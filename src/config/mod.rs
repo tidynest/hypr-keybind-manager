@@ -190,6 +190,115 @@ impl ConfigManager {
         // Return the path so caller can verify or log it
         Ok(backup_path)
     }
+
+    /// Lists all backups in the backup directory, sorted newest first.
+    ///
+    /// Parses timestamps from filenames matching the pattern:
+    /// `{basename}.YYYY-MM-DD_HHMMSS`
+    ///
+    /// Invalid files (wrong format, unparseable timestamps) are silently skipped.
+    ///
+    /// # Returns
+    /// - `Ok(Vec<PathBuf>)` - Backup paths sorted newest to oldest
+    /// - `Err(ConfigError)` - If directory cannot be read
+    ///
+    /// # Examples
+    /// ```
+    /// let backups = manager.list_backups()?;
+    /// // backups[0] is the most recent backup
+    /// ```
+    pub fn list_backups(&self) -> Result<Vec<PathBuf>, ConfigError> {
+        // Read the backup directory
+        let entries = fs::read_dir(&self.backup_dir)
+            .map_err(|e| ConfigError::Io(e))?;
+
+        // Collect valid backups with their timestamps
+        let mut backups: Vec<(PathBuf, chrono::NaiveDateTime)> = Vec::new();
+
+        for entry in entries {
+            let entry = match entry {
+                Ok(e) => e,
+                Err(_) => continue, // Skip unreadable entries
+            };
+
+            let path = entry.path();
+
+            // Only process files (not directories)
+            if !path.is_file() {
+                continue;
+            }
+
+            // Extract filename
+            let filename = match path.file_name().and_then(|n| n.to_str()) {
+                Some(name) => name,
+                None => continue, // Skip if filename is invalid UTF-8
+            };
+
+            // Parse the filename: expect "basename.ext.YYYY-MM-DD_HHMMSS"
+            let parts: Vec<&str> = filename.split('.').collect();
+            if parts.len() != 3 {
+                continue; // Not a valid backup filename
+            }
+
+            // Extract and parse the timestamp (3rd part)
+            let timestamp_str = parts[2];
+            match chrono::NaiveDateTime::parse_from_str(
+                timestamp_str,
+                "%Y-%m-%d_%H%M%S"
+            ) {
+                Ok(timestamp) => {
+                    backups.push((path, timestamp));
+                }
+                Err(_) => continue, // Invalid timestamp format, skip this file
+            }
+        }
+
+        // Sort by timestamp, newest first (descending order)
+        backups.sort_by(|a, b| b.1.cmp(&a.1));
+
+        // Extract just the paths (discard timestamps)
+        Ok(backups.into_iter().map(|(path, _)| path).collect())
+    }
+
+    /// Deletes old backups, keeping only the N most recent.
+    ///
+    /// Uses `list_backups()` to discover and sort backups, then deletes
+    /// all except the first N entries (most recent).
+    ///
+    /// # Arguments
+    /// - `keep` - Number of most recent backups to preserve
+    ///
+    /// # Returns
+    /// - `Ok(usize)` - Number of backups deleted
+    /// - `Err(ConfigError)` - If listing or deletion fails
+    ///
+    /// # Examples
+    /// ```
+    /// // Keep only the 5 most recent backups
+    /// let deleted = manager.cleanup_old_backups(5)?;
+    /// println!("Deleted {} old backups", deleted);
+    /// ```
+    pub fn cleanup_old_backups(&self, keep: usize) -> Result<usize, ConfigError> {
+        // Get sorted list of backups (newest first)
+        let backups = self.list_backups()?;
+
+        // Determine which backups to delete
+        let to_delete = if backups.len() > keep {
+            &backups[keep..] // Everything after index `keep`
+        } else {
+            &[] // Nothing to delete (fewer backups than keep limit)
+        };
+
+        // Delete the old backups
+        let mut deleted_count = 0;
+        for backup_path in to_delete {
+            fs::remove_file(backup_path)
+                .map_err(|e| ConfigError::Io(e))?;
+            deleted_count += 1;
+        }
+
+        Ok(deleted_count)
+    }
 }
 
 #[cfg(test)]
@@ -379,5 +488,160 @@ mod tests {
             "modified content"
         );
     }
-}
 
+    #[test]
+    fn test_list_backups_sorted_newest_first() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+        let backup_dir = temp_dir.path().join("backups");
+        fs::create_dir(&backup_dir).unwrap();
+
+        // Write initial config
+        fs::write(&config_path, "initial\n").unwrap();
+
+        let manager = ConfigManager::new(config_path.clone()).unwrap();
+
+        // Create 3 backups with delays to ensure different timestamps
+        let backup1 = manager.create_timestamped_backup().unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(1));
+
+        fs::write(&config_path, "second\n").unwrap();
+        let backup2 = manager.create_timestamped_backup().unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(1));
+
+        fs::write(&config_path, "third\n").unwrap();
+        let backup3 = manager.create_timestamped_backup().unwrap();
+
+        // List backups
+        let backups = manager.list_backups().unwrap();
+
+        // Should have 3 backups
+        assert_eq!(backups.len(), 3);
+
+        // Should be sorted newest first
+        assert_eq!(backups[0], backup3); // Most recent
+        assert_eq!(backups[1], backup2); // Middle
+        assert_eq!(backups[2], backup1); // Oldest
+    }
+
+    #[test]
+    fn test_list_backups_empty_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+        let backup_dir = temp_dir.path().join("backups");
+        fs::create_dir(&backup_dir).unwrap();
+
+        fs::write(&config_path, "config\n").unwrap();
+
+        let manager = ConfigManager::new(config_path.clone()).unwrap();
+
+        // List backups in empty directory
+        let backups = manager.list_backups().unwrap();
+
+        // Should return empty vector, not error
+        assert_eq!(backups.len(), 0);
+    }
+
+    #[test]
+    fn test_list_backups_ignores_invalid_files() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+        let backup_dir = temp_dir.path().join("backups");
+        fs::create_dir(&backup_dir).unwrap();
+
+        fs::write(&config_path, "config\n").unwrap();
+
+        let manager = ConfigManager::new(config_path.clone()).unwrap();
+
+        // Create one valid backup
+        let valid_backup = manager.create_timestamped_backup().unwrap();
+
+        // Create some invalid files in backup directory
+        fs::write(backup_dir.join("random.txt"), "not a backup").unwrap();
+        fs::write(backup_dir.join("hyprland.conf.notimestamp"), "wrong format").unwrap();
+        fs::write(backup_dir.join("hyprland.conf.2025-99-99_invalid"), "bad date").unwrap();
+
+        // List backups
+        let backups = manager.list_backups().unwrap();
+
+        // Should only find the one valid backup
+        assert_eq!(backups.len(), 1);
+        assert_eq!(backups[0], valid_backup);
+    }
+
+    #[test]
+    fn test_cleanup_keeps_n_most_recent() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+
+        fs::write(&config_path, "initial\n").unwrap();
+
+        let manager = ConfigManager::new(config_path.clone()).unwrap();
+
+        // Create 5 backups with delays
+        let mut backup_paths = Vec::new();
+        for i in 1..=5 {
+            fs::write(&config_path, format!("version {}\n", i)).unwrap();
+            let backup = manager.create_timestamped_backup().unwrap();
+            backup_paths.push(backup);
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+
+        // Keep only 2 most recent
+        let deleted = manager.cleanup_old_backups(2).unwrap();
+
+        // Should have deleted 3 backups (5 - 2 = 3)
+        assert_eq!(deleted, 3);
+
+        // Verify only 2 backups remain
+        let remaining = manager.list_backups().unwrap();
+        assert_eq!(remaining.len(), 2);
+
+        // Verify the correct ones remain (the 2 newest: indices 4 and 3)
+        assert_eq!(remaining[0], backup_paths[4]); // Newest
+        assert_eq!(remaining[1], backup_paths[3]); // Second newest
+    }
+
+    #[test]
+    fn test_cleanup_with_no_backups() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+
+        fs::write(&config_path, "config\n").unwrap();
+
+        let manager = ConfigManager::new(config_path).unwrap();
+
+        // Cleanup with no backups present
+        let deleted = manager.cleanup_old_backups(5).unwrap();
+
+        // Should succeed with 0 deleted
+        assert_eq!(deleted, 0);
+    }
+
+    #[test]
+    fn test_cleanup_when_fewer_than_keep() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+
+        fs::write(&config_path, "initial\n").unwrap();
+
+        let manager = ConfigManager::new(config_path.clone()).unwrap();
+
+        // Create only 3 backups
+        for i in 1..=3 {
+            fs::write(&config_path, format!("version {}\n", i)).unwrap();
+            manager.create_timestamped_backup().unwrap();
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+
+        // Try to keep 10 (more than exist)
+        let deleted = manager.cleanup_old_backups(10).unwrap();
+
+        // Should delete nothing
+        assert_eq!(deleted, 0);
+
+        // All 3 should still exist
+        let remaining = manager.list_backups().unwrap();
+        assert_eq!(remaining.len(), 3);
+    }
+}
