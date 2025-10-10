@@ -13,15 +13,13 @@
 //! comprehensive unit testing without requiring a display server.
 
 pub mod conflict;
+pub use conflict::{ConflictDetector, Conflict};
 pub mod parser;
 pub mod types;
 pub mod validator;
 
 // Re-export commonly used types
 pub use types::*;
-
-// TODO: Implement ConflictDetector in conflict.rs
-// pub use conflict::ConflictDetector;
 
 // TODO: Implement validator functions
 // pub use validator::*;
