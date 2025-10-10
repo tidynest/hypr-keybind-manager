@@ -1,0 +1,55 @@
+[package]
+name = "hypr-keybind-manager"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.83"
+authors = ["Your Name <your.email@example.com>"]
+description = "Secure keybinding manager for Hyprland with conflict detection"
+license = "MIT"
+repository = "https://github.com/yourusername/hypr-keybind-manager"
+
+[dependencies]
+# GUI - use latest stable versions
+gtk4 = "0.10.1"
+glib = "0.21.3"
+
+# Hyprland integration - USE STABLE VERSION
+hyprland = "0.3.13"
+
+# Parsing
+nom = "8.0.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+
+# File operations
+atomic-write-file = "0.3.0"
+notify = { version = "8.2.0", default-features = false, features = ["macos_kqueue"] }
+
+# CLI
+clap = { version = "4.5.48", features = ["derive", "cargo"] }
+colored = "3.0.0"
+
+# Error handling
+anyhow = "1.0.100"
+thiserror = "2.0.17"
+
+[build-dependencies]
+pkg-config = "0.3.32"
+
+[dev-dependencies]
+tempfile = "3.23.0"
+
+[profile.release]
+codegen-units = 1    # Better optimization
+lto = true           # Link-time optimization
+opt-level = "z"      # Optimize for size
+panic = "abort"      # Smaller binary
+strip = true         # Remove debug symbols
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+expect_used = "deny"
+unwrap_used = "deny"
+panic = "deny"
