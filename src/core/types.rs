@@ -71,7 +71,7 @@ impl fmt::Display for BindType {
         match self {
             BindType::Bind => write!(f, "bind"),
             BindType::BindE => write!(f, "binde"),
-            BindType::BindL => write!(f, "bindel"),
+            BindType::BindL => write!(f, "bindl"),
             BindType::BindM => write!(f, "bindm"),
             BindType::BindR => write!(f, "bindr"),
             BindType::BindEL => write!(f, "bindel"),

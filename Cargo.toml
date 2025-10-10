@@ -33,6 +33,8 @@ colored = "3.0.0"
 anyhow = "1.0.100"
 thiserror = "2.0.17"
 
+shellexpand = "3.1.1"
+
 [build-dependencies]
 pkg-config = "0.3.32"
 

@@ -206,11 +206,11 @@ fn parse_key_combo(input: &str) -> IResult<&str, KeyCombo> {
         parse_modifiers(modifier_str)?
     };
 
-    // Skip the comma
+    // Parse key name (skipping the comma)
     let (input, _) = (space0, char(','), space0).parse(input)?;
 
-    // Parse key name
-    let (input, key) = take_while1(|c: char| c.is_alphanumeric() || c == '_')(input)?;
+    let (input, key) = take_until(",")(input)?;
+    let key = key.trim().to_string();
 
     Ok((
         input,
