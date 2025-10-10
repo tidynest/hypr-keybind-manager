@@ -27,6 +27,7 @@
 use std::fs;
 use std::path::PathBuf;
 use thiserror::Error;
+use chrono::Local;
 
 /// Errors that can occur during configuration management.
 #[derive(Debug, Error)]
@@ -65,13 +66,11 @@ pub enum ConfigError {
 /// The ConfigManager provides read-only access and transactional writes
 /// with automatic backup creation. All writes go through the transaction
 /// API to ensure atomicity and recoverability.
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct ConfigManager {
     /// Path to the Hyprland configuration file.
     config_path: PathBuf,
-
-    #[allow(dead_code)]
-    /// Directory where timestamped backups are stored.
     backup_dir: PathBuf,
 }
 
@@ -164,6 +163,32 @@ impl ConfigManager {
     /// ```
     pub fn read_config(&self) -> Result<String, ConfigError> {
         Ok(fs::read_to_string(&self.config_path)?)
+    }
+
+    #[allow(dead_code)]
+    fn create_timestamped_backup(&self) -> Result<PathBuf, ConfigError> {
+        // Read the current config content
+        let content = fs::read_to_string(&self.config_path)?;
+
+        // Generate timestamp in YYYY-MM-DD_HHMMSS format
+        let timestamp = Local::now().format("%Y-%m-%d_%H%M%S");
+
+        // Build the backup filename
+        // Extract the original filename (e.g., "hyprland.conf")
+        let original_name = self.config_path
+            .file_name()
+            .expect("Config path should have a file name")
+            .to_str()
+            .expect("Filename should be valid UTF-8");
+
+        let backup_filename = format!("{}.{}", original_name, timestamp);
+        let backup_path = self.backup_dir.join(&backup_filename);
+
+        // Write the backup file
+        fs::write(&backup_path, &content)?;
+
+        // Return the path so caller can verify or log it
+        Ok(backup_path)
     }
 }
 
@@ -267,4 +292,92 @@ mod tests {
             println!("Skipping symlink test on non-Unix system");
         }
     }
+
+    #[test]
+    fn test_create_timestamped_backup() {
+        // Setup: Create a temp config file
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+        fs::write(&config_path, "bind = SUPER, K, exec, firefox\n").unwrap();
+
+        let manager = ConfigManager::new(config_path.clone()).unwrap();
+
+        // Create a backup
+        let backup_path = manager.create_timestamped_backup().unwrap();
+
+        // Verify: Backup file exists
+        assert!(backup_path.exists(), "Backup file should exist");
+
+        // Verify: Backup is in the backup directory
+        assert_eq!(
+            backup_path.parent().unwrap(),
+            manager.backup_dir,
+            "Backup should be in backup directory",
+        );
+
+        // Verify: Filename format using chrono parsing
+        let filename = backup_path.file_name().unwrap().to_str().unwrap();
+
+        // Extract timestamp part: "hyprland.conf.2025-10-10_221500" -> "2025-10-10_221500"
+        let parts: Vec<&str> = filename.split('.').collect();
+        assert_eq!(
+            parts.len(),
+            3,
+            "Filename should have 3 parts: name.ext.timestamp"
+        );
+        assert_eq!(parts[0], "hyprland", "First part should be 'hyprland'");
+        assert_eq!(parts[1], "conf", "Second part should be 'conf'");
+
+        let timestamp = parts[2];
+
+        // Validate timestamp by parsing with chrono
+        let parsed = chrono::NaiveDateTime::parse_from_str(
+            timestamp,
+            "%Y-%m-%d_%H%M%S",
+        );
+        assert!(
+            parsed.is_ok(),
+            "Timestamp should be valid chrono format: {}",
+            timestamp,
+        );
+
+        // Verify: Backup content matches original
+        let backup_content = fs::read_to_string(&backup_path).unwrap();
+        assert_eq!(backup_content, "bind = SUPER, K, exec, firefox\n");
+    }
+
+    #[test]
+    fn test_multiple_backups_dont_overwrite() {
+        // Setup
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+        fs::write(&config_path, "original content").unwrap();
+
+        let manager = ConfigManager::new(config_path.clone()).unwrap();
+
+        // Create first backup
+        let backup1 = manager.create_timestamped_backup().unwrap();
+
+        // Wait 1 second to ensure different timestamp
+        std::thread::sleep(std::time::Duration::from_secs(1));
+
+        // Modify config and create second backup
+        fs::write(&config_path, "modified content").unwrap();
+        let backup2 = manager.create_timestamped_backup().unwrap();
+
+        // Verify: Both backups exist
+        assert!(backup1.exists(), "First backup should exist");
+        assert!(backup2.exists(), "Second backup should exist");
+
+        // Verify: They're different files
+        assert_eq!(
+            fs::read_to_string(&backup1).unwrap(),
+            "original content"
+        );
+        assert_eq!(
+            fs::read_to_string(&backup2).unwrap(),
+            "modified content"
+        );
+    }
 }
+
