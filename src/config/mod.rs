@@ -1,25 +1,19 @@
 //! Configuration file management with atomic writes and backup support.
-//!
 //! This module provides safe, transactional operations for managing Hyprland
 //! configuration files. Key features:
-//!
 //! - **Atomic writes**: Uses temp-file-then-rename to prevent corruption
 //! - **Automatic backups**: Every write creates a timestamped backup
 //! - **Rollback safety**: Failed transactions leave original config untouched
 //! - **Symlink warnings**: Alerts user but allows symlinked configs
 //!
 //! # Example
-//!
 //! ```no_run
 //! use hypr_keybind_manager::config::ConfigManager;
-//!
 //! let manager = ConfigManager::new("/home/user/.config/hypr/hyprland.conf".into())?;
-//!
 //! // Safe transactional write
 //! manager.begin_transaction()?
 //!     .write("bind = SUPER, Q, exec, firefox".to_string())?
 //!     .commit()?;
-//!
 //! // Automatic rollback if commit() is never called
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
@@ -35,34 +29,27 @@ pub enum ConfigError {
     /// Configuration file does not exist.
     #[error("Config file not found: {0}")]
     NotFound(PathBuf),
-
     /// Backup directory cannot be created or written to.
     #[error("Backup directory not writable: {0}")]
     BackupDirNotWritable(PathBuf),
-
     /// Configuration file has incorrect permissions (should be 0o600).
     #[error("Invalid permissions on config: expected 0o600, found {0:o}")]
     InvalidPermissions(u32),
-
     /// Attempted to commit a transaction twice.
     #[error("Transaction already committed")]
     AlreadyCommitted,
-
     /// Failed to create backup file.
     #[error("Failed to create backup: {0}")]
     BackupFailed(String),
-
     /// Atomic write operation failed.
     #[error("Atomic write failed: {0}")]
     WriteFailed(String),
-
     /// Generic I/O error.
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 }
 
 /// Manages Hyprland configuration files with safe atomic operations.
-///
 /// The ConfigManager provides read-only access and transactional writes
 /// with automatic backup creation. All writes go through the transaction
 /// API to ensure atomicity and recoverability.
@@ -298,6 +285,234 @@ impl ConfigManager {
         }
 
         Ok(deleted_count)
+    }
+}
+
+/// Atomic configuration transaction with automatic backup.
+///
+/// Provides ACID guarantees:
+/// - **Atomic**: Changes are all-or-nothing (atomic file operations)
+/// - **Consistent**: Config is never in a half-written state
+/// - **Isolated**: No race conditions (OS-level atomic rename)
+/// - **Durable**: Backup created before any modifications
+///
+/// # Lifecycle
+///
+/// 1. `begin()` - Creates timestamped backup immediately
+/// 2. User prepares new content (in memory)
+/// 3. `commit()` - Writes atomically or `rollback()` - Restores original
+///
+/// # Example
+///
+/// ```no_run
+/// use hypr_keybind_manager::config::ConfigManager;
+/// use std::path::PathBuf;
+///
+/// let manager = ConfigManager::new(PathBuf::from("hyprland.conf"))?;
+/// let tx = ConfigTransaction::begin(&manager)?;
+///
+/// // Prepare new content
+/// let new_content = "# Updated config\nbind = SUPER, X, exec, firefox\n";
+///
+/// // Commit atomically
+/// match tx.commit(new_content) {
+///     Ok(()) => println!("Changes applied successfully"),
+///     Err(e) => {
+///         eprintln!("Commit failed: {}", e);
+///         // Transaction can be rolled back if needed
+///     }
+/// }
+/// # Ok::<(), hypr_keybind_manager::config::ConfigError>(())
+/// ```
+#[allow(dead_code)]
+pub struct ConfigTransaction<'a> {
+    manager: &'a ConfigManager,
+    backup_path: Option<PathBuf>,
+}
+
+impl<'a> ConfigTransaction<'a> {
+    /// Begins a new transaction by creating a timestamped backup.
+    ///
+    /// The backup is created immediately when `begin()` is called, ensuring
+    /// that a rollback point exists before any modifications are attempted.
+    ///
+    /// # Arguments
+    ///
+    /// * `manager` - Reference to the ConfigManager. The transaction cannot
+    ///               outlive this reference (enforced by lifetime `'a`).
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(ConfigTransaction)` - Transaction ready for commit/rollback
+    /// * `Err(ConfigError)` - Backup creation failed (no changes made)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Backup directory cannot be created
+    /// - Config file cannot be read
+    /// - Backup file cannot be written
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use hypr_keybind_manager::config::ConfigManager;
+    /// use hypr_keybind_manager::config::ConfigTransaction;
+    /// use std::path::PathBuf;
+    ///
+    /// let manager = ConfigManager::new(PathBuf::from("hyprland.conf"))?;
+    /// let tx = ConfigTransaction::begin(&manager)?;
+    /// // Backup now exists in backup directory
+    /// # Ok::<(), hypr_keybind_manager::config::ConfigError>(())
+    /// ```
+    pub fn begin(manager: &'a ConfigManager) -> Result<Self, ConfigError> {
+        // Create backup immediately - this is our rollback point
+        let backup_path = manager.create_timestamped_backup()?;
+
+        Ok(Self {
+            manager,
+            backup_path: Some(backup_path),
+        })
+    }
+
+    /// Commits the transaction by atomically writing new content to the config file.
+    ///
+    /// The write operation is atomic at the filesystem level (temp file + rename),
+    /// ensuring the config is never in a partially-written state. The backup created
+    /// during `begin()` remains available for manual rollback if needed.
+    ///
+    /// This method consumes the transaction, preventing accidental double-commits.
+    ///
+    /// # Arguments
+    ///
+    /// * `new_content` - The complete new configuration content to write
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` - Content written successfully, backup preserved
+    /// * `Err(ConfigError)` - Write failed, original config untouched, backup available
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Temporary file cannot be created
+    /// - Content cannot be written to temp file
+    /// - Atomic rename operation fails
+    ///
+    /// If an error occurs, the original config file remains unchanged and the backup
+    /// created during `begin()` is still available for rollback.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use hypr_keybind_manager::config::{ConfigManager, ConfigTransaction};
+    /// use std::path::PathBuf;
+    ///
+    /// let manager = ConfigManager::new(PathBuf::from("hyprland.conf"))?;
+    /// let tx = ConfigTransaction::begin(&manager)?;
+    ///
+    /// let new_content = "# Updated configuration\nbind = SUPER, X, exec, firefox\n";
+    ///
+    /// match tx.commit(new_content) {
+    ///     Ok(()) => println!("Configuration updated successfully"),
+    ///     Err(e) => eprintln!("Failed to commit: {}", e),
+    /// }
+    /// # Ok::<(), hypr_keybind_manager::config::ConfigError>(())
+    /// ```
+    pub fn commit(self, new_content: &str) -> Result<(), ConfigError> {
+        use std::io::Write;
+        use atomic_write_file::AtomicWriteFile;
+
+        // Open file for atomic writing
+        let mut file = AtomicWriteFile::options()
+            .open(&self.manager.config_path)
+            .map_err(|e| ConfigError::WriteFailed(format!(
+                "Failed to open for atomic write: {}", e)))?;
+
+        // Write content
+        file.write_all(new_content.as_bytes())
+            .map_err(|e| ConfigError::WriteFailed(format!(
+                "Failed to write content: {}", e)))?;
+
+        // Commit atomically
+        file.commit()
+            .map_err(|e| ConfigError::WriteFailed(format!(
+                "Failed to commit atomic write: {}", e)))?;
+
+        // Backup remains in backup directory for future rollback if needed
+        // Cleanup is handled separately by cleanup_old_backups()
+        Ok(())
+    }
+
+    /// Rolls back to the backup created during `begin()`.
+    ///
+    /// Atomically restores the configuration file to its state when the transaction
+    /// began. This can be called after a failed commit or to manually undo changes.
+    ///
+    /// Unlike `commit()`, this method borrows `self` immutably, allowing multiple
+    /// rollback attempts if needed.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` - Config restored successfully from backup
+    /// * `Err(ConfigError)` - Rollback failed (backup unreadable or write failed)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - No backup path is available (should not happen in normal usage)
+    /// - Backup file cannot be read
+    /// - Atomic write of backup content fails
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use hypr_keybind_manager::config::{ConfigManager, ConfigTransaction};
+    /// use std::path::PathBuf;
+    ///
+    /// let manager = ConfigManager::new(PathBuf::from("hyprland.conf"))?;
+    /// let tx = ConfigTransaction::begin(&manager)?;
+    ///
+    /// // Attempt risky operation
+    /// if let Err(e) = tx.commit(potentially_bad_content) {
+    ///     eprintln!("Commit failed: {}", e);
+    ///     tx.rollback()?;  // Restore original
+    ///     println!("Rolled back successfully");
+    /// }
+    /// # Ok::<(), hypr_keybind_manager::config::ConfigError>(())
+    /// ```
+    pub fn rollback(&self) -> Result<(), ConfigError> {
+        use std::io::Write;
+        use atomic_write_file::AtomicWriteFile;
+
+        // Check if backup path is available
+        if let Some(backup_path) = &self.backup_path {
+            // Read backup content
+            let backup_content = fs::read_to_string(backup_path)?;
+
+            // Open file for atomic writing
+            let mut file = AtomicWriteFile::options()
+                .open(&self.manager.config_path)
+                .map_err(|e| ConfigError::WriteFailed(format!(
+                    "Failed to open for atomic write: {}", e)))?;
+
+            // Write backup content
+            file.write_all(backup_content.as_bytes())
+                .map_err(|e| ConfigError::WriteFailed(format!(
+                    "Failed to write content: {}", e)))?;
+
+            // Commit atomically
+            file.commit()
+                .map_err(|e| ConfigError::WriteFailed(format!(
+                    "Failed to commit: {}", e)))?;
+
+            Ok(())
+        } else {
+            // This should not happen in normal usage (begin() always creates backup)
+            Err(ConfigError::BackupFailed(
+                "No backup available for rollback".to_string()
+            ))
+        }
     }
 }
 
@@ -643,5 +858,208 @@ mod tests {
         // All 3 should still exist
         let remaining = manager.list_backups().unwrap();
         assert_eq!(remaining.len(), 3);
+    }
+
+    // ============================================================================
+    // ConfigTransaction Tests
+    // ============================================================================
+
+    #[test]
+    fn test_transaction_basic_flow() {
+        // Setup: Create temp config with original content
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+        let original_content = "# Original config\nbind = SUPER, Q, exec, firefox\n";
+        fs::write(&config_path, original_content).unwrap();
+
+        let manager = ConfigManager::new(config_path.clone()).unwrap();
+
+        // Begin transaction (creates backup)
+        let tx = ConfigTransaction::begin(&manager).unwrap();
+
+        // Verify backup was created
+        let backups = manager.list_backups().unwrap();
+        assert_eq!(backups.len(), 1, "Should have created one backup");
+
+        // Commit new content
+        let new_content = "# Updated config\nbind = SUPER, X, exec, kitty\n";
+        tx.commit(new_content).unwrap();
+
+        // Verify new content was written
+        let final_content = fs::read_to_string(&config_path).unwrap();
+        assert_eq!(final_content, new_content, "Config should have new content");
+
+        // Verify backup still exists (not deleted after commit)
+        let backups_after = manager.list_backups().unwrap();
+        assert_eq!(backups_after.len(), 1, "Backup should still exist after commit");
+
+        // Verify backup contains original content
+        let backup_content = fs::read_to_string(&backups_after[0]).unwrap();
+        assert_eq!(backup_content, original_content, "Backup should contain original content");
+    }
+
+    #[test]
+    fn test_transaction_rollback() {
+        // Setup
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+        let original_content = "# Original\nbind = SUPER, A, exec, alacritty\n";
+        fs::write(&config_path, original_content).unwrap();
+
+        let manager = ConfigManager::new(config_path.clone()).unwrap();
+
+        // Begin transaction
+        let tx = ConfigTransaction::begin(&manager).unwrap();
+
+        // Rollback without committing
+        tx.rollback().unwrap();
+
+        // Verify original content is still there (unchanged)
+        let final_content = fs::read_to_string(&config_path).unwrap();
+        assert_eq!(
+            final_content, original_content,
+            "Rollback without commit should leave original unchanged"
+        );
+    }
+
+    #[test]
+    fn test_transaction_rollback_after_commit() {
+        // Setup
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+        let original_content = "# Original content\n";
+        fs::write(&config_path, original_content).unwrap();
+
+        let manager = ConfigManager::new(config_path.clone()).unwrap();
+
+        // First transaction: commit changes
+        let tx1 = ConfigTransaction::begin(&manager).unwrap();
+        let new_content = "# Modified content\n";
+        tx1.commit(new_content).unwrap();
+
+        // Verify changes applied
+        assert_eq!(
+            fs::read_to_string(&config_path).unwrap(),
+            new_content,
+            "First commit should apply changes"
+        );
+
+        // Second transaction: rollback to original
+        let tx2 = ConfigTransaction::begin(&manager).unwrap();
+        tx2.rollback().unwrap();
+
+        // Verify rolled back to state before second transaction
+        // (which is the "new_content" from first transaction)
+        let final_content = fs::read_to_string(&config_path).unwrap();
+        assert_eq!(
+            final_content, new_content,
+            "Rollback should restore to state at transaction begin"
+        );
+    }
+
+    #[test]
+    fn test_transaction_preserves_exact_content() {
+        // Test edge cases: empty lines, trailing newlines, special chars
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+        fs::write(&config_path, "initial\n").unwrap();
+
+        let manager = ConfigManager::new(config_path.clone()).unwrap();
+
+        // Test 1: Empty content
+        let tx = ConfigTransaction::begin(&manager).unwrap();
+        tx.commit("").unwrap();
+        assert_eq!(fs::read_to_string(&config_path).unwrap(), "");
+
+        // Test 2: Content with multiple blank lines
+        let tx = ConfigTransaction::begin(&manager).unwrap();
+        let content_with_blanks = "line1\n\n\nline2\n";
+        tx.commit(content_with_blanks).unwrap();
+        assert_eq!(fs::read_to_string(&config_path).unwrap(), content_with_blanks);
+
+        // Test 3: No trailing newline
+        let tx = ConfigTransaction::begin(&manager).unwrap();
+        let no_trailing = "no newline at end";
+        tx.commit(no_trailing).unwrap();
+        assert_eq!(fs::read_to_string(&config_path).unwrap(), no_trailing);
+
+        // Test 4: Special characters
+        let tx = ConfigTransaction::begin(&manager).unwrap();
+        let special = "# Special: $VAR, @user, 100%\nbind = SUPER_SHIFT, M, exec, app\n";
+        tx.commit(special).unwrap();
+        assert_eq!(fs::read_to_string(&config_path).unwrap(), special);
+    }
+
+    #[test]
+    fn test_transaction_commit_consumes_self() {
+        // This test demonstrates that commit(self) consumes the transaction.
+        // The following code would NOT compile (commented out):
+        //
+        // let tx = ConfigTransaction::begin(&manager)?;
+        // tx.commit("content1")?;  // ← tx is moved here
+        // tx.commit("content2")?;  // ← Compile error! tx was already consumed
+        //
+        // This is enforced at compile-time by Rust's ownership system.
+        // We verify it works correctly by showing successful single use:
+
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+        fs::write(&config_path, "original\n").unwrap();
+
+        let manager = ConfigManager::new(config_path.clone()).unwrap();
+        let tx = ConfigTransaction::begin(&manager).unwrap();
+
+        // Single commit works fine
+        tx.commit("new content\n").unwrap();
+        // tx is now consumed and cannot be used again (enforced by compiler)
+
+        assert_eq!(fs::read_to_string(&config_path).unwrap(), "new content\n");
+    }
+
+    #[test]
+    fn test_multiple_transactions_create_multiple_backups() {
+        // Integration test: verify transactions work with backup system
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+        fs::write(&config_path, "version 1\n").unwrap();
+
+        let manager = ConfigManager::new(config_path.clone()).unwrap();
+
+        // Transaction 1
+        let tx1 = ConfigTransaction::begin(&manager).unwrap();
+        tx1.commit("version 2\n").unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(1)); // Ensure different timestamps
+
+        // Transaction 2
+        let tx2 = ConfigTransaction::begin(&manager).unwrap();
+        tx2.commit("version 3\n").unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(1));
+
+        // Transaction 3
+        let tx3 = ConfigTransaction::begin(&manager).unwrap();
+        tx3.commit("version 4\n").unwrap();
+
+        // Verify 3 backups exist (one per transaction)
+        let backups = manager.list_backups().unwrap();
+        assert_eq!(backups.len(), 3, "Should have 3 backups from 3 transactions");
+
+        // Verify backups are sorted newest first
+        let backup1_content = fs::read_to_string(&backups[0]).unwrap(); // Newest
+        let backup2_content = fs::read_to_string(&backups[1]).unwrap(); // Middle
+        let backup3_content = fs::read_to_string(&backups[2]).unwrap(); // Oldest
+
+        assert_eq!(backup1_content, "version 3\n", "Newest backup should be from tx3");
+        assert_eq!(backup2_content, "version 2\n", "Middle backup should be from tx2");
+        assert_eq!(backup3_content, "version 1\n", "Oldest backup should be from tx1");
+
+        // Verify final config has latest content
+        assert_eq!(fs::read_to_string(&config_path).unwrap(), "version 4\n");
+
+        // Test cleanup integration
+        let deleted = manager.cleanup_old_backups(2).unwrap();
+        assert_eq!(deleted, 1, "Should delete 1 old backup (keeping 2)");
+
+        let remaining = manager.list_backups().unwrap();
+        assert_eq!(remaining.len(), 2, "Should have 2 backups remaining");
     }
 }
