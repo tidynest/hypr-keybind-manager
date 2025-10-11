@@ -30,6 +30,7 @@
 use regex::Regex;
 use std::collections::HashSet;
 
+#[allow(dead_code)]
 /// Security danger level for caommands
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum DangerLevel {
@@ -44,6 +45,7 @@ pub enum DangerLevel {
 }
 
 /// Assessment result with contextual information
+#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq)]
 pub struct DangerAssessment {
     /// Assessed danger level
@@ -56,6 +58,7 @@ pub struct DangerAssessment {
     pub matched_pattern: Option<String>,
 }
 
+#[allow(dead_code)]
 /// Pattern-based dangerous command detector
 pub struct DangerDetector {
     critical_patterns:   Vec<Regex>,
@@ -68,23 +71,88 @@ impl DangerDetector {
     /// Creates a new detector with all patterns loaded
     pub fn new() -> Self {
         Self {
-            critical_patterns:   Self::build_critical_patterns(),
-            dangerous_commands:  Self::build_dangerous_commands(),
+            critical_patterns: Self::build_critical_patterns(),
+            dangerous_commands: Self::build_dangerous_commands(),
             suspicious_commands: Self::build_suspicious_commands(),
-            safe_commands:       Self::build_safe_commands(),
+            safe_commands: Self::build_safe_commands(),
         }
     }
 
     /// Assesses the danger level of a command string
-    pub fn assess_command(&self, _command: &str) -> DangerAssessment {
-        // TODO: Implement in response to failing tests
-        todo!("assess command not yet implemented")
+    ///
+    /// Checks critical patterns first (Round 1), then will check command
+    /// categorization (Round 2) and entropy (Round 3) in future iterations.
+    pub fn assess_command(&self, command: &str) -> DangerAssessment {
+        // Round 1: Check critical patterns (system-destroying commands)
+        for (i, pattern) in self.critical_patterns.iter().enumerate() {
+            if pattern.is_match(command) {
+                return match i {
+                    0 | 1 => DangerAssessment {  // Both rm patterns
+                        danger_level: DangerLevel::Critical,
+                        reason: "Recursive filesystem deletion from root directory".to_string(),
+                        recommendation: "NEVER execute this command. It will destroy your entire system.".to_string(),
+                        matched_pattern: Some("rm -rf /".to_string()),
+                    },
+                    2 => DangerAssessment {  // dd pattern
+                        danger_level: DangerLevel::Critical,
+                        reason: "Direct write to disk device - will destroy all data and partition table".to_string(),
+                        recommendation: "Remove this keybinding immediately. This overwrites raw disk sectors.".to_string(),
+                        matched_pattern: Some("dd to disk device".to_string()),
+                    },
+                    3 => DangerAssessment {  // Fork bomb
+                        danger_level: DangerLevel::Critical,
+                        reason: "Fork bomb detected - exponential process spawning".to_string(),
+                        recommendation: "This will crash or hang your system. Remove immediately.".to_string(),
+                        matched_pattern: Some("fork bomb".to_string()),
+                    },
+                    _ => unreachable!("Pattern index out of range."),
+                };
+            }
+        }
+
+        // No critical patterns matched - safe for now
+        // (Round 2 and 3 checks will be added here later
+        DangerAssessment {
+            danger_level: DangerLevel::Safe,
+            reason: "No dangerous patterns detected".to_string(),
+            recommendation: String::new(),
+            matched_pattern: None,
+        }
     }
 
+
     /// Builds regex patterns for critical system-destroying commands
+    ///
+    /// Round 1: Three critical patterns
+    /// - Pattern 0: rm -rf / (filesystem destruction)
+    /// - Pattern 1: dd to disk (disk device overwrite)
+    /// - Pattern 2: Fork bomb (resource exhaustion)
     fn build_critical_patterns() -> Vec<Regex> {
-        // TODO: Implement in response to failing tests
-        Vec::new()
+        vec![
+            // Pattern 0a: rm -rf / (r before f)
+            // Matches: rm + space + flags with 'r'/'R' then 'f'/'F' + "/" + end
+            // Examples: "rm -rf /", "rm -Rf /", "rm -r -f /"
+            Regex::new(r"rm\s+.*[rR].*[fF].*\s+/\s*$")
+                .expect("rm -rf / pattern (r before f) should be valid regex"),
+
+            // Pattern 0b: rm -fr / (f before r)
+            // Matches: rm + space + flags with 'f'/'F' then 'r'/'R' + "/" + end
+            // Examples: "rm -fr /", "rm -fR /", "rm -f -r /"
+            Regex::new(r"rm\s+.*[fF].*[rR].*\s+/\s*$")
+                .expect("rm -fr / pattern (f before r) should be valid regex"),
+
+            // Pattern 1: dd to disk devices
+            // Matches: dd + "of=" + SATA (sda-sdz) or NVMe (nvme0n1, nvme1n1, etc.)
+            // Examples: "dd if=/dev/zero of=/dev/sda", "dd if=/dev/urandom of=/dev/nvme0n1"
+            Regex::new(r"dd\s+.*of=/dev/(sd[a-z]|nvme\d+n\d+)")
+                .expect("dd to disk pattern should be valid regex"),
+
+            // Pattern 2: Fork bomb
+            // Matches: :(){ :|:& };: with optional whitespace
+            // This bash syntax creates exponential process spawning
+            Regex::new(r":\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:")
+                .expect("fork bomb pattern should be valid regex"),
+        ]
     }
 
     fn build_dangerous_commands() -> HashSet<String> {
@@ -102,6 +170,7 @@ impl DangerDetector {
         HashSet::new()
     }
 
+    #[allow(dead_code)]
     /// Calculate Shannon entropy of a string (bits per character)
     fn calculate_entropy(&self, _s: &str) -> f32 {
         // TODO: Implement in Round 3
