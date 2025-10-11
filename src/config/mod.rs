@@ -18,6 +18,8 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
+mod danger;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
