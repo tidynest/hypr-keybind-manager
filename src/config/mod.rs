@@ -19,6 +19,7 @@
 //! ```
 
 mod danger;
+mod validator;
 
 use std::fs;
 use std::path::{Path, PathBuf};
