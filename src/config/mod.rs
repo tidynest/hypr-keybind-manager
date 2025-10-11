@@ -19,7 +19,7 @@
 //! ```
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 use chrono::Local;
 
@@ -286,6 +286,97 @@ impl ConfigManager {
 
         Ok(deleted_count)
     }
+
+    /// Restores the configuration from a specific backup file.
+    ///
+    /// This function performs a safe restore operation by:
+    /// 1. Creating a safety backup of the current state
+    /// 2. Atomically restoring from the specified backup
+    ///
+    /// If the restore operation fails at any point, the original config
+    /// remains unchanged. The safety backup allows reverting a successful
+    /// restore if needed.
+    ///
+    /// # Arguments
+    ///
+    /// * `backup_path` - Path to the backup file to restore from
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` - Config successfully restored
+    /// * `Err(ConfigError::BackupFailed)` - Backup path invalid or unreadable
+    /// * `Err(ConfigError::WriteFailed)` - Atomic write operation failed
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use hypr_keybind_manager::config::ConfigManager;
+    /// use std::path::PathBuf;
+    ///
+    /// let manager = ConfigManager::new(PathBuf::from("hyprland.conf"))?;
+    ///
+    /// // List backups to find the one you want
+    /// let backups = manager.list_backups()?;
+    ///
+    /// // Restore from the most recent backup
+    /// if let Some(latest) = backups.first() {
+    ///     manager.restore_backup(latest)?;
+    ///     println!("Config restored successfully!");
+    /// }
+    /// # Ok::<(), hypr_keybind_manager::config::ConfigError>(())
+    /// ```
+    ///
+    /// # Safety
+    ///
+    /// This function creates a safety backup before restoring, so you can
+    /// always revert the restore operation by restoring from the safety backup.
+    pub fn restore_backup(&self, backup_path: &Path) -> Result<(), ConfigError> {
+        use std::io::Write;
+        use atomic_write_file::AtomicWriteFile;
+
+        // Step 1: Validate backup exists and is readable
+        if !backup_path.exists() {
+            return Err(ConfigError::BackupFailed(
+                format!("Backup file does not exist: {}", backup_path.display())
+            ));
+        }
+
+        if !backup_path.is_file() {
+            return Err(ConfigError::BackupFailed(
+                format!("Backup path is not a file: {}", backup_path.display())
+            ));
+        }
+
+        // Step 2: Read content from the specified backup FIRST
+        // (Do this before creating safety backup to ensure backup is readable)
+        let backup_content = fs::read_to_string(backup_path)
+            .map_err(|e| ConfigError::BackupFailed(
+                format!("Failed to read backup file: {}", e)
+            ))?;
+
+        // Step 3: Create safety backup of CURRENT state
+        // This allows undoing the restore if needed
+        let _safety_backup = self.create_timestamped_backup()?;
+
+        // Step 4: Atomically write backup content to config file
+        let mut file = AtomicWriteFile::options()
+            .open(&self.config_path)
+            .map_err(|e| ConfigError::WriteFailed(
+                format!("Failed to open config for restore: {}", e)
+            ))?;
+
+        file.write_all(backup_content.as_bytes())
+            .map_err(|e| ConfigError::WriteFailed(
+                format!("Failed to write restored content: {}", e)
+            ))?;
+
+        file.commit()
+            .map_err(|e| ConfigError::WriteFailed(
+                format!("Failed to commit restore: {}", e)
+            ))?;
+
+        Ok(())
+    }
 }
 
 /// Atomic configuration transaction with automatic backup.
@@ -426,18 +517,21 @@ impl<'a> ConfigTransaction<'a> {
         // Open file for atomic writing
         let mut file = AtomicWriteFile::options()
             .open(&self.manager.config_path)
-            .map_err(|e| ConfigError::WriteFailed(format!(
-                "Failed to open for atomic write: {}", e)))?;
+            .map_err(|e| ConfigError::WriteFailed(
+                format!("Failed to open for atomic write: {}", e)
+            ))?;
 
         // Write content
         file.write_all(new_content.as_bytes())
-            .map_err(|e| ConfigError::WriteFailed(format!(
-                "Failed to write content: {}", e)))?;
+            .map_err(|e| ConfigError::WriteFailed(
+                format!("Failed to write content: {}", e)
+            ))?;
 
         // Commit atomically
         file.commit()
-            .map_err(|e| ConfigError::WriteFailed(format!(
-                "Failed to commit atomic write: {}", e)))?;
+            .map_err(|e| ConfigError::WriteFailed(
+                format!("Failed to commit atomic write: {}", e)
+            ))?;
 
         // Backup remains in backup directory for future rollback if needed
         // Cleanup is handled separately by cleanup_old_backups()
@@ -493,18 +587,21 @@ impl<'a> ConfigTransaction<'a> {
             // Open file for atomic writing
             let mut file = AtomicWriteFile::options()
                 .open(&self.manager.config_path)
-                .map_err(|e| ConfigError::WriteFailed(format!(
-                    "Failed to open for atomic write: {}", e)))?;
+                .map_err(|e| ConfigError::WriteFailed(
+                    format!("Failed to open for atomic write: {}", e)
+                ))?;
 
             // Write backup content
             file.write_all(backup_content.as_bytes())
-                .map_err(|e| ConfigError::WriteFailed(format!(
-                    "Failed to write content: {}", e)))?;
+                .map_err(|e| ConfigError::WriteFailed(
+                    format!("Failed to write content: {}", e)
+                ))?;
 
             // Commit atomically
             file.commit()
-                .map_err(|e| ConfigError::WriteFailed(format!(
-                    "Failed to commit: {}", e)))?;
+                .map_err(|e| ConfigError::WriteFailed(
+                    format!("Failed to commit: {}", e)
+                ))?;
 
             Ok(())
         } else {
@@ -519,6 +616,9 @@ impl<'a> ConfigTransaction<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::time::Duration;
+    use std::thread;
     use tempfile::TempDir;
 
     /// Helper: Creates a temporary config file for testing.
@@ -683,7 +783,7 @@ mod tests {
         let backup1 = manager.create_timestamped_backup().unwrap();
 
         // Wait 1 second to ensure different timestamp
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        thread::sleep(Duration::from_secs(1));
 
         // Modify config and create second backup
         fs::write(&config_path, "modified content").unwrap();
@@ -718,11 +818,11 @@ mod tests {
 
         // Create 3 backups with delays to ensure different timestamps
         let backup1 = manager.create_timestamped_backup().unwrap();
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        thread::sleep(Duration::from_secs(1));
 
         fs::write(&config_path, "second\n").unwrap();
         let backup2 = manager.create_timestamped_backup().unwrap();
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        thread::sleep(Duration::from_secs(1));
 
         fs::write(&config_path, "third\n").unwrap();
         let backup3 = manager.create_timestamped_backup().unwrap();
@@ -799,7 +899,7 @@ mod tests {
             fs::write(&config_path, format!("version {}\n", i)).unwrap();
             let backup = manager.create_timestamped_backup().unwrap();
             backup_paths.push(backup);
-            std::thread::sleep(std::time::Duration::from_secs(1));
+            thread::sleep(Duration::from_secs(1));
         }
 
         // Keep only 2 most recent
@@ -846,7 +946,7 @@ mod tests {
         for i in 1..=3 {
             fs::write(&config_path, format!("version {}\n", i)).unwrap();
             manager.create_timestamped_backup().unwrap();
-            std::thread::sleep(std::time::Duration::from_secs(1));
+            thread::sleep(Duration::from_secs(1));
         }
 
         // Try to keep 10 (more than exist)
@@ -1028,12 +1128,12 @@ mod tests {
         // Transaction 1
         let tx1 = ConfigTransaction::begin(&manager).unwrap();
         tx1.commit("version 2\n").unwrap();
-        std::thread::sleep(std::time::Duration::from_secs(1)); // Ensure different timestamps
+        thread::sleep(Duration::from_secs(1)); // Ensure different timestamps
 
         // Transaction 2
         let tx2 = ConfigTransaction::begin(&manager).unwrap();
         tx2.commit("version 3\n").unwrap();
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        thread::sleep(Duration::from_secs(1));
 
         // Transaction 3
         let tx3 = ConfigTransaction::begin(&manager).unwrap();
@@ -1061,5 +1161,186 @@ mod tests {
 
         let remaining = manager.list_backups().unwrap();
         assert_eq!(remaining.len(), 2, "Should have 2 backups remaining");
+    }
+
+    #[test]
+    fn test_restore_backup_basic() {
+        // Test basic restore functionality: backup → modify → restore
+
+        // Setup: Create config with "original content"
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+        let original_content = "# Original configuration\nbind = SUPER, Q, exec, kitty\n";
+        fs::write(&config_path, original_content).unwrap();
+
+        let manager = ConfigManager::new(config_path.clone()).unwrap();
+
+        // Create backup of original content
+        let backup_path = manager.create_timestamped_backup().unwrap();
+
+        // Verify backup contains original content
+        let backup_content = fs::read_to_string(&backup_path).unwrap();
+        assert_eq!(backup_content, original_content, "Backup should contain original content");
+
+        // Modify config to something different
+        let modified_content = "# Modified configuration\nbind = SUPER, W, exec, firefox\n";
+        fs::write(&config_path, modified_content).unwrap();
+
+        // Verify config now has modified content
+        let current = manager.read_config().unwrap();
+        assert_eq!(current, modified_content, "Config should be modified");
+
+        // Restore from backup
+        manager.restore_backup(&backup_path).unwrap();
+
+        // Verify config is restored to original content
+        let restored = manager.read_config().unwrap();
+        assert_eq!(restored, original_content, "Config should be restored to original content");
+    }
+
+    #[test]
+    fn test_restore_creates_safety_backup() {
+        // Test that restore creates a safety backup before restoring
+
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+        fs::write(&config_path, "initial content\n").unwrap();
+
+        let manager = ConfigManager::new(config_path.clone()).unwrap();
+
+        // Create first backup (the one being restored from)
+        let first_backup = manager.create_timestamped_backup().unwrap();
+
+        // Small delay to ensure different timestamps
+        thread::sleep(Duration::from_secs(1));
+
+        // Modify config to "current content"
+        let current_content = "current content after modification\n";
+        fs::write(&config_path, current_content).unwrap();
+
+        // Count backups BEFORE restore (should be 1 - just first_backup)
+        let backups_before = manager.list_backups().unwrap();
+        assert_eq!(backups_before.len(), 1, "Should have 1 backup after restore");
+
+        // Restore from first backup / Create safety backup
+        manager.restore_backup(&first_backup).unwrap();
+
+        // Count backups AFTER restore (should be 2 - first_backup + safety)
+        let backups_after = manager.list_backups().unwrap();
+        assert_eq!(backups_after.len(), 2, "Should have 2 backups after restore (original + safety)");
+
+        // Verify the safety backup contains the "current content" we had before restore
+        let safety_backup = &backups_after[0];  // Most recent backup
+        let safety_content = fs::read_to_string(&safety_backup).unwrap();
+        assert_eq!(safety_content, current_content,
+           "Safety backup should contain content from before restore");
+    }
+
+
+    #[test]
+    fn test_restore_nonexistent_backup_fails() {
+        // Test that restoring from non-existent backup returns error without modifying config
+
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+        let original_content = "origin content\n";
+        fs::write(&config_path, original_content).unwrap();
+
+        let manager = ConfigManager::new(config_path.clone()).unwrap();
+
+        // Try to restore from non-existent backup
+        let fake_backup = temp_dir.path().join("nonexistent-backup.conf");
+        let result = manager.restore_backup(&fake_backup);
+
+        // Should return error
+        assert!(result.is_err(), "Restore should fail for non-existent backup");
+
+        // Error should be BackupFailed variant
+        match result {
+            Err(ConfigError::BackupFailed(msg)) => {
+                assert!(msg.contains("does not exist"),
+                "Error message should mention file doesn't exist");
+            }
+            _ => panic!("Expected BackupFailed error"),
+        }
+
+        // Original config should be unchanged
+        let current = manager.read_config().unwrap();
+        assert_eq!(current, original_content, "Config should be unchanged after failed retore");
+
+        // No backups should have been created
+        let backups = manager.list_backups().unwrap();
+        assert_eq!(backups.len(), 0, "No backups should be created on failed restore");
+    }
+
+    #[test]
+    fn test_restore_directory_path_fails() {
+        // Test that restoring from directory instead of file returns error
+
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+        fs::write(&config_path, "original\n").unwrap();
+
+        let manager = ConfigManager::new(config_path.clone()).unwrap();
+
+        // Try to restore from directory instead of file
+        let dir_path = temp_dir.path().join("some_directory");
+        fs::create_dir(&dir_path).unwrap();
+
+        let result = manager.restore_backup(&dir_path);
+
+        // Should return error
+        assert!(result.is_err(), "Restore should fail for directory path");
+
+        // Error should mention it's not a file
+        match result {
+            Err(ConfigError::BackupFailed(msg)) => {
+                assert!(msg.contains("not a file"),
+                        "Error message should mention path is not a file");
+            }
+            _ => panic!("Expected BackupFailed error mentioning 'not a file'"),
+        }
+    }
+
+    #[test]
+    fn test_restore_preserves_exact_content() {
+        // Test that restore preserves exact content including edge cases
+
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+
+        // Edge case content: empty lines, special chars, no trailing newline
+        let tricky_content = r#"# Config with edge cases
+
+    bind = SUPER, K, exec, echo "hello $USER"
+    # Empty line above
+    bind = SUPER_SHIFT, M, exec, notify-send 'Test @ 100%'
+    # No trailing newline below"#;
+
+        fs::write(&config_path, tricky_content).unwrap();
+
+        let manager = ConfigManager::new(config_path.clone()).unwrap();
+
+        // Create backup of tricky content
+        let backup = manager.create_timestamped_backup().unwrap();
+
+        // Modify config to something simple
+        fs::write(&config_path, "simple content\n").unwrap();
+
+        // Restore from backup
+        manager.restore_backup(&backup).unwrap();
+
+        // Read restored content
+        let restored = manager.read_config().unwrap();
+
+        // Verify byte-for-byte match
+        assert_eq!(restored, tricky_content,
+           "Restored content should exactly match original, including special chars and formatting");
+
+        // Verify specific edge cases
+        assert!(restored.contains("\"hello $USER\""), "Should preserve quotes and variables");
+        assert!(restored.contains("'Test @ 100%'"), "Should preserve single quotes and special chars");
+        assert!(!restored.ends_with('\n'), "Should preserve lack of trailing newline");
+        assert!(restored.contains("\n\n"), "Should preserve empty lines");
     }
 }
