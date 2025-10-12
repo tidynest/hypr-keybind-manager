@@ -8,18 +8,20 @@
 //!
 //! # Example
 //! ```no_run
-//! use hypr_keybind_manager::config::ConfigManager;
-//! let manager = ConfigManager::new("/home/user/.config/hypr/hyprland.conf".into())?;
+//! use hypr_keybind_manager::config::{ConfigManager, ConfigTransaction};
+//! use std::path::PathBuf;
+//!
+//! let manager = ConfigManager::new(PathBuf::from("/home/user/.config/hypr/hyprland.conf"))?;
+//!
 //! // Safe transactional write
-//! manager.begin_transaction()?
-//!     .write("bind = SUPER, Q, exec, firefox".to_string())?
-//!     .commit()?;
-//! // Automatic rollback if commit() is never called
+//! let tx = ConfigTransaction::begin(&manager)?;
+//! tx.commit("bind = SUPER, Q, exec, firefox\n")?;
+//!
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
 mod danger;
-mod validator;
+pub mod validator;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -47,6 +49,12 @@ pub enum ConfigError {
     /// Atomic write operation failed.
     #[error("Atomic write failed: {0}")]
     WriteFailed(String),
+    /// Configuration file does not exist.
+    #[error("Validation failed: {0}")]
+    ValidationFailed(String),
+    /// Dangerous command detected
+    #[error("Dangerous command detected: {0}")]
+    DangerousCommand(String),
     /// Generic I/O error.
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
@@ -193,9 +201,13 @@ impl ConfigManager {
     /// - `Err(ConfigError)` - If directory cannot be read
     ///
     /// # Examples
-    /// ```
-    /// let backups = manager.list_backups()?;
+    /// ```no_run
+    /// # use hypr_keybind_manager::config::ConfigManager;
+    /// # use std::path::PathBuf;
+    /// # let manager = ConfigManager::new(PathBuf::from("hyprland.conf"))?;
+    /// let backups = manager.list_backups();
     /// // backups[0] is the most recent backup
+    /// # Ok::<(), hypr_keybind_manager::config::ConfigError>(())
     /// ```
     pub fn list_backups(&self) -> Result<Vec<PathBuf>, ConfigError> {
         // Read the backup directory
@@ -263,10 +275,14 @@ impl ConfigManager {
     /// - `Err(ConfigError)` - If listing or deletion fails
     ///
     /// # Examples
-    /// ```
+    /// ```no_run
+    /// # use hypr_keybind_manager::config::ConfigManager;
+    /// # use std::path::PathBuf;
+    /// # let manager = ConfigManager::new(PathBuf::from("hyprland.conf"))?;
     /// // Keep only the 5 most recent backups
     /// let deleted = manager.cleanup_old_backups(5)?;
     /// println!("Deleted {} old backups", deleted);
+    /// # Ok::<(), hypr_keybind_manager::config::ConfigError>(())
     /// ```
     pub fn cleanup_old_backups(&self, keep: usize) -> Result<usize, ConfigError> {
         // Get sorted list of backups (newest first)
@@ -399,7 +415,7 @@ impl ConfigManager {
 /// # Example
 ///
 /// ```no_run
-/// use hypr_keybind_manager::config::ConfigManager;
+/// use hypr_keybind_manager::config::{ConfigManager, ConfigTransaction};
 /// use std::path::PathBuf;
 ///
 /// let manager = ConfigManager::new(PathBuf::from("hyprland.conf"))?;
@@ -467,6 +483,108 @@ impl<'a> ConfigTransaction<'a> {
             manager,
             backup_path: Some(backup_path),
         })
+    }
+
+    /// Commits the transaction with comprehensive validation
+    ///
+    /// This method validates the config before committing:
+    /// 1. Runs all validation layers (injection + danger detection)
+    /// 2. Blocks on Error-level issues (Layer 1 injection, Layer 2 critical)
+    /// 3. Warns on Warning-level issues (Layer 2 suspicious/dangerous)
+    /// 4. Commits if validation passes
+    ///
+    /// # Arguments
+    ///
+    /// * `new_content` - The complete new configuration content to write
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` - Content validated and written successfully
+    /// * `Err(ConfigError::ValidationFailed)` - Layer 1 injection detected
+    /// * `Err(ConfigError::DangerousCommand)` - Layer 2 critical danger detected
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use hypr_keybind_manager::config::{ConfigManager, ConfigTransaction};
+    /// use std::path::PathBuf;
+    ///
+    /// let manager = ConfigManager::new(PathBuf::from("hyprland.conf"))?;
+    /// let tx = ConfigTransaction::begin(&manager)?;
+    ///
+    /// let new_content = "bind = SUPER, K, exec, firefox\n";
+    ///
+    /// match tx.commit_with_validation(new_content) {
+    ///     Ok(()) => println!("✓ Configuration updated successfully"),
+    ///     Err(e) => eprintln!("✗ Commit blocked: {}", e),
+    /// }
+    /// # Ok::<(), hypr_keybind_manager::config::ConfigError>(())
+    /// ```
+    pub fn commit_with_validation(
+        self,
+        new_content: &str,
+    ) -> Result<(), ConfigError> {
+        use crate::config::validator::ConfigValidator;
+
+        // Step 1: Run comprehensive validation
+        let validator = ConfigValidator::new();
+        let report = validator.validate_config(new_content);
+
+        // Step 2: Block on errors (Layer 1: Injection)
+        if report.has_errors() {
+            let error_count = report.issues.iter()
+                .filter(|i| i.validation_level == validator::ValidationLevel::Error)
+                .count();
+
+            eprintln!("\n❌ VALIDATION FAILED:\n");
+            for issue in &report.issues {
+                if issue.validation_level == validator::ValidationLevel::Error {
+                    eprintln!("  Binding {}: {}", issue.binding_index, issue.message);
+                }
+            }
+            eprintln!("\nThis configuration will NOT be commited.");
+            eprintln!("Fix the {} error(s) above before proceeding.\n", error_count);
+
+            return Err(ConfigError::ValidationFailed(
+                format!("{} validation error(s) detected", error_count)
+            ));
+        }
+
+        // Step 3: Block on critical dangers (Layer 2: System destruction)
+        if report.has_critical_dangers() {
+            eprintln!("\n⚠️  CRITICAL DANGER DETECTED:\n");
+            for (binding_idx, danger) in &report.dangerous_commands {
+                if danger.danger_level == danger::DangerLevel::Critical {
+                    eprintln!("  Binding {}: {}", binding_idx, danger.reason);
+                    eprintln!("  Recommendation: {}\n", danger.recommendation);
+                }
+            }
+            eprintln!("This configuration will NOT be committed.");
+            eprintln!("Reemove dangerous commands before proceeding.\n");
+
+            return Err(ConfigError::DangerousCommand(
+                "Critical danger detected - commit blocked.".to_string()
+            ));
+        }
+
+        // Step 4: Show warnings, but allow commit (Layer 2: Suspicious/Dangerous but not Critical
+        let warnings = report.issues.iter()
+            .filter(|i| i.validation_level == validator::ValidationLevel::Warning)
+            .collect::<Vec<_>>();
+
+        if !warnings.is_empty() {
+            eprintln!("\n⚠️  Configuration Warnings:\n");
+            for issue in &warnings {
+                eprintln!("  Binding {}: {}", issue.binding_index, issue.message);
+                if let Some(suggestion) = &issue.suggestion {
+                    eprintln!("   Suggestion: {}", suggestion);
+                }
+            }
+            eprintln!("\nProceeding with commit (warnings are informational).\n");
+        }
+
+        // Step 5: All checks passed . proceed with atomic commit
+        self.commit(new_content)
     }
 
     /// Commits the transaction by atomically writing new content to the config file.
@@ -570,12 +688,11 @@ impl<'a> ConfigTransaction<'a> {
     /// let manager = ConfigManager::new(PathBuf::from("hyprland.conf"))?;
     /// let tx = ConfigTransaction::begin(&manager)?;
     ///
-    /// // Attempt risky operation
-    /// if let Err(e) = tx.commit(potentially_bad_content) {
-    ///     eprintln!("Commit failed: {}", e);
-    ///     tx.rollback()?;  // Restore original
-    ///     println!("Rolled back successfully");
-    /// }
+    /// // Decide not to proceed with changes
+    /// // (e.g., user cancelled, validation failed, etc.)
+    /// println!("Rolling back - changes abandoned");
+    /// tx.rollback()?;  // Restore original
+    ///
     /// # Ok::<(), hypr_keybind_manager::config::ConfigError>(())
     /// ```
     pub fn rollback(&self) -> Result<(), ConfigError> {
@@ -1345,5 +1462,130 @@ mod tests {
         assert!(restored.contains("'Test @ 100%'"), "Should preserve single quotes and special chars");
         assert!(!restored.ends_with('\n'), "Should preserve lack of trailing newline");
         assert!(restored.contains("\n\n"), "Should preserve empty lines");
+    }
+
+    #[test]
+    fn test_injection_blocks_commit() {
+        // Test: Layer 1 injection attempts should block commit
+
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+        fs::write(&config_path, "bind = SUPER, K, exec, firefox\n").unwrap();
+
+        let manager = ConfigManager::new(config_path.clone()).unwrap();
+        let tx = ConfigTransaction::begin(&manager).unwrap();
+
+        // Try to commit config with shell injection
+        let malicious = "bind = SUPER, K, exec, firefox; rm -rf /\n";
+        let result = tx.commit_with_validation(malicious);
+
+        // Should fail with ValidationFailed
+        assert!(result.is_err(), "Injection attempt should be blocked");
+
+        match result.unwrap_err() {
+            ConfigError::ValidationFailed(msg) => {
+                assert!(msg.contains("validation error"),
+                    "Error should mention validation: {}", msg);
+            }
+            other => panic!("Expected ValidationFailed, got {:?}", other),
+        }
+
+        // Original config should be unchanged (transaction rolled back)
+        let current = manager.read_config().unwrap();
+        assert_eq!(current, "bind = SUPER, K, exec, firefox\n",
+            "Original config should be untoched after failed validation");
+    }
+
+    #[test]
+    fn test_critical_danger_blocks_commit() {
+        // Test: Layer 2 critical dangers should block commit
+
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+        fs::write(&config_path, "bind = SUPER, K, exec, firefox\n").unwrap();
+
+        let manager = ConfigManager::new(config_path.clone()).unwrap();
+        let tx = ConfigTransaction::begin(&manager).unwrap();
+
+        // Try to commit config with critical danger (no injection, valid syntax)
+        let dangerous = "bind = SUPER, K, exec, rm -rf /\n";
+        let result = tx.commit_with_validation(dangerous);
+
+        // Should fail with DangerousCommand
+        assert!(result.is_err(), "Critical danger should be blocked");
+
+        match result.unwrap_err() {
+            ConfigError::DangerousCommand(msg) => {
+                assert!(msg.contains("Critical danger") || msg.contains("blocked"),
+                    "Error should mention danger: {}", msg);
+            }
+            other => panic!("Expected DangerousCommand, got {:?}", other),
+        }
+
+        // Original config should be unchanged
+        let current = manager.read_config().unwrap();
+        assert_eq!(current, "bind = SUPER, K, exec, firefox\n",
+            "Original config should be untoched after blocked danger");
+    }
+
+    #[test]
+    fn test_warnings_allow_commit() {
+        // Test: Warning-level issues should allow commit (informational only)
+        // Note: Round 1 only has Critical patterns, so we test safe commands pass
+
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+        fs::write(&config_path, "bind = SUPER, K, exec, firefox\n").unwrap();
+
+        let manager = ConfigManager::new(config_path.clone()).unwrap();
+        let tx = ConfigTransaction::begin(&manager).unwrap();
+
+        // Commit safe config (no warnings in Round 1, but demonstrates success path)
+        let safe = "bind = SUPER, M, exec, kitty\n";
+        let result = tx.commit_with_validation(safe);
+
+        // Should succeed
+        assert!(result.is_ok(), "Safe config should commit successfully");
+
+        // Config should be updated
+        let current = manager.read_config().unwrap();
+        assert_eq!(current, safe, "Config should be updated with safe content");
+
+        // Backup should exist (from transaction begin)
+        let backups = manager.list_backups().unwrap();
+        assert_eq!(backups.len(), 1, "Tranasaction should have created backup");
+    }
+
+    #[test]
+    fn test_clean_config_commits() {
+        // Test: Multi-binding clean config should commit without issues
+
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+        fs::write(&config_path, "initial\n").unwrap();
+
+        let manager = ConfigManager::new(config_path.clone()).unwrap();
+        let tx = ConfigTransaction::begin(&manager).unwrap();
+
+        // Commit multi-binding clean config
+        let clean = r#"# Safe configuration
+bind = SUPER, K, exec, firefox
+bind = SUPER, M, exec, kitty
+bind = SUPER, Q, killactive
+bind = SUPER, F, togglefloating
+"#;
+
+        let result = tx.commit_with_validation(clean);
+
+        // Should succeed
+        assert!(result.is_ok(), "Clean config should commit successfully: {:?}", result);
+
+        // Config should be updated exactly
+        let current = manager.read_config().unwrap();
+        assert_eq!(current, clean, "Config should match committed content exactly");
+
+        // Should have one backup from transaction
+        let backups = manager.list_backups().unwrap();
+        assert_eq!(backups.len(), 1, "Should have backup from transaction begin");
     }
 }

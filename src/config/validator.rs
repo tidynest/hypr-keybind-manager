@@ -10,7 +10,7 @@
 //! system can use to decide whether to allow or block the commit.
 //!
 //! # Example
-//! ```no_run
+//! ```
 //! use hypr_keybind_manager::config::validator::ConfigValidator;
 //!
 //! let validator = ConfigValidator::new();
@@ -190,7 +190,7 @@ impl ConfigValidator {
     ///
     /// # Example
     ///
-    /// ```no_run
+    /// ```
     /// use hypr_keybind_manager::config::validator::ConfigValidator;
     ///
     /// let validator = ConfigValidator::new();
@@ -235,11 +235,7 @@ impl ConfigValidator {
                     match danger.danger_level {
                         DangerLevel::Critical => {
                             // Critical dangers - block commits
-                            report.record_danger(binding_index, danger.clone());
-                            report.add_error(
-                                binding_index,
-                                format!("CRITICAL DANGER: {}", danger.reason)
-                            );
+                            report.record_danger(binding_index, danger.clone());  // Records danger
                         }
                         DangerLevel::Dangerous => {
                             // Dangerous commands - warn but allow
@@ -324,8 +320,8 @@ mod tests {
         // Should have critical danger
         assert!(report.has_critical_dangers(), "rm -rf / should be critical");
 
-        // Should have error (critical blocks commit)
-        assert!(report.has_errors(), "Critical danger should block commit");
+        // Should NOT have errors (critical blocks commit)
+        assert!(!report.has_errors(), "Critical danger should not be an error - it's a danger");
 
         // Should record the danger in dangerous_commands
         assert_eq!(
@@ -352,23 +348,17 @@ bind = SUPER, M, exec, dd if=/dev/zero of=/dev/sda
 
         let report = validator.validate_config(config);
 
-        // Should have errors from both bindings
+        // Should have errors from injection only
         assert!(report.has_errors(), "Should have errors");
         assert_eq!(
-            report.issues.len(), 2,
-            "Should have two issues (one per binding)"
+            report.issues.len(), 1,
+            "Should have one issue (injection only - critical dangers aren't errors)"
         );
 
         // First binding: injection (Layer 1)
         assert!(
             report.issues[0].message.to_lowercase().contains("security"),
             "First issue should be injection"
-        );
-
-        // Second binding: critical danger (Layer 2)
-        assert!(
-            report.issues[1].message.to_lowercase().contains("critical"),
-            "Second issue should be critical danger"
         );
 
         // Should have critical danger
