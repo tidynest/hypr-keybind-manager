@@ -58,6 +58,15 @@ pub enum ConfigError {
     /// Generic I/O error.
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+    /// Hyprland IPC connection failed
+    #[error("Failed to connect to Hyprland IPC: {0}")]
+    IpcConnectionFailed(String),
+    /// Hyprland is not running or socket not found
+    #[error("Hyprland not running (socket not found: {0})")]
+    HyprlandNotRunning(String),
+    /// IPC command was sent but Hyprland returned an error
+    #[error("Hyprland command failed: {0}")]
+    IpcCommandFailed(String),
 }
 
 /// Manages Hyprland configuration files with safe atomic operations.
