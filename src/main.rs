@@ -34,7 +34,11 @@ enum Commands {
     },
 
     /// Launch GUI overlay
-    Gui,
+    Gui {
+        /// Path to Hyprland config file
+        #[arg(short, long, default_value = "~/.config/hypr/hyprland.conf")]
+        config: PathBuf,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -43,10 +47,7 @@ fn main() -> anyhow::Result<()> {
     match cli.command {
         Commands::Check { config } => check_conflicts(&config)?,
         Commands::List { config } => list_keybindings(&config)?,
-        Commands::Gui => {
-            println!("{}", "GUI not yet implemented".yellow());
-            println!("Coming in Phase 5!");
-        }
+        Commands::Gui { config } => launch_gui(&config)?,
     }
 
     Ok(())
@@ -127,7 +128,7 @@ fn list_keybindings(config_path: &Path) -> anyhow::Result<()> {
             .to_str()
             .ok_or_else(|| anyhow::anyhow!("Invalid path encoding"))?
     );
-    let path = std::path::Path::new(expanded_path.as_ref());
+    let path = Path::new(expanded_path.as_ref());
 
     // Read and parse
     let content = fs::read_to_string(path)
@@ -149,6 +150,29 @@ fn list_keybindings(config_path: &Path) -> anyhow::Result<()> {
     }
 
     println!("\n{} Total: {} bindings", "✓".green(), total);
+
+    Ok(())
+}
+
+/// Launch GUI overlay
+fn launch_gui(config_path: &PathBuf) -> anyhow::Result<()> {
+    use hypr_keybind_manager::ui::App;
+
+    // Expand tilde in path
+    let expanded_path = shellexpand::tilde(
+        config_path
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("Invalid path encoding"))?,
+    );
+    let expanded_path = PathBuf::from(expanded_path.as_ref());
+
+    println!("{} Launching GUI...", "→".cyan());
+
+    // Create and run app
+    let app = App::new(expanded_path)
+        .map_err(|e| anyhow::anyhow!("Failed to create app: {}", e))?;
+
+    app.run();
 
     Ok(())
 }

@@ -6,7 +6,8 @@ rust-version = "1.83"
 authors = ["Your Name <your.email@example.com>"]
 description = "Secure keybinding manager for Hyprland with conflict detection"
 license = "MIT"
-repository = "https://github.com/yourusername/hypr-keybind-manager"
+repository = "https://github.com/tidynest/hypr-keybind-manager"
+default-run = "hypr-keybind-manager"
 
 [dependencies]
 # GUI - use latest stable versions
