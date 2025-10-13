@@ -11,8 +11,10 @@
 
 // Components will be added in Day 2
 
-pub mod keybind_list;
-pub mod search_bar;
+mod conflict_panel;
+mod keybind_list;
+mod search_bar;
 
+pub use conflict_panel::ConflictPanel;
 pub use keybind_list::KeybindList;
 pub use search_bar::SearchBar;

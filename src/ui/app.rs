@@ -16,6 +16,8 @@ use gtk4::prelude::*;
 use gtk4::{Application, ApplicationWindow};
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::cell::RefCell;
+use super::components::{ConflictPanel, KeybindList, SearchBar};
 
 use crate::ui::Controller;
 
@@ -88,7 +90,7 @@ impl App {
         });
 
         // Run the application (blocks until exit)
-        self.app.run();
+        self.app.run_with_args::<&str>(&[]);
     }
 
     /// Builds the main window UI
@@ -113,18 +115,34 @@ impl App {
             .default_height(600)
             .build();
 
-        // TODO: Add components here
-        // For now, just show empty window to verify GTK4 works
+        // Main vertical container
+        let vbox = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+        window.set_child(Some(&vbox));
 
-        // Display conflict count in window title (temporary)
-        let conflict_count = controller.conflict_count();
-        if conflict_count > 0 {
-            window.set_title(Some(&format!(
-                "Hyprland Keybinding Manager - {} conflict{}",
-                conflict_count,
-                if conflict_count == 1 { "" } else { "s" }
-            )));
-        }
+        // Conflict warning panel (at the top)
+        let conflict_panel = ConflictPanel::new(controller.clone());
+        vbox.append(conflict_panel.widget());
+
+        // Keybinding list (needs RefCell for SearchBar to update it)
+        let keybind_list = Rc::new(RefCell::new(
+            KeybindList::new(controller.clone())
+        ));
+
+        // Search bar (connects to list for filtering)
+        let search_bar = SearchBar::new(
+            keybind_list.clone(),
+            controller.clone(),
+        );
+        vbox.append(search_bar.widget());
+
+        // Add the scrollable list
+        vbox.append(keybind_list.borrow().widget());
+
+        // Load initial data into list
+        keybind_list.borrow().refresh();
+
+        // Update conflict panel
+        conflict_panel.refresh();
 
         // Show the window
         window.present();

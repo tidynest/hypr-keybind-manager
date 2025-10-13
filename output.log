@@ -1,0 +1,7 @@
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running `target/debug/hypr-keybind-manager gui`
+→ Launching GUI...
+
+(hypr-keybind-manager:2384116): Gtk-WARNING **: 17:44:32.480: Unknown key gtk-modules in /home/bakri/.config/gtk-4.0/settings.ini
+
+(hypr-keybind-manager:2384116): GLib-GIO-CRITICAL **: 17:44:32.527: This application can not open files.
