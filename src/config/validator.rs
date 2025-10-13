@@ -81,6 +81,12 @@ pub struct ValidationReport {
     pub dangerous_commands: Vec<(usize, DangerAssessment)>,
 }
 
+impl Default for ValidationReport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ValidationReport {
     #[allow(dead_code)]
     /// Crates a new empty validation report
@@ -159,6 +165,12 @@ impl ValidationReport {
 #[allow(dead_code)]
 pub struct ConfigValidator {
     danger_detector: DangerDetector,
+}
+
+impl Default for ConfigValidator {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ConfigValidator {

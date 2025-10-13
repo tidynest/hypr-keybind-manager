@@ -221,7 +221,7 @@ impl ConfigManager {
     pub fn list_backups(&self) -> Result<Vec<PathBuf>, ConfigError> {
         // Read the backup directory
         let entries = fs::read_dir(&self.backup_dir)
-            .map_err(|e| ConfigError::Io(e))?;
+            .map_err(ConfigError::Io)?;
 
         // Collect valid backups with their timestamps
         let mut backups: Vec<(PathBuf, chrono::NaiveDateTime)> = Vec::new();
@@ -308,7 +308,7 @@ impl ConfigManager {
         let mut deleted_count = 0;
         for backup_path in to_delete {
             fs::remove_file(backup_path)
-                .map_err(|e| ConfigError::Io(e))?;
+                .map_err(ConfigError::Io)?;
             deleted_count += 1;
         }
 

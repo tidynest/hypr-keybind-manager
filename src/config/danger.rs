@@ -84,6 +84,12 @@ pub struct DangerDetector {
     safe_commands: HashSet<String>,
 }
 
+impl Default for DangerDetector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DangerDetector {
     /// Creates a new detector with all patterns loaded
     pub fn new() -> Self {
