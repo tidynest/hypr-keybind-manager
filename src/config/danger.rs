@@ -670,7 +670,7 @@ impl DangerDetector {
         }
 
         // Base64 strings should have reasonable character variety
-        let unique_chars: std::collections::HashSet<char> = s.chars().collect();
+        let unique_chars: HashSet<char> = s.chars().collect();
         if unique_chars.len() < 4 {
             return false;  // Too uniform (e.g., "AAAAAAAA")
         }
@@ -699,7 +699,7 @@ impl DangerDetector {
 
         // Additional sanity check: hex strings shouldn't be all the same character
         // (prevents false positives on "0000000000")
-        let unique_chars: std::collections::HashSet<char> = s.chars().collect();
+        let unique_chars: HashSet<char> = s.chars().collect();
         if unique_chars.len() < 3 {
             return false;  // Too uniform to be interesting data
         }

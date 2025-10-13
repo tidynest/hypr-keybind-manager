@@ -1,0 +1,119 @@
+    Checking hypr-keybind-manager v0.1.0 (/home/bakri/RustroverProjects/hypr-keybind-manager)
+warning: you should consider adding a `Default` implementation for `DangerDetector`
+  --> src/config/danger.rs:89:5
+   |
+89 | /     pub fn new() -> Self {
+90 | |         Self {
+91 | |             critical_patterns: Self::build_critical_patterns(),
+92 | |             dangerous_commands: Self::build_dangerous_commands(),
+...  |
+96 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#new_without_default
+   = note: `#[warn(clippy::new_without_default)]` on by default
+help: try adding this
+   |
+87 + impl Default for DangerDetector {
+88 +     fn default() -> Self {
+89 +         Self::new()
+90 +     }
+91 + }
+   |
+
+warning: you should consider adding a `Default` implementation for `ValidationReport`
+  --> src/config/validator.rs:87:5
+   |
+87 | /     pub fn new() -> Self {
+88 | |         Self {
+89 | |             issues: Vec::new(),
+90 | |             highest_danger: DangerLevel::Safe,
+...  |
+93 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#new_without_default
+help: try adding this
+   |
+84 + impl Default for ValidationReport {
+85 +     fn default() -> Self {
+86 +         Self::new()
+87 +     }
+88 + }
+   |
+
+warning: you should consider adding a `Default` implementation for `ConfigValidator`
+   --> src/config/validator.rs:167:5
+    |
+167 | /     pub fn new() -> Self {
+168 | |         Self {
+169 | |             danger_detector: DangerDetector::new(),
+170 | |         }
+171 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#new_without_default
+help: try adding this
+    |
+164 + impl Default for ConfigValidator {
+165 +     fn default() -> Self {
+166 +         Self::new()
+167 +     }
+168 + }
+    |
+
+warning: redundant closure
+   --> src/config/mod.rs:224:22
+    |
+224 |             .map_err(|e| ConfigError::Io(e))?;
+    |                      ^^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the function itself: `ConfigError::Io`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_closure
+    = note: `#[warn(clippy::redundant_closure)]` on by default
+
+warning: redundant closure
+   --> src/config/mod.rs:311:26
+    |
+311 |                 .map_err(|e| ConfigError::Io(e))?;
+    |                          ^^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the function itself: `ConfigError::Io`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_closure
+
+warning: doc list item overindented
+   --> src/config/mod.rs:461:9
+    |
+461 |     ///               outlive this reference (enforced by lifetime `'a`).
+    |         ^^^^^^^^^^^^^^ help: try using `  ` (2 spaces)
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_overindented_list_items
+    = note: `#[warn(clippy::doc_overindented_list_items)]` on by default
+
+warning: `hypr-keybind-manager` (lib) generated 6 warnings (run `cargo clippy --fix --lib -p hypr-keybind-manager` to apply 5 suggestions)
+warning: writing `&PathBuf` instead of `&Path` involves a new object where a slice will do
+  --> src/main.rs:56:33
+   |
+56 | fn check_conflicts(config_path: &PathBuf) -> anyhow::Result<()> {
+   |                                 ^^^^^^^^ help: change this to: `&Path`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#ptr_arg
+   = note: `#[warn(clippy::ptr_arg)]` on by default
+
+warning: called `.as_ref().map(|s| s.as_str())` on an `Option` value
+   --> src/main.rs:103:28
+    |
+103 |                 let args = binding.args.as_ref().map(|s| s.as_str()).unwrap_or("");
+    |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using as_deref: `binding.args.as_deref()`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#option_as_ref_deref
+    = note: `#[warn(clippy::option_as_ref_deref)]` on by default
+
+warning: writing `&PathBuf` instead of `&Path` involves a new object where a slice will do
+   --> src/main.rs:123:34
+    |
+123 | fn list_keybindings(config_path: &PathBuf) -> anyhow::Result<()> {
+    |                                  ^^^^^^^^ help: change this to: `&Path`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#ptr_arg
+
+warning: `hypr-keybind-manager` (bin "hypr-keybind-manager") generated 3 warnings (run `cargo clippy --fix --bin "hypr-keybind-manager"` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.33s

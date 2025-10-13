@@ -20,7 +20,7 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
-mod danger;
+pub mod danger;
 pub mod validator;
 
 use std::fs;
