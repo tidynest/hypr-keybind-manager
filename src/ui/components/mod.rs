@@ -10,3 +10,9 @@
 //! - `details_panel.rs` - Selected binding details
 
 // Components will be added in Day 2
+
+pub mod keybind_list;
+pub mod search_bar;
+
+pub use keybind_list::KeybindList;
+pub use search_bar::SearchBar;

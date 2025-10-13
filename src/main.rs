@@ -155,7 +155,7 @@ fn list_keybindings(config_path: &Path) -> anyhow::Result<()> {
 }
 
 /// Launch GUI overlay
-fn launch_gui(config_path: &PathBuf) -> anyhow::Result<()> {
+fn launch_gui(config_path: &Path) -> anyhow::Result<()> {
     use hypr_keybind_manager::ui::App;
 
     // Expand tilde in path
