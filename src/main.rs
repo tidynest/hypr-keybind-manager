@@ -7,7 +7,7 @@ use clap::{Parser, Subcommand};
 use colored::*;
 use hypr_keybind_manager::core::{parser::parse_config_file, conflict::ConflictDetector};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
 #[command(name = "hypr-keybind-manager")]
@@ -53,7 +53,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 /// Check config for keybinding conflicts
-fn check_conflicts(config_path: &PathBuf) -> anyhow::Result<()> {
+fn check_conflicts(config_path: &Path) -> anyhow::Result<()> {
     // Expand tilde in path
     let expanded_path = shellexpand::tilde(
         config_path
@@ -100,7 +100,7 @@ fn check_conflicts(config_path: &PathBuf) -> anyhow::Result<()> {
             );
 
             for (idx, binding) in conflict.conflicting_bindings.iter().enumerate() {
-                let args = binding.args.as_ref().map(|s| s.as_str()).unwrap_or("");
+                let args = binding.args.as_deref().unwrap_or("");
 
                 println!("  {} {} → {} {}",
                      format!("{}.", idx + 1).dimmed(),
@@ -120,7 +120,7 @@ fn check_conflicts(config_path: &PathBuf) -> anyhow::Result<()> {
 }
 
 /// List all keybinding in the config
-fn list_keybindings(config_path: &PathBuf) -> anyhow::Result<()> {
+fn list_keybindings(config_path: &Path) -> anyhow::Result<()> {
     // Expand tilde in path
     let expanded_path = shellexpand::tilde(
         config_path

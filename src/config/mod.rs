@@ -458,7 +458,7 @@ impl<'a> ConfigTransaction<'a> {
     /// # Arguments
     ///
     /// * `manager` - Reference to the ConfigManager. The transaction cannot
-    ///               outlive this reference (enforced by lifetime `'a`).
+    ///   outlive this reference (enforced by lifetime `'a`).
     ///
     /// # Returns
     ///
