@@ -4,11 +4,6 @@
 
 use gtk4::prelude::*;
 use gtk4::SearchEntry;
-use std::cell::RefCell;
-use std::rc::Rc;
-
-use crate::ui::components::KeybindList;
-use crate::ui::Controller;
 
 /// Search bar for filtering keybindings
 pub struct SearchBar {
@@ -19,21 +14,23 @@ pub struct SearchBar {
 impl SearchBar {
     /// Creates a new search bar
     ///
-    /// # Arguments
-    /// * `keybind_list` - Shared KeybindList reference to update
-    /// * `controller` - Shared Controller reference for filtering
+    /// Returns just the widget - parent is responsible for wiring
+    /// up the search functionality to avoid instance sharing bugs.
     ///
     /// # Example
     /// ```no_run
-    /// let controller = Rc::new(Controller::new(config_path)?);
-    /// let list = Rc::new(RefCell::new(KeybindList::new(controller.clone())));
-    /// let search = SearchBar::new(list, controller);
+    /// use hypr_keybind_manager::ui::components::SearchBar;
+    ///
+    /// let search_bar = SearchBar::new();
+    ///
+    /// // Parent wires up search functionality:
+    /// search_bar.widget().connect_search_changed(move |entry| {
+    ///     let query = entry.text().to_string();
+    ///     // ... filter logic here
+    /// });
     /// ```
-    pub fn new(
-        keybind_list: Rc<RefCell<KeybindList>>,
-        controller: Rc<Controller>,
-    ) -> Self {
-        // Creates search entry widget
+    pub fn new() -> Self {
+        // Create search entry widget
         let entry = SearchEntry::builder()
             .placeholder_text("Search keybindings...")
             .hexpand(true)
@@ -42,19 +39,6 @@ impl SearchBar {
             .margin_top(10)
             .margin_bottom(10)
             .build();
-
-        // Connect search-changed signal for real-time filtering
-        let keybind_list_clone = Rc::clone(&keybind_list);
-        let controller_clone = Rc::clone(&controller);
-
-        entry.connect_search_changed(move |entry| {
-            // Get query text
-            let query = entry.text().to_string();
-            // Filter via controller
-            let filered = controller_clone.filter_keybindings(&query);
-            // Update list with filtered results
-            keybind_list_clone.borrow().update_with_bindings(filered);
-        });
 
         Self { widget: entry }
     }

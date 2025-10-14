@@ -14,7 +14,9 @@
 mod conflict_panel;
 mod keybind_list;
 mod search_bar;
+mod details_panel;
 
 pub use conflict_panel::ConflictPanel;
 pub use keybind_list::KeybindList;
 pub use search_bar::SearchBar;
+pub use details_panel::DetailsPanel;

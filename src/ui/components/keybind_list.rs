@@ -134,6 +134,43 @@ impl KeybindList {
         &self.widget
     }
 
+    /// Get a binding by its current display index.
+    ///
+    /// Returns the keybinding at the specified index in the currently displayed list.
+    /// This accounts for any active search filters.
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - The zero-based index in the current display
+    ///
+    /// # Returns
+    ///
+    /// * `Some(Keybinding)` if the index is valid
+    /// * `None` if the index is out of bounds
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// if let Some(binding) = keybind_list.get_binding_at_index(2) {
+    ///     println!("Third binding: {}", binding.key_combo);
+    /// }
+    /// ```
+    pub fn get_binding_at_index(&self, index: usize) -> Option<Keybinding> {
+        let bindings = self.current_bindings.borrow();
+        bindings.get(index).cloned()
+    }
+
+    /// Get a reference to the internal ListBox widget.
+    ///
+    /// This is used for connecting signals (e.g., row selection).
+    ///
+    /// # Returns
+    ///
+    /// Reference to the `ListBox` widget
+    pub fn list_box(&self) -> &ListBox {
+        &self.list_box
+    }
+
     /// Returns count of currently displayed bindings
     pub fn count(&self) -> usize {
         self.current_bindings.borrow().len()

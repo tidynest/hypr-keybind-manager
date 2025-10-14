@@ -13,11 +13,10 @@
 //! ```
 
 use gtk4::prelude::*;
-use gtk4::{Application, ApplicationWindow};
+use gtk4::{Application, ApplicationWindow, Orientation, Paned};
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::cell::RefCell;
-use super::components::{ConflictPanel, KeybindList, SearchBar};
+use crate::ui::components::{ConflictPanel, DetailsPanel, KeybindList, SearchBar};
 
 use crate::ui::Controller;
 
@@ -98,53 +97,111 @@ impl App {
     /// This is called when the application activates. It creates
     /// the window and all components.
     fn build_ui(app: &Application, controller: Rc<Controller>) {
-        // Load keybindings from config
-        match controller.load_keybindings() {
-            Ok(count) => println!("✓ Loaded {} keybindings", count),
-            Err(e) => {
-                eprintln!("✗ Failed to load keybindings: {}", e);
-                return;
-            }
+        // Load keybindings
+        if let Err(e) = controller.load_keybindings() {
+            eprintln!("Failed to load keybindings: {}", e);
+            return;
         }
 
-        // Create main window
+        // Create application window
         let window = ApplicationWindow::builder()
             .application(app)
             .title("Hyprland Keybinding Manager")
-            .default_width(800)
+            .default_width(1000)
             .default_height(600)
             .build();
 
-        // Main vertical container
-        let vbox = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-        window.set_child(Some(&vbox));
+        // Create main vertical box
+        let main_vbox = gtk4::Box::new(Orientation::Vertical, 0);
 
-        // Conflict warning panel (at the top)
+        // Create conflict panel at top
         let conflict_panel = ConflictPanel::new(controller.clone());
-        vbox.append(conflict_panel.widget());
+        main_vbox.append(conflict_panel.widget());
 
-        // Keybinding list (needs RefCell for SearchBar to update it)
-        let keybind_list = Rc::new(RefCell::new(
-            KeybindList::new(controller.clone())
-        ));
+        // USE PANED INSTEAD OF BOX FOR FIXED RIGHT PANEL
+        let paned = Paned::new(Orientation::Horizontal);
 
-        // Search bar (connects to list for filtering)
-        let search_bar = SearchBar::new(
-            keybind_list.clone(),
-            controller.clone(),
-        );
-        vbox.append(search_bar.widget());
+        // LEFT SIDE: Search + List (resizable)
+        let left_vbox = gtk4::Box::new(Orientation::Vertical, 10);
+        left_vbox.set_margin_start(10);
+        left_vbox.set_margin_end(10);
+        left_vbox.set_margin_bottom(10);
 
-        // Add the scrollable list
-        vbox.append(keybind_list.borrow().widget());
+        // Create SINGLE keybind list instance
+        let keybind_list = Rc::new(KeybindList::new(controller.clone()));
 
-        // Load initial data into list
-        keybind_list.borrow().refresh();
+        // Create search bar
+        let search_bar = SearchBar::new();
+        left_vbox.append(search_bar.widget());
+
+        // Add keybind list to left side
+        left_vbox.append(keybind_list.widget());
+
+        // Wire up search functionality manually
+        let keybind_list_for_search = keybind_list.clone();
+        let controller_for_search = controller.clone();
+
+        search_bar.widget().connect_search_changed(move |entry| {
+            let query = entry.text().to_string();
+            let filtered = controller_for_search.filter_keybindings(&query);
+            keybind_list_for_search.update_with_bindings(filtered);
+        });
+
+        // RIGHT SIDE: Details Panel (FIXED 280px)
+        let details_panel = Rc::new(DetailsPanel::new(controller.clone()));
+
+        // KEY: Configure Paned to keep right side fixed at 280px
+        paned.set_start_child(Some(&left_vbox));
+        paned.set_resize_start_child(true);   // Left side resizes with window
+        paned.set_shrink_start_child(true);   // Left side can shrink
+
+        paned.set_end_child(Some(details_panel.widget()));
+        paned.set_resize_end_child(false);    // Right side DOES NOT resize!
+        paned.set_shrink_end_child(false);    // Right side CANNOT shrink!
+
+        // Set divider position (window width - panel width)
+        // This will be adjusted when window is realized
+        paned.set_position(720);  // 1000px default width - 280px panel = 720px
+
+        // Adjust paned position when window size changes
+        let paned_clone = paned.clone();
+        window.connect_default_width_notify(move |window| {
+            let width = window.default_width();
+            paned_clone.set_position(width - 280);
+        });
+
+        // Add paned to main
+        main_vbox.append(&paned);
+
+        // Set window content
+        window.set_child(Some(&main_vbox));
+
+        // Connect row selection signal
+        let details_panel_clone = details_panel.clone();
+        let keybind_list_clone = keybind_list.clone();
+
+        keybind_list.list_box().connect_row_selected(move |_list_box, row| {
+            match row {
+                Some(r) => {
+                    let index = r.index() as usize;
+                    if let Some(binding) = keybind_list_clone.get_binding_at_index(index) {
+                        details_panel_clone.update_binding(Some(&binding));
+                    }
+                }
+                None => {
+                    details_panel_clone.update_binding(None);
+                }
+            }
+        });
+
+        // Initial display
+        let all_bindings = controller.get_keybindings();
+        keybind_list.update_with_bindings(all_bindings);
 
         // Update conflict panel
         conflict_panel.refresh();
 
-        // Show the window
+        // Show window
         window.present();
     }
 }
