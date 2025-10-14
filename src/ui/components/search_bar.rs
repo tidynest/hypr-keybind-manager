@@ -20,6 +20,7 @@ impl SearchBar {
     /// # Example
     /// ```no_run
     /// use hypr_keybind_manager::ui::components::SearchBar;
+    /// use gtk4::prelude::*;
     ///
     /// let search_bar = SearchBar::new();
     ///

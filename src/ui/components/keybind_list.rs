@@ -31,9 +31,18 @@ impl KeybindList {
     ///
     /// # Example
     /// ```no_run
+    /// use hypr_keybind_manager::ui::components::KeybindList;
+    /// use hypr_keybind_manager::ui::Controller;
+    /// use std::rc::Rc;
+    /// use std::path::PathBuf;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let config_path = PathBuf::from("~/.config/hypr/hyprland.conf");
     /// let controller = Rc::new(Controller::new(config_path)?);
     /// let list = KeybindList::new(controller);
     /// list.refresh(); // Load initial data
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn new(controller: Rc<Controller>) -> Self {
         // Create scrollable container
@@ -77,16 +86,16 @@ impl KeybindList {
         // Cache the bindings
         *self.current_bindings.borrow_mut() = bindings.clone();
 
-        // Add new rows
-        for binding in bindings {
-            let row = self.create_row(&binding);
+        // Add new rows with alternating colours
+        for (index, binding) in bindings.iter().enumerate() {
+            let row = self.create_row(binding, index);
             self.list_box.append(&row);
         }
     }
 
-    /// Creates a single row widget for a keybinding
-    fn create_row(&self, binding: &Keybinding) -> GtkBox {
-        // Horizontalbox for row layout
+    /// Create a single row widget for a keybinding
+    fn create_row(&self, binding: &Keybinding, index: usize) -> GtkBox {
+        // Horizontal box for row layout
         let row = GtkBox::builder()
             .orientation(Orientation::Horizontal)
             .spacing(20)
@@ -95,6 +104,15 @@ impl KeybindList {
             .margin_top(5)
             .margin_bottom(5)
             .build();
+
+        // Add subtle alternating background colour for every other row
+        if index % 2 == 0 {
+            // Even rows: Slightly lighter background
+            row.add_css_class("even-row");
+        } else {
+            // Odd rows: Slightly darker background (Default background colour)
+            row.add_css_class("odd-row");
+        }
 
         // Key combination (e.g., "SUPER+K")
         let key_label = Label::builder()
@@ -120,6 +138,15 @@ impl KeybindList {
             .xalign(0.0)
             .hexpand(true)  // Take remaining space
             .build();
+
+        // Add tooltip to show full arguments on hover
+        if let Some(full_args) = &binding.args {
+            if full_args.len() > 40 {
+                args_label.set_can_target(true);
+                args_label.set_has_tooltip(true);
+                args_label.set_tooltip_text(Some(full_args));
+            }
+        }
 
         // Assemble row
         row.append(&key_label);

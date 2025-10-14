@@ -72,10 +72,11 @@ impl DetailsPanel {
 
         // Row 0: Key Combo
         let key_header = Label::builder()
-            .label("Key Combo:")
+            .label("🎹 Key Combo:")
             .halign(Align::End)
             .xalign(1.0)
             .build();
+        key_header.add_css_class("field-header");
 
         let key_label = Label::builder()
             .label("Select a keybinding...")
@@ -91,10 +92,11 @@ impl DetailsPanel {
 
         // Row 1: Dispatcher
         let dispatcher_header = Label::builder()
-            .label("Dispatcher:")
+            .label("⚡ Dispatcher:")
             .halign(Align::End)
             .xalign(1.0)
             .build();
+        dispatcher_header.add_css_class("field-header");
 
         let dispatcher_label = Label::builder()
             .label("")
@@ -110,10 +112,11 @@ impl DetailsPanel {
 
         // Row 2: Arguments
         let args_header = Label::builder()
-            .label("Arguments:")
+            .label("📝 Arguments:")
             .halign(Align::End)
             .xalign(1.0)
             .build();
+        args_header.add_css_class("field-header");
 
         let args_label = Label::builder()
             .label("")
@@ -129,10 +132,11 @@ impl DetailsPanel {
 
         // Row 3: Bind Type
         let bind_type_header = Label::builder()
-            .label("Bind Type:")
+            .label("🔗 Bind Type:")
             .halign(Align::End)
             .xalign(1.0)
             .build();
+        bind_type_header.add_css_class("field-header");
 
         let bind_type_label = Label::builder()
             .label("")
@@ -148,10 +152,11 @@ impl DetailsPanel {
 
         // Row 4: Status
         let status_header = Label::builder()
-            .label("Status:")
+            .label("📊 Status:")
             .halign(Align::End)
             .xalign(1.0)
             .build();
+        status_header.add_css_class("field-header");
 
         let status_label = Label::builder()
             .label("")
@@ -179,7 +184,6 @@ impl DetailsPanel {
         }
     }
 
-
     /// Update the panel to display information about a specific keybinding.
     ///
     /// If `None` is passed, the panel shows a "Select a keybinding..." message.
@@ -191,9 +195,22 @@ impl DetailsPanel {
         match binding {
             Some(b) => {
                 // Display binding information
-                self.key_label.set_label(&format!("{}", b.key_combo));
+                let key_combo_text = format!("{}", b.key_combo);
+                self.key_label.set_label(&key_combo_text);
+                self.key_label.set_can_target(true);
+                self.key_label.set_has_tooltip(true);
+                self.key_label.set_tooltip_text(Some(&key_combo_text));  // Tooltip for long combos
+
                 self.dispatcher_label.set_label(&b.dispatcher);
-                self.args_label.set_label(b.args.as_deref().unwrap_or("(none)"));
+                self.dispatcher_label.set_can_target(true);
+                self.dispatcher_label.set_has_tooltip(true);
+                self.dispatcher_label.set_tooltip_text(Some(&b.dispatcher));
+
+                let args_text = b.args.as_deref().unwrap_or("(none)");
+                self.args_label.set_label(args_text);
+                self.args_label.set_can_target(true);
+                self.args_label.set_has_tooltip(true);
+                self.args_label.set_tooltip_text(Some(args_text));  // Tooltip shows full args
 
                 // Format BindType for display
                 let bind_type_str = match b.bind_type {
@@ -232,36 +249,91 @@ impl DetailsPanel {
 
                 // Format the status message based on conflicts found
                 if conflicting_bindings.is_empty() {
-                    self.status_label.set_label("✅ No conflicts")
+                    self.status_label.set_label("✅ No conflicts");
+                    self.status_label.set_tooltip_text(Some("This keybinding has no conflicts"));
                 } else if conflicting_bindings.len() == 1 {
                     // Single conflic - show the full details
                     let other = &conflicting_bindings[0];
+                    let args_preview = if let Some(args) = &other.args {
+                        // Truncate long arguments for display
+                        if args.len() > 30 {
+                            format!("({}", &args[..30])
+                        } else {
+                            args.clone()
+                        }
+                    } else {
+                        String::new()
+                    };
+
                     let conflict_description = format!(
                         "⚠️ Conflicts with:\n{} → {} {}",
                         other.key_combo,
                         other.dispatcher,
+                        args_preview
+                    );
+
+                    // Full text in tooltip
+                    let full_conflict = format!(
+                        "Conflicts with:  {} → {} {}",
+                        other.key_combo,
+                        other.dispatcher,
                         other.args.as_deref().unwrap_or("")
                     );
+
                     self.status_label.set_label(&conflict_description);
+                    self.status_label.set_tooltip_text(Some(&full_conflict));
                 } else {
                     // Multiple conflicts - show first one and count
                     let first_conflict = &conflicting_bindings[0];
+                    let args_preview = if let Some(args) = &first_conflict.args {
+                        if args.len() > 30 {
+                            format!("({}", &args[..30])
+                        } else {
+                            args.clone()
+                        }
+                    } else {
+                        String::new()
+                    };
+
                     let conflict_description = format!(
-                        "⚠️ Conflicts with:\n{} → {} {}\n(and {} more)",
+                        "⚠️  {}\n   {} {}\n   (and {} more)",
                         first_conflict.key_combo,
                         first_conflict.dispatcher,
-                        first_conflict.args.as_deref().unwrap_or(""),
+                        args_preview,
                         conflicting_bindings.len() - 1
                     );
+
+                    // List all conflicts in tooltip
+                    let mut full_conflicts = String::from("Conflicts with:\n");
+                    for (i, cb) in conflicting_bindings.iter().enumerate() {
+                        full_conflicts.push_str(&format!(
+                            "{}. {} → {} {}\n",
+                            i + 1,
+                            cb.key_combo,
+                            cb.dispatcher,
+                            cb.args.as_deref().unwrap_or("")
+                        ));
+                    }
+
                     self.status_label.set_label(&conflict_description);
+                    self.status_label.set_tooltip_text(Some(&full_conflicts));
                 }
             }
             None => {
-                self.key_label.set_label("Select a keybinding...");
+                // Show friendly placeholder when nothing is selected
+                self.key_label.set_label("👈 Select a binding");
+                self.key_label.set_tooltip_text(None);
+
                 self.dispatcher_label.set_label("");
+                self.dispatcher_label.set_tooltip_text(None);
+
                 self.args_label.set_label("");
+                self.args_label.set_tooltip_text(None);
+
                 self.bind_type_label.set_label("");
+
                 self.status_label.set_label("");
+                self.status_label.set_tooltip_text(None);
             }
         }
     }

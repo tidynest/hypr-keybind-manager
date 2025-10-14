@@ -5,7 +5,7 @@
 //!
 //! # Features
 //!
-//! - Yellow warning banner using GTK4's InfoBar widget
+//! - Yellow warning banner using GTK4's GtkBox widget
 //! - Displays count of detected conflicts
 //! - Automatically shows/hides based on conflict state
 //! - Smooth reveal/hide animations
@@ -37,19 +37,20 @@
 //! panel.refresh();  // Shows banner if conflicts exist
 //! ```
 
-use gtk4::{InfoBar, Label, MessageType};
+use gtk4::prelude::*;
+use gtk4::{Box as GtkBox, Label, Orientation, Revealer};
 use std::rc::Rc;
 
 use crate::ui::Controller;
 
 /// Warning panel that displays when keybinding conflicts are detected
 ///
-/// This component uses GTK4's InfoBar widget to show a dismissible warning
+/// This component uses GTK4's GtkBox widget to show a dismissible warning
 /// banner. It queries the Controller for conflicts and updates its visibility
 /// and message accordingly.
 pub struct ConflictPanel {
-    /// Root widget (InfoBar provides the warning banner styling)
-    widget: InfoBar,
+    /// Root widget (Revealer for smooth show/hide animation)
+    widget: Revealer,
     /// Label displaying the conflict message and count
     message_label: Label,
     /// Controller for accessing conflict data
@@ -83,29 +84,41 @@ impl ConflictPanel {
     /// // vbox.append(panel.widget());
     /// ```
     pub fn new(controller: Rc<Controller>) -> Self {
-        // Create the InfoBar with warning styling
-        let info_bar = InfoBar::builder()
-            .message_type(MessageType::Warning)  // Yellow warning colour
-            .revealed(false)                     // Hidden by default
-            .show_close_button(false)            // No dismiss button
-            .hexpand(true)                       // Fill width
+        // Create revealer for smooth animations
+        let revealer = Revealer::builder()
+            .transition_type(gtk4::RevealerTransitionType::SlideDown)
+            .transition_duration(300)
+            .reveal_child(false)
             .build();
+
+        // Create warning box with styling
+        let warning_box = GtkBox::builder()
+            .orientation(Orientation::Horizontal)
+            .spacing(10)
+            .margin_start(10)
+            .margin_end(10)
+            .margin_top(5)
+            .margin_bottom(5)
+            .hexpand(true)
+            .build();
+
+        warning_box.add_css_class("warning-banner");
 
         // Create the message label
         let message_label = Label::builder()
-            .label("No conflicts detected")  // Default message
-            .xalign(0.0)                     // Left-align text
+            .label("No conflicts detected")
+            .xalign(0.0)
             .margin_start(10)
             .margin_end(10)
             .margin_top(5)
             .margin_bottom(5)
             .build();
 
-        // Add label to InfoBar's content area
-        info_bar.add_child(&message_label);
+        warning_box.append(&message_label);
+        revealer.set_child(Some(&warning_box));
 
         Self {
-            widget: info_bar,
+            widget: revealer,
             message_label,
             controller,
         }
@@ -138,11 +151,11 @@ impl ConflictPanel {
 
         if conflicts.is_empty() {
             // No conflicts - hide the panel
-            self.widget.set_revealed(false);
+            self.widget.set_reveal_child(false);
             self.message_label.set_label("No conflicts detected");
         } else {
             // Conflicts exist - show the panel with count
-            self.widget.set_revealed(true);
+            self.widget.set_reveal_child(true);
 
             let count = conflicts.len();
             let message = if count == 1 {
@@ -159,7 +172,7 @@ impl ConflictPanel {
     ///
     /// # Returns
     ///
-    /// Reference to the InfoBar widget that can be appended to a Box or other container
+    /// Reference to the GtkBox widget that can be appended to a Box or other container
     ///
     /// # Example
     ///
@@ -173,7 +186,7 @@ impl ConflictPanel {
     /// # let vbox = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     /// vbox.append(panel.widget());
     /// ```
-    pub fn widget(&self) -> &InfoBar {
+    pub fn widget(&self) -> &Revealer {
         &self.widget
     }
 

@@ -13,7 +13,7 @@
 //! ```
 
 use gtk4::prelude::*;
-use gtk4::{Application, ApplicationWindow, Orientation, Paned};
+use gtk4::{gdk, Application, ApplicationWindow, CssProvider, Orientation, Paned};
 use std::path::PathBuf;
 use std::rc::Rc;
 use crate::ui::components::{ConflictPanel, DetailsPanel, KeybindList, SearchBar};
@@ -92,6 +92,82 @@ impl App {
         self.app.run_with_args::<&str>(&[]);
     }
 
+    // Load custom CSS styling for the application
+    fn load_css() {
+        let provider = CssProvider::new();
+        provider.load_from_string(
+            "
+            /* Alternating row colours for keybind list */
+            .even-row {
+                background-color: alpha(@theme_bg_color, 0.5);
+            }
+
+            .odd-row {
+                background-color: transparent;
+            }
+
+            /* Selected row highlighting */
+            row:selected {
+                background-color: @theme_selected_bg_color;
+            }
+
+            /* Hover effect for better interaction feedback */
+            row:hover {
+                background-color: alpha(@theme_bg_color, 0.3);
+            }
+
+            /* Slightly increase spacing in details panel */
+            frame {
+                padding: 8px;
+            }
+
+            /* Bold labels for field headers */
+            .field-header {
+                font-weight: bold;
+                font-size: 0.95em;
+            }
+
+            /* Value labels with slightly larger spacing */
+            .field-value {
+                padding-left: 8px;
+            }
+
+            /* Panel title styling */
+            frame > label {
+                font-weight: bold;
+                font-size: 1.05em;
+            }
+
+            /* Search bar styling */
+            searchentry {
+                border-radius: 8px;
+            }
+
+            /* Warning banner styling (replaces deprecated InfoBar) */
+            .warning-banner {
+                background: linear-gradient(to bottom, #fcd34d, #fbbf24);
+                border: 1px solid #f59e0b;
+                border-left: 4px solid #d97706;
+                border-radius: 8px;
+                padding: 4px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            }
+
+            .warning-banner label {
+                color: #78350f;
+                font-weight: 600;
+                text-shadow: 0 1px 1px rgba(255, 255, 255, 0.3);
+            }
+            "
+        );
+
+        // Apply CSS to the default display
+        gtk4::style_context_add_provider_for_display(
+            &gdk::Display::default().expect("Could not connect to a display"),
+            &provider,
+            gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+        );
+    }
     /// Builds the main window UI
     ///
     /// This is called when the application activates. It creates
@@ -102,6 +178,9 @@ impl App {
             eprintln!("Failed to load keybindings: {}", e);
             return;
         }
+
+        // Load custom CSS styling
+        Self::load_css();
 
         // Create application window
         let window = ApplicationWindow::builder()
@@ -118,7 +197,7 @@ impl App {
         let conflict_panel = ConflictPanel::new(controller.clone());
         main_vbox.append(conflict_panel.widget());
 
-        // USE PANED INSTEAD OF BOX FOR FIXED RIGHT PANEL
+        // Use PANED for fixed right panel
         let paned = Paned::new(Orientation::Horizontal);
 
         // LEFT SIDE: Search + List (resizable)
@@ -160,7 +239,6 @@ impl App {
         paned.set_shrink_end_child(false);    // Right side CANNOT shrink!
 
         // Set divider position (window width - panel width)
-        // This will be adjusted when window is realized
         paned.set_position(720);  // 1000px default width - 280px panel = 720px
 
         // Adjust paned position when window size changes
@@ -193,6 +271,58 @@ impl App {
                 }
             }
         });
+
+        // Add keyboard navigation
+        use gtk4::{EventControllerKey, gdk};
+
+        let key_controller    = EventControllerKey::new();
+        let list_box_for_keys = keybind_list.list_box().clone();
+
+        key_controller.connect_key_pressed(move |_controller, key, _code, _modifier| {
+            match key {
+                gdk::Key::Up => {
+                    // Move selection up
+                    if let Some(selected_row) = list_box_for_keys.selected_row() {
+                        let current_index = selected_row.index();
+                        if current_index > 0 {
+                            if let Some(previous_row) = list_box_for_keys.row_at_index(current_index - 1) {
+                                list_box_for_keys.select_row(Some(&previous_row));
+                            }
+                        }
+                    }
+                    gtk4::glib::Propagation::Stop
+                }
+                gdk::Key::Down => {
+                    // Move selection down
+                    if let Some(selected_row) = list_box_for_keys.selected_row() {
+                        let current_index = selected_row.index();
+                        if let Some(next_row) = list_box_for_keys.row_at_index(current_index + 1) {
+                            list_box_for_keys.select_row(Some(&next_row));
+                        }
+                    } else {
+                        // If nothing selected, select first row
+                        if let Some(first_row) = list_box_for_keys.row_at_index(0) {
+                            list_box_for_keys.select_row(Some(&first_row));
+                        }
+                    }
+                    gtk4::glib::Propagation::Stop
+                }
+                gdk::Key::Return | gdk::Key::KP_Enter => {
+                    // Enter key - already handled by row selection, just ensure it's visible
+                    if let Some(selected_row) = list_box_for_keys.selected_row() {
+                        list_box_for_keys.select_row(Some(&selected_row));
+                    }
+                    gtk4::glib::Propagation::Stop
+                }
+                _ => gtk4::glib::Propagation::Proceed
+            }
+        });
+
+        keybind_list.list_box().add_controller(key_controller);
+
+        // Make list box focusable for keyboard navigation
+        keybind_list.list_box().set_can_focus(true);
+        keybind_list.list_box().grab_focus();
 
         // Initial display
         let all_bindings = controller.get_keybindings();
