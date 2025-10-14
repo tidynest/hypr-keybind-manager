@@ -1,5 +1,14 @@
+# Build artifacts
 /target
 
- .idea*
+# IDE files (IntelliJ IDEA / RustRover)
+.idea/
 
-.idea/dictionaries/
+# OS files
+.DS_Store
+Thumbs.db
+
+# Backup files
+*~
+*.swp
+*.swo

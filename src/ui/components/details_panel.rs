@@ -197,27 +197,63 @@ impl DetailsPanel {
 
                 // Format BindType for display
                 let bind_type_str = match b.bind_type {
-                    crate::core::types::BindType::Bind   => "bind",
-                    crate::core::types::BindType::BindE  => "binde",
-                    crate::core::types::BindType::BindL  => "bindl",
-                    crate::core::types::BindType::BindM  => "bindm",
-                    crate::core::types::BindType::BindR  => "bindr",
+                    crate::core::types::BindType::Bind => "bind",
+                    crate::core::types::BindType::BindE => "binde",
+                    crate::core::types::BindType::BindL => "bindl",
+                    crate::core::types::BindType::BindM => "bindm",
+                    crate::core::types::BindType::BindR => "bindr",
                     crate::core::types::BindType::BindEL => "bindel",
                 };
                 self.bind_type_label.set_label(bind_type_str);
 
-                // Check for conflicts
+                // Check for conflicts and show which bindings conflict
                 let conflicts = self.controller.get_conflicts();
-                let has_conflict = conflicts.iter().any(|conflict| {
-                    conflict.conflicting_bindings.iter().any(|cb| {
-                        cb.key_combo == b.key_combo && cb.dispatcher == b.dispatcher
-                    })
-                });
 
-                if has_conflict {
-                    self.status_label.set_label("⚠️  Conflicts with another binding");
+                // Find conflicts involving this binding
+                let mut conflicting_bindings = Vec::new();
+
+                for conflict in conflicts.iter() {
+                    // Check if this binding is part of this conflict
+                    let is_involved = conflict.conflicting_bindings.iter().any(|cb| {
+                        cb.key_combo == b.key_combo && cb.dispatcher == b.dispatcher
+                    });
+
+                    if is_involved {
+                        // Collect all other bindings in this conflict
+                        for cb in conflict.conflicting_bindings.iter() {
+                            // Skip the current binding itself
+                            if cb.key_combo == b.key_combo && cb.dispatcher == b.dispatcher {
+                                continue;
+                            }
+                            conflicting_bindings.push(cb.clone());
+                        }
+                    }
+                }
+
+                // Format the status message based on conflicts found
+                if conflicting_bindings.is_empty() {
+                    self.status_label.set_label("✅ No conflicts")
+                } else if conflicting_bindings.len() == 1 {
+                    // Single conflic - show the full details
+                    let other = &conflicting_bindings[0];
+                    let conflict_description = format!(
+                        "⚠️ Conflicts with:\n{} → {} {}",
+                        other.key_combo,
+                        other.dispatcher,
+                        other.args.as_deref().unwrap_or("")
+                    );
+                    self.status_label.set_label(&conflict_description);
                 } else {
-                    self.status_label.set_label("✅ No conflicts");
+                    // Multiple conflicts - show first one and count
+                    let first_conflict = &conflicting_bindings[0];
+                    let conflict_description = format!(
+                        "⚠️ Conflicts with:\n{} → {} {}\n(and {} more)",
+                        first_conflict.key_combo,
+                        first_conflict.dispatcher,
+                        first_conflict.args.as_deref().unwrap_or(""),
+                        conflicting_bindings.len() - 1
+                    );
+                    self.status_label.set_label(&conflict_description);
                 }
             }
             None => {
