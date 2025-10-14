@@ -7,6 +7,7 @@
 use gtk4::pango::WrapMode::WordChar;
 use gtk4::prelude::*;
 use gtk4::{Frame, Grid, Label, Align};
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::core::types::Keybinding;
@@ -20,6 +21,7 @@ use crate::ui::Controller;
 /// - Arguments (e.g., "firefox")
 /// - Bind type (e.g., "bind")
 /// - Conflict status (whether this binding conflicts with others)
+/// - Delete button (disabled when nothing selected)
 ///
 /// The panel width is enforced by the parent Paned widget in app.rs
 pub struct DetailsPanel {
@@ -35,8 +37,12 @@ pub struct DetailsPanel {
     bind_type_label: Label,
     /// Label displaying conflict status
     status_label: Label,
+    /// Delete button
+    delete_button: gtk4::Button,
     /// Controller for accessing conflict information
     controller: Rc<Controller>,
+    /// Currently displayed binding (for delete operation)
+    current_binding: Rc<RefCell<Option<Keybinding>>>,
 }
 
 impl DetailsPanel {
@@ -57,17 +63,20 @@ impl DetailsPanel {
             .margin_end(10)
             .margin_top(10)
             .margin_bottom(10)
-            .width_request(280)  // Request 280px width
+            .width_request(280)
             .build();
+
+        // Create main vertical box to hold grid + button
+        let vbox = gtk4::Box::new(gtk4::Orientation::Vertical, 10);
+        vbox.set_margin_start(15);
+        vbox.set_margin_end(15);
+        vbox.set_margin_top(15);
+        vbox.set_margin_bottom(15);
 
         // Create grid for two-column layout (label / value)
         let grid = Grid::builder()
             .row_spacing(10)
             .column_spacing(15)
-            .margin_start(15)
-            .margin_end(15)
-            .margin_top(15)
-            .margin_bottom(15)
             .build();
 
         // Row 0: Key Combo
@@ -170,8 +179,25 @@ impl DetailsPanel {
         grid.attach(&status_header, 0, 4, 1, 1);
         grid.attach(&status_label, 1, 4, 1, 1);
 
-        // Add grid to frame
-        frame.set_child(Some(&grid));
+        // Add grid to vbox
+        vbox.append(&grid);
+
+        // Add separator
+        let separator = gtk4::Separator::new(gtk4::Orientation::Horizontal);
+        separator.set_margin_top(10);
+        separator.set_margin_bottom(10);
+        vbox.append(&separator);
+
+        // Add delete button
+        let delete_button = gtk4::Button::builder()
+            .label("🗑️  Delete Keybinding")
+            .sensitive(false)  // Disabled until a binding is selected
+            .build();
+        delete_button.add_css_class("destructive-action");
+        vbox.append(&delete_button);
+
+        // Add vbox to frame
+        frame.set_child(Some(&vbox));
 
         Self {
             widget: frame,
@@ -180,7 +206,9 @@ impl DetailsPanel {
             args_label,
             bind_type_label,
             status_label,
+            delete_button,
             controller,
+            current_binding: Rc::new(RefCell::new(None)),
         }
     }
 
@@ -192,6 +220,12 @@ impl DetailsPanel {
     ///
     /// * `binding` - The keybinding to display, or `None` to clear
     pub fn update_binding(&self, binding: Option<&Keybinding>) {
+        // Store the current binding for delete operation
+        *self.current_binding.borrow_mut() = binding.cloned();
+
+        // Enable/disable delete button based on selection
+        self.delete_button.set_sensitive(binding.is_some());
+
         match binding {
             Some(b) => {
                 // Display binding information
@@ -199,7 +233,7 @@ impl DetailsPanel {
                 self.key_label.set_label(&key_combo_text);
                 self.key_label.set_can_target(true);
                 self.key_label.set_has_tooltip(true);
-                self.key_label.set_tooltip_text(Some(&key_combo_text));  // Tooltip for long combos
+                self.key_label.set_tooltip_text(Some(&key_combo_text));
 
                 self.dispatcher_label.set_label(&b.dispatcher);
                 self.dispatcher_label.set_can_target(true);
@@ -210,7 +244,7 @@ impl DetailsPanel {
                 self.args_label.set_label(args_text);
                 self.args_label.set_can_target(true);
                 self.args_label.set_has_tooltip(true);
-                self.args_label.set_tooltip_text(Some(args_text));  // Tooltip shows full args
+                self.args_label.set_tooltip_text(Some(args_text));
 
                 // Format BindType for display
                 let bind_type_str = match b.bind_type {
@@ -252,10 +286,9 @@ impl DetailsPanel {
                     self.status_label.set_label("✅ No conflicts");
                     self.status_label.set_tooltip_text(Some("This keybinding has no conflicts"));
                 } else if conflicting_bindings.len() == 1 {
-                    // Single conflic - show the full details
+                    // Single conflict - show the full details
                     let other = &conflicting_bindings[0];
                     let args_preview = if let Some(args) = &other.args {
-                        // Truncate long arguments for display
                         if args.len() > 30 {
                             format!("({}", &args[..30])
                         } else {
@@ -272,7 +305,6 @@ impl DetailsPanel {
                         args_preview
                     );
 
-                    // Full text in tooltip
                     let full_conflict = format!(
                         "Conflicts with:  {} → {} {}",
                         other.key_combo,
@@ -303,7 +335,6 @@ impl DetailsPanel {
                         conflicting_bindings.len() - 1
                     );
 
-                    // List all conflicts in tooltip
                     let mut full_conflicts = String::from("Conflicts with:\n");
                     for (i, cb) in conflicting_bindings.iter().enumerate() {
                         full_conflicts.push_str(&format!(
@@ -336,6 +367,36 @@ impl DetailsPanel {
                 self.status_label.set_tooltip_text(None);
             }
         }
+    }
+
+    /// Connects the delete button to a callback
+    ///
+    /// This should be called from the app after creating the panel,
+    /// passing in a closure that handles the deletion and UI refresh.
+    ///
+    /// # Arguments
+    /// * `callback` - Function to call when delete is clicked
+    pub fn connect_delete<F>(&self, callback: F)
+    where
+        F: Fn(&Keybinding) + 'static,
+    {
+        let current_binding = self.current_binding.clone();
+
+        self.delete_button.connect_clicked(move |_button| {
+            eprintln!("🔍 DEBUG: Delete button clicked!");
+
+            if let Some(binding) = current_binding.borrow().as_ref() {
+                eprintln!("🔍 DEBUG: Current binding found:");
+                eprintln!("   Key: {}", binding.key_combo);
+                eprintln!("   Dispatcher: {}", binding.dispatcher);
+                eprintln!("   Args: {:?}", binding.args);
+                callback(binding);
+            } else {
+                eprintln!("⚠️ DEBUG: No binding stored in RefCell!");
+            }
+        });
+
+        eprintln!("✅ DEBUG: Delete button callback registered");
     }
 
     /// Get the root widget for adding to a container.

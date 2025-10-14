@@ -262,6 +262,65 @@ impl Controller {
         self.get_conflicts().len()
     }
 
+    /// Deletes a keybinding and writes changes to disk
+    ///
+    /// This removes the binding from the in-memory list and immediately
+    /// writes the updated list back to the config file, creating a backup.
+    ///
+    /// # Arguments
+    /// * `binding` - The keybinding to delete
+    ///
+    /// # Returns
+    /// * `Ok(())` - Successfully deleted and saved
+    /// * `Err(String)` - Failed to write changes
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use hypr_keybind_manager::ui::Controller;
+    /// # use hypr_keybind_manager::core::{Keybinding, KeyCombo, Modifier, BindType};
+    /// # use std::path::PathBuf;
+    /// # fn main() -> Result<(), String> {
+    /// let controller = Controller::new(PathBuf::from("test.conf"))
+    ///     .map_err(|e| e.to_string())?;
+    ///
+    /// let binding = Keybinding {
+    ///     key_combo: KeyCombo::new(vec![Modifier::Super], "K"),
+    ///     bind_type: BindType::Bind,
+    ///     dispatcher: "exec".to_string(),
+    ///     args: Some("firefox".to_string()),
+    /// };
+    ///
+    /// controller.delete_keybinding(&binding)?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn delete_keybinding(&self, binding: &Keybinding) -> Result<(), String> {
+        // Remove binding from in-memory list
+        let mut bindings = self.keybindings.borrow_mut();
+
+        // Find and remove the binding
+        bindings.retain(|b| {
+            // Match on all fields to ensure we delete the exact binding
+            !(b.key_combo == binding.key_combo
+                && b.bind_type == binding.bind_type
+                && b.dispatcher == binding.dispatcher
+                && b.args == binding.args)
+        });
+
+        // Write updated list to disk
+        let mut config_manager = self.config_manager.borrow_mut();
+        config_manager.write_bindings(&bindings)
+            .map_err(|e| format!("Failed to write changes: {}", e))?;
+
+        // Rebuild conflict detector with new list
+        let mut detector = ConflictDetector::new();
+        for b in bindings.iter() {
+            detector.add_binding(b.clone());
+        }
+        *self.conflict_detector.borrow_mut() = detector;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]

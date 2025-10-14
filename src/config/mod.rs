@@ -27,6 +27,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use chrono::Local;
+use crate::Keybinding;
 
 /// Errors that can occur during configuration management.
 #[derive(Debug, Error)]
@@ -405,6 +406,173 @@ impl ConfigManager {
 
         Ok(())
     }
+
+    /// Writes keybindings back to the configuration file
+    ///
+    /// Creates an automatic backup via the transaction system before writing.
+    /// Preserves comments, blank lines, and non-keybinding configuration.
+    ///
+    /// # Arguments
+    /// * `bindings` - The complete list of keybindings to write
+    ///
+    /// # Errors
+    /// Returns `ConfigError` if:
+    /// - File cannot be read
+    /// - Backup creation fails
+    /// - File cannot be written
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use hypr_keybind_manager::config::ConfigManager;
+    /// # use hypr_keybind_manager::core::Keybinding;
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut manager = ConfigManager::new("~/.config/hypr/hyprland.conf".into())?;
+    /// let bindings = vec![/* your modified bindings */];
+    ///
+    /// manager.write_bindings(&bindings)?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn write_bindings(&mut self, bindings: &[Keybinding]) -> Result<(), ConfigError> {
+        // Read current config to preserve non-keybinding content
+        let original_content = self.read_config()?;
+
+        // Rebuild config with updated keybindings
+        let new_content = self.rebuild_config(&original_content, bindings)?;
+
+        // Write atomically via transaction (creates backup automatically)
+        let transaction = ConfigTransaction::begin(self)?;
+        transaction.commit(&new_content)?;
+
+        Ok(())
+    }
+
+    /// Rebuilds config file, replacing keybinding lines whilst preserving everything else
+    ///
+    /// This is the "smart" part - we identify the keybinding section and replace only that,
+    /// keeping comments, blank lines, and other settings intact.
+    ///
+    /// # Strategy
+    /// 1. Scan through original line by line
+    /// 2. When we hit the first keybinding line, mark that position
+    /// 3. Skip all subsequent keybinding lines
+    /// 4. At the end of the keybinding section, insert our new bindings
+    /// 5. Continue with the rest of the file
+    ///
+    /// # Arguments
+    /// * `original` - Original config file content
+    /// * `bindings` - New keybindings to write
+    ///
+    /// # Returns
+    /// The rebuilt config as a string
+    fn rebuild_config(&self, original: &str, bindings: &[Keybinding]) -> Result<String, ConfigError> {
+        let mut result = String::new();
+        let mut in_keybinding_section = false;
+        let mut keybindings_written = false;
+
+        for line in original.lines() {
+            let trimmed = line.trim();
+
+            // Check if this is a keybinding line
+            let is_keybinding = trimmed.starts_with("bind")
+                && !trimmed.starts_with("#")
+                && (trimmed.starts_with("bind =")
+                    || trimmed.starts_with("binde =")
+                    || trimmed.starts_with("bindl =")
+                    || trimmed.starts_with("bindm =")
+                    || trimmed.starts_with("bindr =")
+                    || trimmed.starts_with("bindel ="));
+
+            if is_keybinding {
+                // Keybinding section has been reached
+                if !in_keybinding_section {
+                    in_keybinding_section = true;
+                }
+
+                // Skip this line - new bindings will be written at the end of the section
+                continue;
+            }
+
+            // If we're in keybinding section but hit a non-keybinding line, write our bindings now
+            if in_keybinding_section && !keybindings_written {
+                for binding in bindings {
+                    result.push_str(&self.format_binding(binding));
+                    result.push('\n');
+                }
+                keybindings_written = true;
+                in_keybinding_section = false;
+            }
+
+            // Preserve all non-keybinding lines
+            result.push_str(line);
+            result.push('\n');
+        }
+
+        // If we never found a keybinding section, or we're still in it at EOF, write bindings now
+        if !keybindings_written {
+            result.push_str("\n# Keybindings\n");
+            for binding in bindings {
+                result.push_str(&self.format_binding(binding));
+                result.push('\n');
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// Formats a keybinding into a config file line
+    ///
+    /// Example output: `bind = SUPER, K, exec, firefox`
+    ///
+    /// # Arguments
+    /// * `binding` - The keybinding to format
+    ///
+    /// # Returns
+    /// A formatted config line (without trailing newline)
+    fn format_binding(&self, binding: &Keybinding) -> String {
+        use crate::core::types::Modifier::*;
+        // Build a modifier string
+        let modifiers_str = if binding.key_combo.modifiers.is_empty() {
+            String::new()
+        } else {
+            binding.key_combo.modifiers
+                .iter()
+                .map(|m| match m {
+                    Super => "SUPER",
+                    Ctrl => "CTRL",
+                    Shift => "SHIFT",
+                    Alt => "ALT",
+                })
+                .collect::<Vec<_>>()
+                .join("_")
+        };
+
+        // Build the parts that will be comma-separated
+        let mut parts = Vec::new();
+
+        // Add modifiers and key
+        if !modifiers_str.is_empty() {
+            parts.push(modifiers_str);
+        } else {
+            // No modifiers - just key
+            parts.push(String::new());
+        }
+
+        // Add key
+        parts.push(binding.key_combo.key.clone());
+
+        // Add dispatcher
+        parts.push(binding.dispatcher.clone());
+
+        // Add args if present
+        if let Some(args) = &binding.args {
+            parts.push(args.clone());
+        }
+
+        // Format: bind_type = comma,separated,parts
+        // Example: bind = SUPER, K, exec, firefox
+        format!("{} = {}", binding.bind_type, parts.join(", "))
+    }
 }
 
 /// Atomic configuration transaction with automatic backup.
@@ -749,6 +917,7 @@ mod tests {
     use std::time::Duration;
     use std::thread;
     use tempfile::TempDir;
+    use crate::{BindType, KeyCombo, Modifier};
 
     /// Helper: Creates a temporary config file for testing.
     fn create_test_config() -> (TempDir, PathBuf) {
@@ -1596,5 +1765,217 @@ bind = SUPER, F, togglefloating
         // Should have one backup from transaction
         let backups = manager.list_backups().unwrap();
         assert_eq!(backups.len(), 1, "Should have backup from transaction begin");
+    }
+
+    // ============================================================================
+    // Write Functionality Tests
+    // ============================================================================
+
+    #[test]
+    fn test_format_binding_with_modifiers() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+        fs::write(&config_path, "initial\n").unwrap();
+
+        let manager = ConfigManager::new(config_path).unwrap();
+
+        let binding = Keybinding {
+            key_combo: KeyCombo::new(vec![Modifier::Super], "K"),
+            bind_type: BindType::Bind,
+            dispatcher: "exec".to_string(),
+            args: Some("firefox".to_string()),
+        };
+
+        let formatted = manager.format_binding(&binding);
+
+        // Should match Hyprland format: bind = SUPER, K, exec, firefox
+        assert!(formatted.contains("bind"));
+        assert!(formatted.contains("SUPER"));
+        assert!(formatted.contains("K"));
+        assert!(formatted.contains("exec"));
+        assert!(formatted.contains("firefox"));
+        assert!(formatted.contains("="));
+        assert!(formatted.contains(","));
+    }
+
+    #[test]
+    fn test_format_binding_multiple_modifiers() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+        fs::write(&config_path, "initial\n").unwrap();
+
+        let manager = ConfigManager::new(config_path).unwrap();
+
+        let binding = Keybinding {
+            key_combo: KeyCombo::new(vec![Modifier::Super, Modifier::Shift], "M"),
+            bind_type: BindType::Bind,
+            dispatcher: "exec".to_string(),
+            args: Some("kitty".to_string()),
+        };
+
+        let formatted = manager.format_binding(&binding);
+
+        // Should have both modifiers joined with underscore
+        assert!(formatted.contains("SUPER") || formatted.contains("SHIFT"));
+        assert!(formatted.contains("_"));
+    }
+
+    #[test]
+    fn test_format_binding_no_args() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+        fs::write(&config_path, "initial\n").unwrap();
+
+        let manager = ConfigManager::new(config_path).unwrap();
+
+        let binding = Keybinding {
+            key_combo: KeyCombo::new(vec![Modifier::Super], "Q"),
+            bind_type: BindType::Bind,
+            dispatcher: "killactive".to_string(),
+            args: None,
+        };
+
+        let formatted = manager.format_binding(&binding);
+
+        // Should have dispatcher but no args
+        assert!(formatted.contains("killactive"));
+        assert!(!formatted.ends_with(","));
+    }
+
+    #[test]
+    fn test_write_bindings_basic() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+
+        // Create initial config with comments and settings
+        let initial_content = r#"# My Hyprland Config
+$mainMod = SUPER
+
+# Window rules
+windowrule = float, pavucontrol
+
+# Original keybindings
+bind = SUPER, K, exec, firefox
+bind = SUPER, M, exec, kitty
+
+# More settings below
+decoration {
+    rounding = 10
+}
+"#;
+        fs::write(&config_path, initial_content).unwrap();
+
+        let mut manager = ConfigManager::new(config_path.clone()).unwrap();
+
+        // New bindings (modified)
+        let new_bindings = vec![
+            Keybinding {
+                key_combo: KeyCombo::new(vec![Modifier::Super], "K"),
+                bind_type: BindType::Bind,
+                dispatcher: "exec".to_string(),
+                args: Some("brave".to_string()),  // Changed from firefox
+            },
+            Keybinding {
+                key_combo: KeyCombo::new(vec![Modifier::Super], "M"),
+                bind_type: BindType::Bind,
+                dispatcher: "exec".to_string(),
+                args: Some("alacritty".to_string()),  // Changed from kitty
+            },
+        ];
+
+        // Write new bindings
+        manager.write_bindings(&new_bindings).unwrap();
+
+        // Read result
+        let result = fs::read_to_string(&config_path).unwrap();
+
+        // Verify: Should have new bindings
+        assert!(result.contains("brave"), "Should have new firefox → brave");
+        assert!(result.contains("alacritty"), "Should have new kitty → alacritty");
+
+        // Verify: Should NOT have old bindings
+        assert!(!result.contains("firefox"), "Should not have old firefox");
+        assert!(!result.contains("kitty"), "Should not have old kitty");
+
+        // Verify: Should preserve comments and settings
+        assert!(result.contains("# My Hyprland Config"), "Should preserve header comment");
+        assert!(result.contains("$mainMod = SUPER"), "Should preserve variables");
+        assert!(result.contains("windowrule"), "Should preserve window rules");
+        assert!(result.contains("decoration"), "Should preserve decoration section");
+        assert!(result.contains("rounding = 10"), "Should preserve settings");
+    }
+
+    #[test]
+    fn test_write_bindings_preserves_structure() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+
+        let initial = r#"# Top comment
+
+# Keybindings start here
+bind = SUPER, K, exec, firefox
+
+# Bottom comment
+"#;
+        fs::write(&config_path, initial).unwrap();
+
+        let mut manager = ConfigManager::new(config_path.clone()).unwrap();
+
+        let new_bindings = vec![
+            Keybinding {
+                key_combo: KeyCombo::new(vec![Modifier::Super], "M"),
+                bind_type: BindType::Bind,
+                dispatcher: "exec".to_string(),
+                args: Some("kitty".to_string()),
+            },
+        ];
+
+        manager.write_bindings(&new_bindings).unwrap();
+
+        let result = fs::read_to_string(&config_path).unwrap();
+
+        // Should have both comments
+        assert!(result.contains("# Top comment"));
+        assert!(result.contains("# Bottom comment"));
+
+        // Should have new binding
+        assert!(result.contains("kitty"));
+
+        // Should NOT have old binding
+        assert!(!result.contains("firefox"));
+    }
+
+    #[test]
+    fn test_write_bindings_creates_backup() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("hyprland.conf");
+
+        fs::write(&config_path, "bind = SUPER, K, exec, firefox\n").unwrap();
+
+        let mut manager = ConfigManager::new(config_path.clone()).unwrap();
+
+        // Check no backups initially
+        let backups_before = manager.list_backups().unwrap();
+        assert_eq!(backups_before.len(), 0);
+
+        // Write new bindings
+        let new_bindings = vec![
+            Keybinding {
+                key_combo: KeyCombo::new(vec![Modifier::Super], "M"),
+                bind_type: BindType::Bind,
+                dispatcher: "exec".to_string(),
+                args: Some("kitty".to_string()),
+            },
+        ];
+
+        manager.write_bindings(&new_bindings).unwrap();
+
+        // Should have created a backup
+        let backups_after = manager.list_backups().unwrap();
+        assert_eq!(backups_after.len(), 1, "Should create backup automatically");
+
+        // Backup should contain original content
+        let backup_content = fs::read_to_string(&backups_after[0]).unwrap();
+        assert!(backup_content.contains("firefox"), "Backup should have original binding");
     }
 }

@@ -194,7 +194,7 @@ impl App {
         let main_vbox = gtk4::Box::new(Orientation::Vertical, 0);
 
         // Create conflict panel at top
-        let conflict_panel = ConflictPanel::new(controller.clone());
+        let conflict_panel = Rc::new(ConflictPanel::new(controller.clone()));
         main_vbox.append(conflict_panel.widget());
 
         // Use PANED for fixed right panel
@@ -330,6 +330,123 @@ impl App {
 
         // Update conflict panel
         conflict_panel.refresh();
+
+        // Initial display
+        let all_bindings = controller.get_keybindings();
+        keybind_list.update_with_bindings(all_bindings);
+
+        // Update conflict panel
+        conflict_panel.refresh();
+
+        // ============================================================================
+        // Wire up delete button
+        // ============================================================================
+        let window_for_delete = window.clone();
+        let controller_for_delete = controller.clone();
+        let keybind_list_for_delete = keybind_list.clone();
+        let details_panel_for_delete = details_panel.clone();
+        let conflict_panel_for_delete = conflict_panel.clone();
+
+        details_panel.connect_delete(move |binding| {
+            eprintln!("\n🔍 DEBUG: === DELETE CALLBACK FIRED ===");
+            eprintln!("Binding to delete: {} -> {} {:?}",
+                      binding.key_combo,
+                      binding.dispatcher,
+                      binding.args);
+
+            // Clone everything needed for the dialog
+            let controller_clone = controller_for_delete.clone();
+            let keybind_list_clone = keybind_list_for_delete.clone();
+            let details_panel_clone = details_panel_for_delete.clone();
+            let conflict_panel_clone = conflict_panel_for_delete.clone();
+            let binding_clone = binding.clone();
+            let window_clone = window_for_delete.clone();
+
+            eprintln!("🔍 DEBUG: Creating AlertDialog...");
+
+            // Create confirmation dialog using modern AlertDialog
+            let dialog = gtk4::AlertDialog::builder()
+                .modal(true)
+                .message("Delete Keybinding?")
+                .detail(&format!(
+                    "Are you sure you want to delete:\n\n{} → {} {}",
+                    binding.key_combo,
+                    binding.dispatcher,
+                    binding.args.as_deref().unwrap_or("(no args)")
+                ))
+                .buttons(vec!["Cancel", "Delete"])
+                .cancel_button(0)
+                .default_button(0)
+                .build();
+
+            eprintln!("🔍 DEBUG: AlertDialog created, calling choose()...");
+
+            // Clone window AGAIN for the inner closure (this fixes the borrow error!)
+            let window_for_inner = window_clone.clone();
+
+            dialog.choose(
+                Some(&window_clone),  // Borrows window_clone here
+                None::<&gtk4::gio::Cancellable>,
+                move |response| {  // Moves window_for_inner here (different variable!)
+                    eprintln!("🔍 DEBUG: Dialog response received: {:?}", response);
+
+                    match response {
+                        Ok(1) => {  // 1 = Delete button (second button)
+                            eprintln!("🔍 DEBUG: User clicked Delete, proceeding...");
+
+                            match controller_clone.delete_keybinding(&binding_clone) {
+                                Ok(()) => {
+                                    eprintln!("✅ DEBUG: Delete succeeded!");
+
+                                    // Refresh UI
+                                    eprintln!("🔍 DEBUG: Refreshing keybind list...");
+                                    let updated = controller_clone.get_keybindings();
+                                    keybind_list_clone.update_with_bindings(updated);
+
+                                    eprintln!("🔍 DEBUG: Clearing details panel...");
+                                    details_panel_clone.update_binding(None);
+
+                                    eprintln!("🔍 DEBUG: Updating conflicts panel...");
+                                    conflict_panel_clone.refresh();
+
+                                    eprintln!("✅ DEBUG: UI refresh complete!");
+                                    println!("✅ Keybinding deleted successfully");
+                                }
+                                Err(e) => {
+                                    eprintln!("❌ DEBUG: Delete failed: {}", e);
+
+                                    // Show error dialog (use window_for_inner)
+                                    let error_dialog = gtk4::AlertDialog::builder()
+                                        .modal(true)
+                                        .message("Delete Failed")
+                                        .detail(&format!("Failed to delete keybinding:\n{}", e))
+                                        .buttons(vec!["OK"])
+                                        .build();
+
+                                    error_dialog.show(Some(&window_for_inner));
+                                }
+                            }
+                        }
+                        Ok(0) => {
+                            eprintln!("🔍 DEBUG: User clicked Cancel");
+                        }
+                        Ok(other) => {
+                            eprintln!("⚠️ DEBUG: Unexpected button index: {}", other);
+                        }
+                        Err(e) => {
+                            eprintln!("❌ DEBUG: Dialog error: {:?}", e);
+                        }
+                    }
+                }
+            );
+
+            eprintln!("🔍 DEBUG: Dialog.choose() called, waiting for user response...");
+        });
+
+        eprintln!("✅ DEBUG: Delete button wiring complete");
+        // ============================================================================
+        // End of delete button wiring
+        // ============================================================================
 
         // Show window
         window.present();
