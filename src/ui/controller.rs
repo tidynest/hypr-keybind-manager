@@ -321,6 +321,138 @@ impl Controller {
 
         Ok(())
     }
+
+    /// Adds a new keybinding to the configuration
+    ///
+    /// This method:
+    /// 1. Adds the binding to the in-memory list
+    /// 2. Writes changes to disk (creates automatic backup)
+    /// 3. Rebuilds the conflict detector
+    ///
+    /// # Arguments
+    /// * `binding` - The new keybinding to add
+    ///
+    /// # Returns
+    /// * `Ok(())` if successful
+    /// * `Err(String)` with error message if operation fails
+    ///
+    /// # Example
+    /// ```ignore
+    /// match controller.add_keybinding(new_binding) {
+    ///     Ok(()) => println!("Keybinding added successfully"),
+    ///     Err(e) => eprintln!("Failed to add: {}", e),
+    /// }
+    /// ```
+    pub fn add_keybinding(&self, binding: Keybinding) -> Result<(), String> {
+        eprintln!("🔍 DEBUG: Adding new keybinding");
+        eprintln!("   New: {} → {} {}",
+                  binding.key_combo,
+                  binding.dispatcher,
+                  binding.args.as_deref().unwrap_or("(no args)"));
+
+        // 1. Add the binding to the list
+        let mut bindings = self.keybindings.borrow_mut();
+        bindings.push(binding.clone());
+
+        // 2. Write changes to disk (creates automatic backup via Transaction)
+        let mut config_manager = self.config_manager.borrow_mut();
+        config_manager.write_bindings(&bindings)
+            .map_err(|e| format!("Failed to write changes to config: {}", e))?;
+
+        eprintln!("✅ DEBUG: Config file updated successfully");
+
+        // 3. Rebuild conflict detector with updated bindings
+        let mut detector = ConflictDetector::new();
+        for binding in bindings.iter() {
+            detector.add_binding(binding.clone());
+        }
+        *self.conflict_detector.borrow_mut() = detector;
+
+        eprintln!("✅ DEBUG: Conflict detector rebuilt");
+        eprintln!("✅ DEBUG: Add complete!");
+
+        Ok(())
+    }
+
+    /// Lists all available backup files, sorted newest first
+    pub fn list_backups(&self) -> Result<Vec<PathBuf>, String> {
+        self.config_manager
+            .borrow()
+            .list_backups()
+            .map_err(|e| format!("Failed to list backups: {}", e))
+    }
+
+    /// Updates an existing keybinding with new values
+    ///
+    /// This method:
+    /// 1. Finds the old binding in the list
+    /// 2. Replaces it with the new binding
+    /// 3. Writes changes to disk (creates automatic backup)
+    /// 4. Rebuilds the conflict detector
+    ///
+    /// # Arguments
+    /// * `old` - The binding to replace
+    /// * `new` - The new binding values
+    ///
+    /// # Returns
+    /// * `Ok(())` if successful
+    /// * `Err(String)` with error message if operation fails
+    ///
+    /// # Example
+    /// ```ignore
+    /// match controller.update_keybinding(&old_binding, new_binding) {
+    ///     Ok(()) => println!("Keybinding updated successfully"),
+    ///     Err(e) => eprintln!("Failed to update: {}", e),
+    /// }
+    /// ```
+    pub fn update_keybinding(&self, old: &Keybinding, new: Keybinding) -> Result<(), String> {
+        eprintln!("🔍 DEBUG: Updating keybinding");
+        eprintln!("   Old: {} → {} {}", old.key_combo, old.dispatcher,
+                  old.args.as_deref().unwrap_or("(no args)"));
+        eprintln!("   New: {} → {} {}", new.key_combo, new.dispatcher,
+                  new.args.as_deref().unwrap_or("(no args)"));
+
+        // 1. Find and replace the binding in the list
+        let mut bindings = self.keybindings.borrow_mut();
+
+        // Find the position of the old binding
+        let position = bindings.iter().position(|b|
+            b.key_combo == old.key_combo &&
+                b.bind_type == old.bind_type &&
+                b.dispatcher == old.dispatcher &&
+                b.args == old.args
+        );
+
+        match position {
+            Some(pos) => {
+                eprintln!("✅ DEBUG: Found binding at position {}", pos);
+                bindings[pos] = new.clone();
+            }
+            None => {
+                eprintln!("⚠️ DEBUG: Binding not found in list!");
+                return Err("Binding not found in the keybinding list".to_string());
+            }
+        }
+
+        // 2. Write changes to disk (creates automatic backup via Transaction)
+        let mut config_manager = self.config_manager.borrow_mut();
+        config_manager.write_bindings(&bindings)
+            .map_err(|e| format!("Failed to write changes to config: {}", e))?;
+
+        eprintln!("✅ DEBUG: Config file updated successfully");
+
+        // 3. Rebuild conflict detector with updated bindings
+        let mut detector = ConflictDetector::new();
+        for binding in bindings.iter() {
+            detector.add_binding(binding.clone());
+        }
+        *self.conflict_detector.borrow_mut() = detector;
+
+        eprintln!("✅ DEBUG: Conflict detector rebuilt");
+        eprintln!("✅ DEBUG: Update complete!");
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]

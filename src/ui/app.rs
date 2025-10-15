@@ -13,10 +13,10 @@
 //! ```
 
 use gtk4::prelude::*;
-use gtk4::{gdk, Application, ApplicationWindow, CssProvider, Orientation, Paned};
+use gtk4::{gdk, Application, ApplicationWindow, Button, CssProvider, Orientation, Paned};
 use std::path::PathBuf;
 use std::rc::Rc;
-use crate::ui::components::{ConflictPanel, DetailsPanel, KeybindList, SearchBar};
+use crate::ui::components::{BackupDialog, ConflictPanel, DetailsPanel, EditDialog, KeybindList, SearchBar};
 
 use crate::ui::Controller;
 
@@ -95,71 +95,8 @@ impl App {
     // Load custom CSS styling for the application
     fn load_css() {
         let provider = CssProvider::new();
-        provider.load_from_string(
-            "
-            /* Alternating row colours for keybind list */
-            .even-row {
-                background-color: alpha(@theme_bg_color, 0.5);
-            }
-
-            .odd-row {
-                background-color: transparent;
-            }
-
-            /* Selected row highlighting */
-            row:selected {
-                background-color: @theme_selected_bg_color;
-            }
-
-            /* Hover effect for better interaction feedback */
-            row:hover {
-                background-color: alpha(@theme_bg_color, 0.3);
-            }
-
-            /* Slightly increase spacing in details panel */
-            frame {
-                padding: 8px;
-            }
-
-            /* Bold labels for field headers */
-            .field-header {
-                font-weight: bold;
-                font-size: 0.95em;
-            }
-
-            /* Value labels with slightly larger spacing */
-            .field-value {
-                padding-left: 8px;
-            }
-
-            /* Panel title styling */
-            frame > label {
-                font-weight: bold;
-                font-size: 1.05em;
-            }
-
-            /* Search bar styling */
-            searchentry {
-                border-radius: 8px;
-            }
-
-            /* Warning banner styling (replaces deprecated InfoBar) */
-            .warning-banner {
-                background: linear-gradient(to bottom, #fcd34d, #fbbf24);
-                border: 1px solid #f59e0b;
-                border-left: 4px solid #d97706;
-                border-radius: 8px;
-                padding: 4px;
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            }
-
-            .warning-banner label {
-                color: #78350f;
-                font-weight: 600;
-                text-shadow: 0 1px 1px rgba(255, 255, 255, 0.3);
-            }
-            "
-        );
+        let css = include_str!("style.css");
+        provider.load_from_string(css);
 
         // Apply CSS to the default display
         gtk4::style_context_add_provider_for_display(
@@ -168,6 +105,7 @@ impl App {
             gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
     }
+
     /// Builds the main window UI
     ///
     /// This is called when the application activates. It creates
@@ -187,7 +125,8 @@ impl App {
             .application(app)
             .title("Hyprland Keybinding Manager")
             .default_width(1000)
-            .default_height(600)
+            .default_width(1000)
+            .default_height(800)
             .build();
 
         // Create main vertical box
@@ -212,6 +151,17 @@ impl App {
         // Create search bar
         let search_bar = SearchBar::new();
         left_vbox.append(search_bar.widget());
+
+        let add_keybinding_button = Button::builder()
+            .label("➕ Add Keybinding")
+            .build();
+        add_keybinding_button.add_css_class("suggested-action");
+        left_vbox.append(&add_keybinding_button);
+
+        let backup_button = Button::builder()
+            .label("📦 Manage Backups")
+            .build();
+        left_vbox.append(&backup_button);
 
         // Add keybind list to left side
         left_vbox.append(keybind_list.widget());
@@ -290,7 +240,7 @@ impl App {
                             }
                         }
                     }
-                    gtk4::glib::Propagation::Stop
+                    glib::Propagation::Stop
                 }
                 gdk::Key::Down => {
                     // Move selection down
@@ -305,16 +255,16 @@ impl App {
                             list_box_for_keys.select_row(Some(&first_row));
                         }
                     }
-                    gtk4::glib::Propagation::Stop
+                    glib::Propagation::Stop
                 }
                 gdk::Key::Return | gdk::Key::KP_Enter => {
                     // Enter key - already handled by row selection, just ensure it's visible
                     if let Some(selected_row) = list_box_for_keys.selected_row() {
                         list_box_for_keys.select_row(Some(&selected_row));
                     }
-                    gtk4::glib::Propagation::Stop
+                    glib::Propagation::Stop
                 }
-                _ => gtk4::glib::Propagation::Proceed
+                _ => glib::Propagation::Proceed
             }
         });
 
@@ -447,6 +397,211 @@ impl App {
         // ============================================================================
         // End of delete button wiring
         // ============================================================================
+
+        // ============================================================================
+        // Wire up edit button
+        // ============================================================================
+        eprintln!("🔧 DEBUG: Setting up edit button callback...");
+
+        let window_for_edit = window.clone();
+        let controller_for_edit = controller.clone();
+        let keybind_list_for_edit = keybind_list.clone();
+        let details_panel_for_edit = details_panel.clone();
+        let conflict_panel_for_edit = conflict_panel.clone();
+
+        details_panel.connect_edit(move |binding| {
+            eprintln!("\n✏️ DEBUG: === EDIT CALLBACK FIRED ===");
+            eprintln!("Binding to edit: {} -> {} {:?}",
+                      binding.key_combo,
+                      binding.dispatcher,
+                      binding.args);
+
+            // Clone everything for the nested closures
+            let controller_clone = controller_for_edit.clone();
+            let keybind_list_clone = keybind_list_for_edit.clone();
+            let details_panel_clone = details_panel_for_edit.clone();
+            let conflict_panel_clone = conflict_panel_for_edit.clone();
+            let binding_clone = binding.clone();
+            let window_clone = window_for_edit.clone();
+
+            eprintln!("📝 DEBUG: Creating EditDialog...");
+
+            // Show the edit dialog
+            let edit_dialog = EditDialog::new(&window_clone, &binding_clone);
+
+            eprintln!("📝 DEBUG: Edit dialog created, calling show_and_wait()...");
+
+            // Get the result (blocks until user clicks Save or Cancel)
+            if let Some(new_binding) = edit_dialog.show_and_wait() {
+                eprintln!("💾 DEBUG: User clicked Save!");
+                eprintln!("   New values: {} -> {} {:?}",
+                          new_binding.key_combo,
+                          new_binding.dispatcher,
+                          new_binding.args);
+
+                // Try to update the keybinding
+                match controller_clone.update_keybinding(&binding_clone, new_binding) {
+                    Ok(()) => {
+                        eprintln!("✅ DEBUG: Update successful! Refreshing UI...");
+
+                        // Clear the details panel (user needs to reselect)
+                        details_panel_clone.update_binding(None);
+
+                        // Refresh the keybinding list
+                        let updated_bindings = controller_clone.get_keybindings();
+                        keybind_list_clone.update_with_bindings(updated_bindings);
+
+
+                        // Refresh conflicts
+                        conflict_panel_clone.refresh();
+
+                        eprintln!("✅ DEBUG: UI refresh complete!");
+                        println!("✅ Keybinding updated successfully");
+                    }
+                    Err(e) => {
+                        eprintln!("❌ DEBUG: Update failed: {}", e);
+
+                        // Show error dialog
+                        let error_dialog = gtk4::AlertDialog::builder()
+                            .modal(true)
+                            .message("Edit Failed")
+                            .detail(&format!("Failed to update keybinding:\n\n{}", e))
+                            .buttons(vec!["OK"])
+                            .build();
+
+                        error_dialog.show(Some(&window_clone));
+                    }
+                }
+            } else {
+                eprintln!("🚫 DEBUG: User clicked Cancel");
+            }
+        });
+
+        eprintln!("✅ DEBUG: Edit button wiring complete");
+        // ============================================================================
+        // End of edit button wiring
+        // ============================================================================
+
+        // ============================================================================
+        // Wire up add button
+        // ============================================================================
+        eprintln!("🔧 DEBUG: Setting up add button callback...");
+
+        let window_for_add = window.clone();
+        let controller_for_add = controller.clone();
+        let keybind_list_for_add = keybind_list.clone();
+        let details_panel_for_add = details_panel.clone();
+        let conflict_panel_for_add = conflict_panel.clone();
+
+        add_keybinding_button.connect_clicked(move |_| {
+            eprintln!("\n➕ DEBUG: === ADD CALLBACK FIRED ===");
+
+            // Clone everything for the nested closures
+            let controller_clone = controller_for_add.clone();
+            let keybind_list_clone = keybind_list_for_add.clone();
+            let details_panel_clone = details_panel_for_add.clone();
+            let conflict_panel_clone = conflict_panel_for_add.clone();
+            let window_clone = window_for_add.clone();
+
+            eprintln!("📝 DEBUG: Creating empty keybinding template...");
+
+            // Create an empty keybinding for the dialog
+            use crate::core::types::{BindType, KeyCombo, Keybinding};
+            let empty_binding = Keybinding {
+                bind_type: BindType::Bind,  // Default to standard bind
+                key_combo: KeyCombo {
+                    modifiers: vec![],
+                    key: String::new(),
+                },
+                dispatcher: String::new(),
+                args: None,
+            };
+
+            eprintln!("📝 DEBUG: Creating EditDialog with empty binding...");
+
+            // Show the edit dialog (reused for adding!)
+            let edit_dialog = EditDialog::new(&window_clone, &empty_binding);
+
+            eprintln!("📝 DEBUG: Dialog created, calling show_and_wait()...");
+
+            // Get the result (blocks until user clicks Save or Cancel)
+            if let Some(new_binding) = edit_dialog.show_and_wait() {
+                eprintln!("💾 DEBUG: User clicked Save!");
+                eprintln!("   New binding: {} -> {} {:?}",
+                          new_binding.key_combo,
+                          new_binding.dispatcher,
+                          new_binding.args);
+
+                // Try to add the keybinding
+                match controller_clone.add_keybinding(new_binding) {
+                    Ok(()) => {
+                        eprintln!("✅ DEBUG: Add successful! Refreshing UI...");
+
+                        // Clear the details panel (user needs to select the new binding)
+                        details_panel_clone.update_binding(None);
+
+                        // Refresh the keybinding list
+                        let updated_bindings = controller_clone.get_keybindings();
+                        keybind_list_clone.update_with_bindings(updated_bindings);
+
+                        // Refresh conflicts
+                        conflict_panel_clone.refresh();
+
+                        eprintln!("✅ DEBUG: UI refresh complete!");
+                        println!("✅ Keybinding added successfully");
+                    }
+                    Err(e) => {
+                        eprintln!("❌ DEBUG: Add failed: {}", e);
+
+                        // Show error dialog
+                        let error_dialog = gtk4::AlertDialog::builder()
+                            .modal(true)
+                            .message("Add Failed")
+                            .detail(&format!("Failed to add keybinding:\n\n{}", e))
+                            .buttons(vec!["OK"])
+                            .build();
+
+                        error_dialog.show(Some(&window_clone));
+                    }
+                }
+            } else {
+                eprintln!("🚫 DEBUG: User clicked Cancel");
+            }
+        });
+
+        eprintln!("✅ DEBUG: Add button wiring complete");
+        // ============================================================================
+        // End of add button wiring
+        // ============================================================================
+
+        // ============================================================================
+        // Wire up backup button
+        // ============================================================================
+        let window_for_backup = window.clone();
+        let controller_for_backup = controller.clone();
+
+        backup_button.connect_clicked(move |_| {
+            eprintln!("🗄️  DEBUG: Backup button clicked!");
+
+            // Get list of backups from ConfigManager
+            let backups = match controller_for_backup.list_backups() {
+                Ok(b)  => b,
+                Err(e) => {
+                    eprintln!("❌ Failed to list backups: {}", e);
+                    return;
+                }
+            };
+
+            eprintln!("📋 DEBUG: Found {} backups", backups.len());
+
+            // Create and show dialog
+            let dialog = BackupDialog::new(
+                window_for_backup
+                    .upcast_ref::<gtk4::Window>(),
+                backups
+            );
+            dialog.show();
+        });
 
         // Show window
         window.present();

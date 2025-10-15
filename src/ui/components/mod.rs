@@ -12,11 +12,15 @@
 // Components will be added in Day 2
 
 mod conflict_panel;
+mod edit_dialog;
 mod keybind_list;
 mod search_bar;
 mod details_panel;
+mod backup_dialog;
 
 pub use conflict_panel::ConflictPanel;
+pub use edit_dialog::EditDialog;
 pub use keybind_list::KeybindList;
 pub use search_bar::SearchBar;
 pub use details_panel::DetailsPanel;
+pub use backup_dialog::BackupDialog;

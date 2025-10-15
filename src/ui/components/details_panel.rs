@@ -37,6 +37,8 @@ pub struct DetailsPanel {
     bind_type_label: Label,
     /// Label displaying conflict status
     status_label: Label,
+    /// Edit button
+    edit_button: gtk4::Button,
     /// Delete button
     delete_button: gtk4::Button,
     /// Controller for accessing conflict information
@@ -188,6 +190,13 @@ impl DetailsPanel {
         separator.set_margin_bottom(10);
         vbox.append(&separator);
 
+        // Add edit button
+        let edit_button = gtk4::Button::builder()
+            .label("✏️ Edit Keybinding")
+            .sensitive(false)  // Disabled until a binding is selected
+            .build();
+        vbox.append(&edit_button);
+
         // Add delete button
         let delete_button = gtk4::Button::builder()
             .label("🗑️  Delete Keybinding")
@@ -206,6 +215,7 @@ impl DetailsPanel {
             args_label,
             bind_type_label,
             status_label,
+            edit_button,
             delete_button,
             controller,
             current_binding: Rc::new(RefCell::new(None)),
@@ -223,7 +233,8 @@ impl DetailsPanel {
         // Store the current binding for delete operation
         *self.current_binding.borrow_mut() = binding.cloned();
 
-        // Enable/disable delete button based on selection
+        // Enable/disable buttons based on selection
+        self.edit_button.set_sensitive(binding.is_some());
         self.delete_button.set_sensitive(binding.is_some());
 
         match binding {
@@ -385,18 +396,52 @@ impl DetailsPanel {
         self.delete_button.connect_clicked(move |_button| {
             eprintln!("🔍 DEBUG: Delete button clicked!");
 
-            if let Some(binding) = current_binding.borrow().as_ref() {
+            // Extract the binding COMPLETELY before calling callback
+            // This ensures no borrow is held when callback triggers UI refresh
+            let binding = current_binding.borrow();
+            let binding_to_delete = binding.as_ref().clone();
+
+            if let Some(binding) = binding_to_delete {
                 eprintln!("🔍 DEBUG: Current binding found:");
                 eprintln!("   Key: {}", binding.key_combo);
                 eprintln!("   Dispatcher: {}", binding.dispatcher);
                 eprintln!("   Args: {:?}", binding.args);
-                callback(binding);
+                // No borrow is held here - safe to call callback which may trigger UI refresh
+                callback(&binding);
             } else {
                 eprintln!("⚠️ DEBUG: No binding stored in RefCell!");
             }
         });
 
         eprintln!("✅ DEBUG: Delete button callback registered");
+    }
+
+    /// Connects a callback to the edit button
+    ///
+    /// The callback receives a reference to the currently selected keybinding
+    /// when the edit button is clicked.
+    pub fn connect_edit<F>(&self, callback: F)
+    where
+        F: Fn(&Keybinding) + 'static,
+    {
+        let current_binding = self.current_binding.clone();
+
+        self.edit_button.connect_clicked(move |_button| {
+            eprintln!("🔍 DEBUG: Edit button clicked!");
+
+            // Extract the binding COMPLETELY before calling callback
+            // This ensures no borrow is held when callback triggers UI refresh
+            let binding_to_edit = current_binding.borrow().as_ref().cloned();
+
+            if let Some(binding) = binding_to_edit {
+                eprintln!("✅ DEBUG: Found binding to edit: {} → {}",
+                      binding.key_combo, binding.dispatcher);
+                // No borrow is held here - safe to call callback which may trigger UI refresh
+                callback(&binding);
+            } else {
+                eprintln!("⚠️ DEBUG: No binding stored in RefCell!");
+            }
+        });
     }
 
     /// Get the root widget for adding to a container.

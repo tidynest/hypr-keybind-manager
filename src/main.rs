@@ -41,7 +41,11 @@ enum Commands {
     },
 }
 
-fn main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<(), Box<dyn std::error::Error>> {
+    // Suppress GTK warnings and debug messages
+    std::env::set_var("G_MESSAGES_DEBUG", "");
+    std::env::set_var("GTK_DEBUG", "");
+
     let cli = Cli::parse();
 
     match cli.command {
