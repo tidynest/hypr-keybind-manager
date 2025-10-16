@@ -112,9 +112,9 @@ graph TB
     Validator -->|Block/Warn| Controller
     Controller -->|Update UI| User
 
-    style User fill:#e1f5ff
-    style Controller fill:#fff4e1
-    style Validator fill:#ffe1e1
+    style User fill:#e1f5ff,color:#000
+    style Controller fill:#fff4e1,color:#000
+    style Validator fill:#ffe1e1,color:#000
 ```
 
 <details>
@@ -175,11 +175,11 @@ graph LR
     L2 -.->|Detects| Danger[Critical Patterns<br/>rm -rf /, dd, fork bombs]
     L3 -.->|Validates| Config[Dispatcher Whitelist<br/>Argument Length<br/>Encoding Detection]
 
-    style L1 fill:#ffe1e1
-    style L2 fill:#fff4e1
-    style L3 fill:#e1ffe1
-    style Accept fill:#d4f1d4
-    style Reject fill:#ffd4d4
+    style L1 fill:#ffe1e1,color:#000
+    style L2 fill:#fff4e1,color:#000
+    style L3 fill:#e1ffe1,color:#000
+    style Accept fill:#d4f1d4,color:#000
+    style Reject fill:#ffd4d4,color:#000
 ```
 
 For detailed security information, see [SECURITY.md](SECURITY.md).
@@ -318,35 +318,35 @@ The application uses a **[HashMap](https://doc.rust-lang.org/std/collections/str
 
 ```
 hypr-keybind-manager/
-├── README.md                  # Project overview and documentation hub
-├── LICENSE                    # Apache 2.0 license
-├── CONTRIBUTING.md            # Contribution guidelines
-├── SECURITY.md                # Security policy and threat model
-├── Cargo.toml                 # Rust dependencies and metadata
-├── build.rs                   # Build-time code generation
-├── docs/                      # Technical documentation
-│   ├── ARCHITECTURE.md        # System design and data flow
-│   ├── DESIGN_DECISIONS.md    # Rationale for architectural choices
-│   └── ENTROPY_DETECTION.md   # Shannon entropy deep-dive (929 lines)
-└── src/                       # Source code
-    ├── main.rs                # CLI entry point
-    ├── lib.rs                 # Library root
-    ├── config/                # Config file I/O
-    │   ├── mod.rs             # ConfigManager (reads/writes with backups)
-    │   ├── validator.rs       # Config validation (Layer 3)
-    │   └── danger.rs          # Dangerous command detection (Layer 2)
-    ├── core/                  # Business logic
-    │   ├── types.rs           # Keybinding, KeyCombo, Modifier, BindType
-    │   ├── parser.rs          # Parse Hyprland config syntax (nom)
-    │   ├── conflict.rs        # ConflictDetector engine (HashMap)
-    │   ├── validator.rs       # Injection prevention (Layer 1)
-    │   └── mod.rs             # Core module exports
-    ├── ui/                    # GTK4 GUI (MVC pattern)
-    │   ├── app.rs             # Main window setup
-    │   ├── controller.rs      # MVC Controller (mediates Model ↔ View)
-    │   ├── style.css          # GTK CSS styling
-    │   ├── mod.rs             # UI module exports
-    │   └── components/        # Reusable UI widgets
+├── README.md                      # Project overview and documentation hub
+├── LICENSE                        # Apache 2.0 license
+├── CONTRIBUTING.md                # Contribution guidelines
+├── SECURITY.md                    # Security policy and threat model
+├── Cargo.toml                     # Rust dependencies and metadata
+├── build.rs                       # Build-time code generation
+├── docs/                          # Technical documentation
+│   ├── ARCHITECTURE.md            # System design and data flow
+│   ├── DESIGN_DECISIONS.md        # Rationale for architectural choices
+│   └── ENTROPY_DETECTION.md       # Shannon entropy deep-dive (929 lines)
+└── src/                           # Source code
+    ├── main.rs                    # CLI entry point
+    ├── lib.rs                     # Library root
+    ├── config/                    # Config file I/O
+    │   ├── mod.rs                 # ConfigManager (reads/writes with backups)
+    │   ├── validator.rs           # Config validation (Layer 3)
+    │   └── danger.rs              # Dangerous command detection (Layer 2)
+    ├── core/                      # Business logic
+    │   ├── types.rs               # Keybinding, KeyCombo, Modifier, BindType
+    │   ├── parser.rs              # Parse Hyprland config syntax (nom)
+    │   ├── conflict.rs            # ConflictDetector engine (HashMap)
+    │   ├── validator.rs           # Injection prevention (Layer 1)
+    │   └── mod.rs                 # Core module exports
+    ├── ui/                        # GTK4 GUI (MVC pattern)
+    │   ├── app.rs                 # Main window setup
+    │   ├── controller.rs          # MVC Controller (mediates Model ↔ View)
+    │   ├── style.css              # GTK CSS styling
+    │   ├── mod.rs                 # UI module exports
+    │   └── components/            # Reusable UI widgets
     │       ├── keybind_list.rs    # Scrollable list
     │       ├── search_bar.rs      # Real-time search
     │       ├── conflict_panel.rs  # Warning banner
@@ -354,7 +354,7 @@ hypr-keybind-manager/
     │       ├── edit_dialog.rs     # Edit/Add dialog
     │       ├── backup_dialog.rs   # Backup management
     │       └── mod.rs             # Component exports
-    └── ipc/                   # (Future: Hyprland IPC integration)
+    └── ipc/                       # (Future: Hyprland IPC integration)
         └── mod.rs
 ```
 

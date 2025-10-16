@@ -56,11 +56,11 @@ graph TB
     ConfigMgr <-->|Read/Write| ConfigFile
     ConfigMgr <-->|Create/Restore| Backups
 
-    style Presentation fill:#e1f5ff
-    style Application fill:#fff4e1
-    style Domain fill:#e1ffe1
-    style Infrastructure fill:#ffe1e1
-    style Persistence fill:#f0f0f0
+    style Presentation fill:#e1f5ff,color:#000
+    style Application fill:#fff4e1,color:#000
+    style Domain fill:#e1ffe1,color:#000
+    style Infrastructure fill:#ffe1e1,color:#000
+    style Persistence fill:#f0f0f0,color:#000
 ```
 
 <details>
@@ -154,10 +154,10 @@ graph LR
     Parser -.->|creates| Types
     ConflictCore -.->|uses| Types
 
-    style Main fill:#ffe1e1
-    style UI fill:#e1f5ff
-    style Config fill:#fff4e1
-    style Core fill:#e1ffe1
+    style Main fill:#ffe1e1,color:#000
+    style UI fill:#e1f5ff,color:#000
+    style Config fill:#fff4e1,color:#000
+    style Core fill:#e1ffe1,color:#000
 ```
 
 ---
@@ -268,11 +268,11 @@ flowchart TD
 
     ShowBanner --> End([User sees conflicts])
     HideBanner --> End
-
-    style Start fill:#e1f5ff
-    style Conflicts fill:#ffe1e1
-    style ShowBanner fill:#ffd4d4
-    style HideBanner fill:#d4f1d4
+    
+    style Start fill:#e1f5ff,color:#000
+    style Conflicts fill:#ffe1e1,color:#000
+    style ShowBanner fill:#ffd4d4,color:#000
+    style HideBanner fill:#d4f1d4,color:#000
 ```
 
 ### 4. Security Validation Flow
@@ -316,11 +316,11 @@ flowchart TD
     Reject --> End
     Accept --> Success([Proceed with operation])
 
-    style Layer1 fill:#ffe1e1
-    style Layer2 fill:#fff4e1
-    style Layer3 fill:#e1ffe1
-    style Accept fill:#d4f1d4
-    style Reject fill:#ffd4d4
+    style Layer1 fill:#ffe1e1,color:#000
+    style Layer2 fill:#fff4e1,color:#000
+    style Layer3 fill:#e1ffe1,color:#000
+    style Accept fill:#d4f1d4,color:#000
+    style Reject fill:#ffd4d4,color:#000
 ```
 
 ### 5. Backup and Restore Flow

@@ -82,11 +82,11 @@ graph TB
     Decision -->|Yes| Accept[✅ Execute/Save]
     Decision -->|No| Reject[❌ Block + Error Message]
 
-    style Layer1 fill:#ffe1e1
-    style Layer2 fill:#fff4e1
-    style Layer3 fill:#e1ffe1
-    style Accept fill:#d4f1d4
-    style Reject fill:#ffd4d4
+    style Layer1 fill:#ffe1e1,color:#000
+    style Layer2 fill:#fff4e1,color:#000
+    style Layer3 fill:#e1ffe1,color:#000
+    style Accept fill:#d4f1d4,color:#000
+    style Reject fill:#ffd4d4,color:#000
 ```
 
 <details>
