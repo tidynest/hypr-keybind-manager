@@ -43,7 +43,7 @@ graph TB
         Validator[Security Validator<br/>3 Layers]
     end
 
-    subgraph Persistence [Persistence Layer - Filesystem]
+    subgraph Persistence [Persistence Layer - Filesystem<br/><br/>]
         ConfigFile[Config File<br/>&#126;/.config/hypr/hyprland.conf]
         Backups[Backup Files<br/>&#126;/.config/hypr/backups/]
     end
