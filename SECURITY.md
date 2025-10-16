@@ -55,21 +55,21 @@ This document outlines the security architecture, threat model, supported versio
 graph TB
     Input[User Input<br/>Key Combo, Dispatcher, Args]
 
-subgraph Layer1 [Layer 1: Injection Prevention<br/>&nbsp;]
+subgraph Layer1 [Layer 1: Injection Prevention<br/><br/>]
         WhitelistCheck[Dispatcher Whitelist]
         MetacharCheck[Shell Metacharacter Detection]
         LengthCheck[Argument Length Limit]
         KeyValidation[Key Name Validation]
     end
 
-    subgraph Layer2 [Layer 2: Danger Detection<br/>&nbsp;]
+    subgraph Layer2 [Layer 2: Danger Detection<br/><br/>]
         PatternMatch[Critical Pattern Matching<br/>rm -rf /, dd, fork bombs]
         DangerHash[Dangerous Command HashSet<br/>sudo, chmod 777, mkfs]
         EntropyDetect[Shannon Entropy Detection<br/>Base64/Hex payloads]
         ContextAnalysis[Context-Aware Analysis]
     end
 
-    subgraph Layer3 [Layer 3: Config Validation<br/>&nbsp;]
+    subgraph Layer3 [Layer 3: Config Validation<br/><br/>]
         UnifiedReport[Unified Validation Report]
         SeverityCheck[Severity Classification]
         TransactionGuard[Transaction Integration]
