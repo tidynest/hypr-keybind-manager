@@ -5,7 +5,7 @@ edition = "2021"
 rust-version = "1.83"
 authors = ["Your Name <your.email@example.com>"]
 description = "Secure keybinding manager for Hyprland with conflict detection"
-license = "MIT"
+license = "Apache-2.0"
 repository = "https://github.com/tidynest/hypr-keybind-manager"
 default-run = "hypr-keybind-manager"
 
