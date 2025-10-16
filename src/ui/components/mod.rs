@@ -2,14 +2,14 @@
 //!
 //! Reusable GTK4 widgets for the keybinding manager.
 //!
-//! # Components (Day 2+)
+//! # Components
 //!
 //! - `keybind_list.rs` - Scrollable list of keybindings
 //! - `search_bar.rs` - Real-time search/filter
 //! - `conflict_panel.rs` - Conflict warning banner
 //! - `details_panel.rs` - Selected binding details
-
-// Components will be added in Day 2
+//! - `edit_dialog.rs` - Add/edit keybinding dialog
+//! - `backup_dialog.rs` - Backup management dialog
 
 mod conflict_panel;
 mod edit_dialog;

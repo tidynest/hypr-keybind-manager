@@ -166,6 +166,15 @@ fn parse_bind_line(input: &str) -> IResult<&str, Keybinding> {
 }
 
 /// Parse bind_type (bind, binde, bindl, bindm, bindr, bindel)
+///
+/// Recognizes all six Hyprland binding types and converts them to
+/// the corresponding BindType enum variant. The order matters: `bindel`
+/// must be checked before `binde` to avoid partial matches.
+///
+/// # Returns
+///
+/// The parsed BindType variant, or a nom parsing error if the input
+/// doesn't start with a valid bind type keyword.
 fn parse_bind_type(input: &str) -> IResult<&str, BindType> {
     map(
         alt((

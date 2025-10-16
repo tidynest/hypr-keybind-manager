@@ -55,7 +55,7 @@ pub enum ValidationLevel {
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct ValidationIssue {
-    /// Index of the binding with the issue (0.based)
+    /// Index of the binding with the issue (0-based)
     pub binding_index: usize,
     /// Severity level (Error/Warning/Info)
     pub validation_level: ValidationLevel,
@@ -75,7 +75,7 @@ pub struct ValidationIssue {
 pub struct ValidationReport {
     /// All validation issues (errors + warnings)
     pub issues: Vec<ValidationIssue>,
-    ///Highest danger level found (for quick checks)
+    /// Highest danger level found (for quick checks)
     pub highest_danger: DangerLevel,
     /// Dangerous commands with their assessments (for detailed reporting)
     pub dangerous_commands: Vec<(usize, DangerAssessment)>,
@@ -89,7 +89,7 @@ impl Default for ValidationReport {
 
 impl ValidationReport {
     #[allow(dead_code)]
-    /// Crates a new empty validation report
+    /// Creates a new empty validation report
     pub fn new() -> Self {
         Self {
             issues: Vec::new(),

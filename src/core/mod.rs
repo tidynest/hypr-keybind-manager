@@ -20,6 +20,3 @@ pub mod validator;
 pub use conflict::{ConflictDetector, Conflict};
 pub use types::*;
 pub use validator::{validate_keybinding, ValidationError};
-
-// TODO: Implement validator functions
-// pub use validator::*;

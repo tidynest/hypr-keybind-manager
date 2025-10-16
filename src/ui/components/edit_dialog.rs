@@ -1,3 +1,40 @@
+//! Edit dialog component for adding and editing keybindings.
+//!
+//! Provides a modern GTK4 Window-based dialog for creating new keybindings
+//! or editing existing ones. The dialog includes:
+//!
+//! - Pre-filled form fields for editing
+//! - Real-time validation with error feedback
+//! - Recursive error handling (user can fix and retry)
+//! - Modal dialog pattern with Save/Cancel buttons
+//!
+//! # Architecture
+//!
+//! Uses GTK4 Window instead of deprecated Dialog API, with manual button
+//! layout and response tracking via `Rc<Cell<Option<DialogResponse>>>`.
+//!
+//! # Example
+//!
+//! ```no_run
+//! use hypr_keybind_manager::ui::components::EditDialog;
+//! use hypr_keybind_manager::core::types::{Keybinding, KeyCombo, Modifier, BindType};
+//! use gtk4::ApplicationWindow;
+//!
+//! # fn example(parent: &ApplicationWindow) {
+//! let binding = Keybinding {
+//!     key_combo: KeyCombo::new(vec![Modifier::Super], "K"),
+//!     bind_type: BindType::Bind,
+//!     dispatcher: "exec".to_string(),
+//!     args: Some("firefox".to_string()),
+//! };
+//!
+//! let dialog = EditDialog::new(parent, &binding);
+//! if let Some(updated_binding) = dialog.show_and_wait() {
+//!     println!("User saved: {}", updated_binding.key_combo);
+//! }
+//! # }
+//! ```
+
 use gtk4::prelude::*;
 use gtk4::{ApplicationWindow, Box as GtkBox, Button, Entry, Grid, Label, Orientation, Window};
 use std::cell::Cell;

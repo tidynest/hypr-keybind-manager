@@ -95,7 +95,7 @@ impl fmt::Display for BindType {
 ///     modifiers: vec![Modifier::Super, Modifier::Shift],
 ///     key: "K".to_string(),
 /// };
-/// ``
+/// ```
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct KeyCombo {
     /// Modifier keys (SUPER, CTRL, SHIFT, ALT)
@@ -167,7 +167,7 @@ pub struct Keybinding {
     /// The key combination that triggers this binding
     pub key_combo: KeyCombo,
 
-    /// Type of bidning (bind, binde, bindl, etc.)
+    /// Type of binding (bind, binde, bindl, etc.)
     pub bind_type: BindType,
 
     /// Hyprland dispatcher name (e.g., "exec", "killactive", "workspace")

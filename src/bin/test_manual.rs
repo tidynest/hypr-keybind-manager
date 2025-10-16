@@ -1,4 +1,22 @@
 //! Manual verification of entropy detection
+//!
+//! This binary provides manual testing for the entropy-based danger detection
+//! system. It runs several test cases including:
+//!
+//! - Base64-encoded malicious commands
+//! - Hex-encoded malicious commands
+//! - Perl packed commands
+//! - Normal safe commands (to verify no false positives)
+//!
+//! # Usage
+//!
+//! ```bash
+//! cargo run --bin test_manual
+//! ```
+//!
+//! The output shows danger level assessments for each test case,
+//! verifying that the entropy detector correctly identifies obfuscated
+//! commands while not flagging normal commands.
 
 use hypr_keybind_manager::config::danger::DangerDetector;
 

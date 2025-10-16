@@ -559,7 +559,7 @@ bind = SUPER, K, exec, chrome
         controller.load_keybindings().unwrap();
 
         let conflicts = controller.get_conflicts();
-        assert_eq!(conflicts.len(), 1, "Should detect 1 conflict (SUPER+K used twice");
+        assert_eq!(conflicts.len(), 1, "Should detect 1 conflict (SUPER+K used twice)");
 
         let conflict = &conflicts[0];
         assert_eq!(

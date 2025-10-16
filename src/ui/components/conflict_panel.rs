@@ -172,7 +172,7 @@ impl ConflictPanel {
     ///
     /// # Returns
     ///
-    /// Reference to the GtkBox widget that can be appended to a Box or other container
+    /// Reference to the Revealer widget that can be appended to a Box or other container
     ///
     /// # Example
     ///

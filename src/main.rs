@@ -1,7 +1,21 @@
-//! CLI entry point for hypr-keybind-manager
+//! CLI entry point for Hyprland Keybinding Manager
 //!
-//! Provides command-line interface for checking conflicts,
-//! listing keybindings, and launching the GUI.
+//! Provides a command-line interface for managing Hyprland keybindings with
+//! three main commands: conflict checking, listing bindings, and launching
+//! the graphical user interface.
+//!
+//! # Usage
+//!
+//! ```bash
+//! # Check for conflicts
+//! hypr-keybind-manager check -c ~/.config/hypr/hyprland.conf
+//!
+//! # List all keybindings
+//! hypr-keybind-manager list
+//!
+//! # Launch GUI
+//! hypr-keybind-manager gui
+//! ```
 
 use clap::{Parser, Subcommand};
 use colored::*;
@@ -9,6 +23,10 @@ use hypr_keybind_manager::core::{parser::parse_config_file, conflict::ConflictDe
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// Command-line interface for Hyprland Keybinding Manager.
+///
+/// Provides subcommands for checking conflicts, listing keybindings,
+/// and launching the graphical interface.
 #[derive(Parser)]
 #[command(name = "hypr-keybind-manager")]
 #[command(author, version, about, long_about = None)]
@@ -17,6 +35,7 @@ struct Cli {
     command: Commands,
 }
 
+/// Available CLI subcommands.
 #[derive(Subcommand)]
 enum Commands {
     /// Check for keybinding conflicts
@@ -41,6 +60,15 @@ enum Commands {
     },
 }
 
+/// Main entry point for the CLI application.
+///
+/// Parses command-line arguments and dispatches to the appropriate subcommand handler.
+/// Suppresses GTK debug output to keep terminal clean.
+///
+/// # Returns
+///
+/// * `Ok(())` - Command executed successfully
+/// * `Err(_)` - Command failed with error details
 fn main() -> anyhow::Result<(), Box<dyn std::error::Error>> {
     // Suppress GTK warnings and debug messages
     std::env::set_var("G_MESSAGES_DEBUG", "");
@@ -57,7 +85,24 @@ fn main() -> anyhow::Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Check config for keybinding conflicts
+/// Checks configuration file for keybinding conflicts.
+///
+/// Parses the Hyprland config, detects duplicate key combinations,
+/// and displays conflicts with coloured output. Exits with code 1
+/// if conflicts are found.
+///
+/// # Arguments
+///
+/// * `config_path` - Path to Hyprland configuration file (supports tilde expansion)
+///
+/// # Returns
+///
+/// * `Ok(())` - No conflicts found
+/// * `Err(_)` - File read or parse error
+///
+/// # Exits
+///
+/// Exits with code 1 if conflicts are detected
 fn check_conflicts(config_path: &Path) -> anyhow::Result<()> {
     // Expand tilde in path
     let expanded_path = shellexpand::tilde(
@@ -124,7 +169,20 @@ fn check_conflicts(config_path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// List all keybinding in the config
+/// Lists all keybindings from the configuration file.
+///
+/// Parses the Hyprland config and displays all keybindings with
+/// formatted, colourised output showing key combinations, dispatchers,
+/// and arguments.
+///
+/// # Arguments
+///
+/// * `config_path` - Path to Hyprland configuration file (supports tilde expansion)
+///
+/// # Returns
+///
+/// * `Ok(())` - Successfully listed bindings
+/// * `Err(_)` - File read or parse error
 fn list_keybindings(config_path: &Path) -> anyhow::Result<()> {
     // Expand tilde in path
     let expanded_path = shellexpand::tilde(
@@ -158,7 +216,23 @@ fn list_keybindings(config_path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Launch GUI overlay
+/// Launches the graphical user interface.
+///
+/// Creates and runs the GTK4 application window for visual keybinding
+/// management with real-time conflict detection and editing capabilities.
+///
+/// # Arguments
+///
+/// * `config_path` - Path to Hyprland configuration file (supports tilde expansion)
+///
+/// # Returns
+///
+/// * `Ok(())` - GUI closed successfully
+/// * `Err(_)` - Failed to create or run application
+///
+/// # Blocking
+///
+/// This function blocks until the GUI window is closed by the user.
 fn launch_gui(config_path: &Path) -> anyhow::Result<()> {
     use hypr_keybind_manager::ui::App;
 

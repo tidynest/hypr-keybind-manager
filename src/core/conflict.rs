@@ -44,7 +44,7 @@ impl ConflictDetector {
 
     /// Adds a keybinding to the detector.
     ///
-    /// Time complexity: 0(1) average case
+    /// Time complexity: O(1) average case
     pub fn add_binding(&mut self, binding: Keybinding) {
         // Clone KeyCombo for HashMap ownership
         self.bindings
@@ -55,7 +55,7 @@ impl ConflictDetector {
 
     /// Finds all conflicts (key combos with 2 or more bindings).
     ///
-    /// Time complexity: 0(n) where n = number of unique key combos.
+    /// Time complexity: O(n) where n = number of unique key combos.
     pub fn find_conflicts(&self) -> Vec<Conflict> {
         self.bindings
             .iter()

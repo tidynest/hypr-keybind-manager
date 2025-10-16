@@ -266,28 +266,6 @@ impl HyprlandClient {
     /// This method assumes the binding has already passed validation.
     /// It builds the command by concatenating validated components,
     /// not by interpolating user input into a format string.
-    /// Builds a keyword command string safely
-    ///
-    /// This constructs the command using safe concatenation, NOT string
-    /// interpolation or format macros that could be vulnerable to injection.
-    ///
-    /// # Arguments
-    ///
-    /// * `keyword` - The Hyprland keyword ("bind" or "unbind")
-    /// * `binding` - The keybinding to encode
-    ///
-    /// # Returns
-    ///
-    /// A safely constructed command string in Hyprland's format:
-    /// ```text
-    /// MODIFIERS, KEY, dispatcher, args
-    /// ```
-    ///
-    /// # Safety
-    ///
-    /// This method assumes the binding has already passed validation.
-    /// It builds the command by concatenating validated components,
-    /// not by interpolating user input into a format string.
     fn build_keyword_command(&self, _keyword: &str, binding: &Keybinding) -> String {
         // Build modifiers string (e.g., "SUPER_SHIFT")
         let modifiers_str = if binding.key_combo.modifiers.is_empty() {
@@ -484,7 +462,7 @@ mod tests {
 
         let cmd = client.build_keyword_command("bind", &binding);
 
-        // Should contain both mogifiers joined with underscore
+        // Should contain both modifiers joined with underscore
         assert!(cmd.contains("SUPER") && cmd.contains("SHIFT"),
             "Should contain both modifiers: {}", cmd);
     }

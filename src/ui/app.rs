@@ -92,7 +92,10 @@ impl App {
         self.app.run_with_args::<&str>(&[]);
     }
 
-    // Load custom CSS styling for the application
+    /// Loads custom CSS styling for the application
+    ///
+    /// Applies the CSS from `style.css` to the default display
+    /// at APPLICATION priority level.
     fn load_css() {
         let provider = CssProvider::new();
         let css = include_str!("style.css");
@@ -124,7 +127,6 @@ impl App {
         let window = ApplicationWindow::builder()
             .application(app)
             .title("Hyprland Keybinding Manager")
-            .default_width(1000)
             .default_width(1000)
             .default_height(800)
             .build();
@@ -273,13 +275,6 @@ impl App {
         // Make list box focusable for keyboard navigation
         keybind_list.list_box().set_can_focus(true);
         keybind_list.list_box().grab_focus();
-
-        // Initial display
-        let all_bindings = controller.get_keybindings();
-        keybind_list.update_with_bindings(all_bindings);
-
-        // Update conflict panel
-        conflict_panel.refresh();
 
         // Initial display
         let all_bindings = controller.get_keybindings();
@@ -546,7 +541,7 @@ impl App {
                     }
                 },
                 // Add the on_delete callback
-                move|backup_path| {
+                move |backup_path| {
                     controller_for_delete.delete_backup(backup_path)
                 }
             );

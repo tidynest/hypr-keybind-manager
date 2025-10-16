@@ -1,10 +1,27 @@
-//! build.rs
+//! Build script for Hyprland Keybinding Manager
 //!
-//! Build script for hypr-keybind-manager
+//! Handles compilation-time dependency checks and library linking.
 //!
-//! This script handles linking to the gtk4-layer-shell C library,
-//! which is required for creating Wayland layer-shell popup windows.
-//! The library must be installed on the system (via pacman on Arch).
+//! # Dependencies
+//!
+//! This script probes for the `gtk4-layer-shell-0` library, which provides
+//! Wayland layer-shell support for GTK4 applications. This library is required
+//! for creating properly layered popup windows in Wayland compositors.
+//!
+//! # System Requirements
+//!
+//! - **Arch Linux:** `sudo pacman -S gtk4-layer-shell`
+//! - **Other distros:** Install `gtk4-layer-shell` development package
+//!
+//! # Panics
+//!
+//! Exits with code 1 if `gtk4-layer-shell-0` is not found on the system.
+
+/// Main build script entry point.
+///
+/// Probes for the gtk4-layer-shell library using pkg-config and configures
+/// cargo to link against it. If the library is not found, prints installation
+/// instructions and exits with an error.
 fn main() {
     // Link to gtk4-layer-shell C library
     match pkg_config::probe_library("gtk4-layer-shell-0") {
