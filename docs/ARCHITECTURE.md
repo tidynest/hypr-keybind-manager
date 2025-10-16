@@ -22,13 +22,14 @@
 Hyprland Keybinding Manager follows the **[Model-View-Controller (MVC)](https://en.wikipedia.org/wiki/Model%E2%80%93view%E2%80%93controller)** architectural pattern with additional security and persistence layers.
 
 ```mermaid
+%%{init: {'flowchart': {'subGraphTitleMargin': {'top': 10, 'bottom': 20}}}}%%
 graph TB
     subgraph Presentation [Presentation Layer - GTK4 UI]
         View[View Components<br/>keybind_list, details_panel, edit_dialog]
     end
 
     subgraph Application [Application Layer - Business Logic]
-        Controller[Controller<br/>Mediates Model ↔ View]
+        Controller[Controller<br/>Mediates Model &harr; View]
         ConflictDetect[Conflict Detector<br/>HashMap O1]
     end
 
@@ -43,8 +44,8 @@ graph TB
     end
 
     subgraph Persistence [Persistence Layer - Filesystem]
-        ConfigFile[Config File<br/>~/.config/hypr/hyprland.conf]
-        Backups[Backup Files<br/>~/.config/hypr/backups/]
+        ConfigFile[Config File<br/>&#126;/.config/hypr/hyprland.conf]
+        Backups[Backup Files<br/>&#126;/.config/hypr/backups/]
     end
 
     View <-->|User Actions<br/>UI Updates| Controller
