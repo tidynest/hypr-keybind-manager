@@ -171,7 +171,7 @@ graph LR
     L3 --> Accept[✅ Accept]
     L3 --> Reject[❌ Reject]
 
-    L1 -.->|Blocks| Inject[Shell Metacharacters<br/>$, ;, |, &, backticks]
+L1 -.->|Blocks| Inject[Shell Metacharacters<br/>$, ;, pipe, &, backticks]
     L2 -.->|Detects| Danger[Critical Patterns<br/>rm -rf /, dd, fork bombs]
     L3 -.->|Validates| Config[Dispatcher Whitelist<br/>Argument Length<br/>Encoding Detection]
 
