@@ -22,5 +22,4 @@ pub mod ipc;
 pub mod ui;
 
 // Re-export commonly used types for convenience
-pub use core::{Keybinding, KeyCombo, Modifier, BindType};
-// TODO: Add ConflictDetector when implemented
+pub use core::{BindType, Keybinding, KeyCombo, Modifier};

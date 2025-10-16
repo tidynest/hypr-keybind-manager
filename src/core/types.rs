@@ -136,7 +136,7 @@ impl fmt::Display for KeyCombo {
             let mods = self
                 .modifiers
                 .iter()
-                .map(|m| format!("{}", m))
+                .map(|m| m.to_string())
                 .collect::<Vec<_>>()
                 .join("+");
             write!(f, "{}+{}", mods, self.key)

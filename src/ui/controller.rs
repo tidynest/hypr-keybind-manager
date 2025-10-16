@@ -13,8 +13,8 @@
 //! The Controller holds references to Model components but doesn't know
 //! about GTK4 widgets. This keeps business logic separate from presentation.
 
-use std::path::PathBuf;
 use std::cell::RefCell;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use crate::config::{ConfigError, ConfigManager};
@@ -298,14 +298,8 @@ impl Controller {
         // Remove binding from in-memory list
         let mut bindings = self.keybindings.borrow_mut();
 
-        // Find and remove the binding
-        bindings.retain(|b| {
-            // Match on all fields to ensure we delete the exact binding
-            !(b.key_combo == binding.key_combo
-                && b.bind_type == binding.bind_type
-                && b.dispatcher == binding.dispatcher
-                && b.args == binding.args)
-        });
+        // Find and remove the binding (uses derived PartialEq)
+        bindings.retain(|b| b != binding);
 
         // Write updated list to disk
         let mut config_manager = self.config_manager.borrow_mut();
@@ -344,12 +338,6 @@ impl Controller {
     /// }
     /// ```
     pub fn add_keybinding(&self, binding: Keybinding) -> Result<(), String> {
-        eprintln!("🔍 DEBUG: Adding new keybinding");
-        eprintln!("   New: {} → {} {}",
-                  binding.key_combo,
-                  binding.dispatcher,
-                  binding.args.as_deref().unwrap_or("(no args)"));
-
         // 1. Add the binding to the list
         let mut bindings = self.keybindings.borrow_mut();
         bindings.push(binding.clone());
@@ -359,17 +347,12 @@ impl Controller {
         config_manager.write_bindings(&bindings)
             .map_err(|e| format!("Failed to write changes to config: {}", e))?;
 
-        eprintln!("✅ DEBUG: Config file updated successfully");
-
         // 3. Rebuild conflict detector with updated bindings
         let mut detector = ConflictDetector::new();
         for binding in bindings.iter() {
             detector.add_binding(binding.clone());
         }
         *self.conflict_detector.borrow_mut() = detector;
-
-        eprintln!("✅ DEBUG: Conflict detector rebuilt");
-        eprintln!("✅ DEBUG: Add complete!");
 
         Ok(())
     }
@@ -380,6 +363,52 @@ impl Controller {
             .borrow()
             .list_backups()
             .map_err(|e| format!("Failed to list backups: {}", e))
+    }
+
+    /// Restores the configuration from a backup file.
+    ///
+    /// Creates a safety backup before restoring, then reloads keybindings from the restored config.
+    ///
+    /// # Arguments
+    ///
+    /// * `backup_path` - Path to the backup file to restore from
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` - Successfully restored and reloaded
+    /// * `Err(String)` - Restore failed (original config unchanged)
+    pub fn restore_backup(&self, backup_path: &Path) -> Result<(), String> {
+        // Restore the backup via ConfigManager
+        self.config_manager
+            .borrow()
+            .restore_backup(backup_path)
+            .map_err(|e| format!("Failed to restore backup: {}", e))?;
+
+        // Reload keybindings from the restored config
+        self.load_keybindings()
+            .map_err(|e| format!("Failed to reload keybindings: {}", e))?;
+
+        Ok(())
+    }
+
+    /// Deletes a specific backup file.
+    ///
+    /// # Arguments
+    ///
+    /// * `backup_path` - Path to the backup file to delete
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` - Successfully deleted
+    /// * `Err(String)` - Delete failed (file not found, permission error, etc.)
+    pub fn delete_backup(&self, backup_path: &Path) -> Result<(), String> {
+        use std::fs;
+
+        // Delete the backup file
+        fs::remove_file(backup_path)
+            .map_err(|e| format!("Failed to delete backup: {}", e))?;
+
+        Ok(())
     }
 
     /// Updates an existing keybinding with new values
@@ -406,30 +435,17 @@ impl Controller {
     /// }
     /// ```
     pub fn update_keybinding(&self, old: &Keybinding, new: Keybinding) -> Result<(), String> {
-        eprintln!("🔍 DEBUG: Updating keybinding");
-        eprintln!("   Old: {} → {} {}", old.key_combo, old.dispatcher,
-                  old.args.as_deref().unwrap_or("(no args)"));
-        eprintln!("   New: {} → {} {}", new.key_combo, new.dispatcher,
-                  new.args.as_deref().unwrap_or("(no args)"));
-
         // 1. Find and replace the binding in the list
         let mut bindings = self.keybindings.borrow_mut();
 
         // Find the position of the old binding
-        let position = bindings.iter().position(|b|
-            b.key_combo == old.key_combo &&
-                b.bind_type == old.bind_type &&
-                b.dispatcher == old.dispatcher &&
-                b.args == old.args
-        );
+        let position = bindings.iter().position(|b| b == old);
 
         match position {
             Some(pos) => {
-                eprintln!("✅ DEBUG: Found binding at position {}", pos);
                 bindings[pos] = new.clone();
             }
             None => {
-                eprintln!("⚠️ DEBUG: Binding not found in list!");
                 return Err("Binding not found in the keybinding list".to_string());
             }
         }
@@ -439,17 +455,12 @@ impl Controller {
         config_manager.write_bindings(&bindings)
             .map_err(|e| format!("Failed to write changes to config: {}", e))?;
 
-        eprintln!("✅ DEBUG: Config file updated successfully");
-
         // 3. Rebuild conflict detector with updated bindings
         let mut detector = ConflictDetector::new();
         for binding in bindings.iter() {
             detector.add_binding(binding.clone());
         }
         *self.conflict_detector.borrow_mut() = detector;
-
-        eprintln!("✅ DEBUG: Conflict detector rebuilt");
-        eprintln!("✅ DEBUG: Update complete!");
 
         Ok(())
     }

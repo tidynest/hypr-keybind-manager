@@ -298,12 +298,6 @@ impl App {
         let conflict_panel_for_delete = conflict_panel.clone();
 
         details_panel.connect_delete(move |binding| {
-            eprintln!("\n🔍 DEBUG: === DELETE CALLBACK FIRED ===");
-            eprintln!("Binding to delete: {} -> {} {:?}",
-                      binding.key_combo,
-                      binding.dispatcher,
-                      binding.args);
-
             // Clone everything needed for the dialog
             let controller_clone = controller_for_delete.clone();
             let keybind_list_clone = keybind_list_for_delete.clone();
@@ -311,8 +305,6 @@ impl App {
             let conflict_panel_clone = conflict_panel_for_delete.clone();
             let binding_clone = binding.clone();
             let window_clone = window_for_delete.clone();
-
-            eprintln!("🔍 DEBUG: Creating AlertDialog...");
 
             // Create confirmation dialog using modern AlertDialog
             let dialog = gtk4::AlertDialog::builder()
@@ -329,8 +321,6 @@ impl App {
                 .default_button(0)
                 .build();
 
-            eprintln!("🔍 DEBUG: AlertDialog created, calling choose()...");
-
             // Clone window AGAIN for the inner closure (this fixes the borrow error!)
             let window_for_inner = window_clone.clone();
 
@@ -338,33 +328,18 @@ impl App {
                 Some(&window_clone),  // Borrows window_clone here
                 None::<&gtk4::gio::Cancellable>,
                 move |response| {  // Moves window_for_inner here (different variable!)
-                    eprintln!("🔍 DEBUG: Dialog response received: {:?}", response);
-
                     match response {
                         Ok(1) => {  // 1 = Delete button (second button)
-                            eprintln!("🔍 DEBUG: User clicked Delete, proceeding...");
-
                             match controller_clone.delete_keybinding(&binding_clone) {
                                 Ok(()) => {
-                                    eprintln!("✅ DEBUG: Delete succeeded!");
-
                                     // Refresh UI
-                                    eprintln!("🔍 DEBUG: Refreshing keybind list...");
                                     let updated = controller_clone.get_keybindings();
                                     keybind_list_clone.update_with_bindings(updated);
-
-                                    eprintln!("🔍 DEBUG: Clearing details panel...");
                                     details_panel_clone.update_binding(None);
-
-                                    eprintln!("🔍 DEBUG: Updating conflicts panel...");
                                     conflict_panel_clone.refresh();
-
-                                    eprintln!("✅ DEBUG: UI refresh complete!");
                                     println!("✅ Keybinding deleted successfully");
                                 }
                                 Err(e) => {
-                                    eprintln!("❌ DEBUG: Delete failed: {}", e);
-
                                     // Show error dialog (use window_for_inner)
                                     let error_dialog = gtk4::AlertDialog::builder()
                                         .modal(true)
@@ -378,22 +353,18 @@ impl App {
                             }
                         }
                         Ok(0) => {
-                            eprintln!("🔍 DEBUG: User clicked Cancel");
+                            // User clicked Cancel
                         }
-                        Ok(other) => {
-                            eprintln!("⚠️ DEBUG: Unexpected button index: {}", other);
+                        Ok(_other) => {
+                            // Unexpected button index
                         }
-                        Err(e) => {
-                            eprintln!("❌ DEBUG: Dialog error: {:?}", e);
+                        Err(_e) => {
+                            // Dialog error
                         }
                     }
                 }
             );
-
-            eprintln!("🔍 DEBUG: Dialog.choose() called, waiting for user response...");
         });
-
-        eprintln!("✅ DEBUG: Delete button wiring complete");
         // ============================================================================
         // End of delete button wiring
         // ============================================================================
@@ -401,8 +372,6 @@ impl App {
         // ============================================================================
         // Wire up edit button
         // ============================================================================
-        eprintln!("🔧 DEBUG: Setting up edit button callback...");
-
         let window_for_edit = window.clone();
         let controller_for_edit = controller.clone();
         let keybind_list_for_edit = keybind_list.clone();
@@ -410,12 +379,6 @@ impl App {
         let conflict_panel_for_edit = conflict_panel.clone();
 
         details_panel.connect_edit(move |binding| {
-            eprintln!("\n✏️ DEBUG: === EDIT CALLBACK FIRED ===");
-            eprintln!("Binding to edit: {} -> {} {:?}",
-                      binding.key_combo,
-                      binding.dispatcher,
-                      binding.args);
-
             // Clone everything for the nested closures
             let controller_clone = controller_for_edit.clone();
             let keybind_list_clone = keybind_list_for_edit.clone();
@@ -424,26 +387,14 @@ impl App {
             let binding_clone = binding.clone();
             let window_clone = window_for_edit.clone();
 
-            eprintln!("📝 DEBUG: Creating EditDialog...");
-
             // Show the edit dialog
             let edit_dialog = EditDialog::new(&window_clone, &binding_clone);
 
-            eprintln!("📝 DEBUG: Edit dialog created, calling show_and_wait()...");
-
             // Get the result (blocks until user clicks Save or Cancel)
             if let Some(new_binding) = edit_dialog.show_and_wait() {
-                eprintln!("💾 DEBUG: User clicked Save!");
-                eprintln!("   New values: {} -> {} {:?}",
-                          new_binding.key_combo,
-                          new_binding.dispatcher,
-                          new_binding.args);
-
                 // Try to update the keybinding
                 match controller_clone.update_keybinding(&binding_clone, new_binding) {
                     Ok(()) => {
-                        eprintln!("✅ DEBUG: Update successful! Refreshing UI...");
-
                         // Clear the details panel (user needs to reselect)
                         details_panel_clone.update_binding(None);
 
@@ -451,16 +402,12 @@ impl App {
                         let updated_bindings = controller_clone.get_keybindings();
                         keybind_list_clone.update_with_bindings(updated_bindings);
 
-
                         // Refresh conflicts
                         conflict_panel_clone.refresh();
 
-                        eprintln!("✅ DEBUG: UI refresh complete!");
                         println!("✅ Keybinding updated successfully");
                     }
                     Err(e) => {
-                        eprintln!("❌ DEBUG: Update failed: {}", e);
-
                         // Show error dialog
                         let error_dialog = gtk4::AlertDialog::builder()
                             .modal(true)
@@ -472,12 +419,8 @@ impl App {
                         error_dialog.show(Some(&window_clone));
                     }
                 }
-            } else {
-                eprintln!("🚫 DEBUG: User clicked Cancel");
             }
         });
-
-        eprintln!("✅ DEBUG: Edit button wiring complete");
         // ============================================================================
         // End of edit button wiring
         // ============================================================================
@@ -485,8 +428,6 @@ impl App {
         // ============================================================================
         // Wire up add button
         // ============================================================================
-        eprintln!("🔧 DEBUG: Setting up add button callback...");
-
         let window_for_add = window.clone();
         let controller_for_add = controller.clone();
         let keybind_list_for_add = keybind_list.clone();
@@ -494,16 +435,12 @@ impl App {
         let conflict_panel_for_add = conflict_panel.clone();
 
         add_keybinding_button.connect_clicked(move |_| {
-            eprintln!("\n➕ DEBUG: === ADD CALLBACK FIRED ===");
-
             // Clone everything for the nested closures
             let controller_clone = controller_for_add.clone();
             let keybind_list_clone = keybind_list_for_add.clone();
             let details_panel_clone = details_panel_for_add.clone();
             let conflict_panel_clone = conflict_panel_for_add.clone();
             let window_clone = window_for_add.clone();
-
-            eprintln!("📝 DEBUG: Creating empty keybinding template...");
 
             // Create an empty keybinding for the dialog
             use crate::core::types::{BindType, KeyCombo, Keybinding};
@@ -517,26 +454,14 @@ impl App {
                 args: None,
             };
 
-            eprintln!("📝 DEBUG: Creating EditDialog with empty binding...");
-
             // Show the edit dialog (reused for adding!)
             let edit_dialog = EditDialog::new(&window_clone, &empty_binding);
 
-            eprintln!("📝 DEBUG: Dialog created, calling show_and_wait()...");
-
             // Get the result (blocks until user clicks Save or Cancel)
             if let Some(new_binding) = edit_dialog.show_and_wait() {
-                eprintln!("💾 DEBUG: User clicked Save!");
-                eprintln!("   New binding: {} -> {} {:?}",
-                          new_binding.key_combo,
-                          new_binding.dispatcher,
-                          new_binding.args);
-
                 // Try to add the keybinding
                 match controller_clone.add_keybinding(new_binding) {
                     Ok(()) => {
-                        eprintln!("✅ DEBUG: Add successful! Refreshing UI...");
-
                         // Clear the details panel (user needs to select the new binding)
                         details_panel_clone.update_binding(None);
 
@@ -547,12 +472,9 @@ impl App {
                         // Refresh conflicts
                         conflict_panel_clone.refresh();
 
-                        eprintln!("✅ DEBUG: UI refresh complete!");
                         println!("✅ Keybinding added successfully");
                     }
                     Err(e) => {
-                        eprintln!("❌ DEBUG: Add failed: {}", e);
-
                         // Show error dialog
                         let error_dialog = gtk4::AlertDialog::builder()
                             .modal(true)
@@ -564,12 +486,8 @@ impl App {
                         error_dialog.show(Some(&window_clone));
                     }
                 }
-            } else {
-                eprintln!("🚫 DEBUG: User clicked Cancel");
             }
         });
-
-        eprintln!("✅ DEBUG: Add button wiring complete");
         // ============================================================================
         // End of add button wiring
         // ============================================================================
@@ -579,10 +497,11 @@ impl App {
         // ============================================================================
         let window_for_backup = window.clone();
         let controller_for_backup = controller.clone();
+        let keybind_list_for_backup = keybind_list.clone();
+        let details_panel_for_backup = details_panel.clone();
+        let conflict_panel_for_backup = conflict_panel.clone();
 
         backup_button.connect_clicked(move |_| {
-            eprintln!("🗄️  DEBUG: Backup button clicked!");
-
             // Get list of backups from ConfigManager
             let backups = match controller_for_backup.list_backups() {
                 Ok(b)  => b,
@@ -592,13 +511,44 @@ impl App {
                 }
             };
 
-            eprintln!("📋 DEBUG: Found {} backups", backups.len());
+            // Clone for the restore callback
+            let controller_clone = controller_for_backup.clone();
+            let keybind_list_clone = keybind_list_for_backup.clone();
+            let details_panel_clone = details_panel_for_backup.clone();
+            let conflict_panel_clone = conflict_panel_for_backup.clone();
 
-            // Create and show dialog
+            // Clone again for the delete callback
+            let controller_for_delete = controller_for_backup.clone();
+
+            // Create and show dialog with restore callback
             let dialog = BackupDialog::new(
-                window_for_backup
-                    .upcast_ref::<gtk4::Window>(),
-                backups
+                window_for_backup.upcast_ref::<gtk4::Window>(),
+                backups,
+                move |backup_path| {
+                    // Call controller to restore backup
+                    match controller_clone.restore_backup(backup_path) {
+                        Ok(()) => {
+                            // Refresh UI after restore
+                            let updated_bindings = controller_clone.get_keybindings();
+                            keybind_list_clone.update_with_bindings(updated_bindings);
+
+                            // Clear details panel
+                            details_panel_clone.update_binding(None);
+
+                            // Refresh conflicts
+                            conflict_panel_clone.refresh();
+
+                            Ok(())
+                        }
+                        Err(e) => {
+                            Err(e)
+                        }
+                    }
+                },
+                // Add the on_delete callback
+                move|backup_path| {
+                    controller_for_delete.delete_backup(backup_path)
+                }
             );
             dialog.show();
         });

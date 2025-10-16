@@ -137,13 +137,8 @@ impl EditDialog {
             let response = response.clone();
             let window = dialog_window.clone();
             cancel_button.connect_clicked(move |_| {
-                eprintln!("🔍 DEBUG: Cancel button clicked!");
-                eprintln!("🔍 DEBUG: Setting response to Cancel");
                 response.set(Some(DialogResponse::Cancel));
-                eprintln!("🔍 DEBUG: Response set, current value: {:?}", response.get());
-                eprintln!("🔍 DEBUG: Closing window");
                 window.close();
-                eprintln!("🔍 DEBUG: Window closed");
             });
         }
 
@@ -152,13 +147,8 @@ impl EditDialog {
             let response = response.clone();
             let window = dialog_window.clone();
             save_button.connect_clicked(move |_| {
-                eprintln!("🔍 DEBUG: Save button clicked!");
-                eprintln!("🔍 DEBUG: Setting response to Save");
                 response.set(Some(DialogResponse::Save));
-                eprintln!("🔍 DEBUG: Response set, current value: {:?}", response.get());
-                eprintln!("🔍 DEBUG: Closing window");
                 window.close();
-                eprintln!("🔍 DEBUG: Window closed");
             });
         }
 
@@ -166,12 +156,8 @@ impl EditDialog {
         {
             let response = response.clone();
             dialog_window.connect_close_request(move |_| {
-                eprintln!("🔍 DEBUG: Window X button clicked!");
                 if response.get().is_none() {
-                    eprintln!("🔍 DEBUG: No response set yet, setting to Cancel");
                     response.set(Some(DialogResponse::Cancel));
-                } else {
-                    eprintln!("🔍 DEBUG: Response already set to {:?}", response.get());
                 }
                 glib::Propagation::Proceed
             });
@@ -257,60 +243,41 @@ impl EditDialog {
 
     /// Shows the dialog and waits for user response
     pub fn show_and_wait(self) -> Option<Keybinding> {
-        // Reset response (in case of reuse, though we consume self)
         self.response.set(None);
-
-        eprintln!("📝 DEBUG: Presenting window...");
         self.dialog_window.present();
 
-        eprintln!("🔄 DEBUG: Entering event loop...");
-        // Keep the GTK main loop until we get a response
         let main_context = glib::MainContext::default();
 
-        while self.response.get().is_none() && self.dialog_window.is_visible() {
-            main_context.iteration(true);
-        }
+        // Keep looping until we get a valid response or user cancels
+        loop {
+            // Wait for a response
+            while self.response.get().is_none() && self.dialog_window.is_visible() {
+                main_context.iteration(true);
+            }
 
-        eprintln!("🔍 DEBUG: Loop exited!");
-        eprintln!("🔍 DEBUG: self.response.get() = {:?}", self.response.get());
-        eprintln!("🔍 DEBUG: window.is_visible() = {}", self.dialog_window.is_visible());
-
-        // Now we have a response (or a window was closed)!
-        match self.response.get() {
-            Some(DialogResponse::Save) => {
-                eprintln!("✅ DEBUG: Response is Save, parsing binding...");
-
-                // User clicked Save - try to parse the binding
-                match self.parse_binding() {
-                    Ok(binding) => {
-                        eprintln!("✅ DEBUG: Parsing successful!");
-                        self.dialog_window.close();
-                        Some(binding)
-                    }
-                    Err(e) => {
-                        eprintln!("❌ DEBUG: Parsing failed: {}", e);
-
-                        // Show error but don't close dialog
-                        self.show_error(&e);
-
-                        // Reset and wait again (recursive pattern)
-                        self.response.set(None);
-                        eprintln!("🔄 DEBUG: Recursing for user to fix input...");
-
-                        // Try again recursively
-                        self.show_and_wait()
+            // Check what the user did
+            match self.response.get() {
+                Some(DialogResponse::Save) => {
+                    match self.parse_binding() {
+                        Ok(binding) => {
+                            self.dialog_window.close();
+                            return Some(binding)
+                        }
+                        Err(e) => {
+                            self.show_error(&e);
+                            // Reset response and continue the outer loop
+                            self.response.set(None);
+                        }
                     }
                 }
-            }
-            Some(DialogResponse::Cancel) => {
-                eprintln!("🚫 DEBUG: Response is Cancel");
-                self.dialog_window.close();
-                None
-            }
-            None => {
-                eprintln!("⚠️ DEBUG: Response is None (window closed via X)");
-                self.dialog_window.close();
-                None
+                Some(DialogResponse::Cancel) => {
+                    self.dialog_window.close();
+                    return None;
+                }
+                None => {
+                    self.dialog_window.close();
+                    return None
+                }
             }
         }
     }

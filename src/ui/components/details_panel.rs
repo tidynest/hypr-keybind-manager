@@ -394,26 +394,16 @@ impl DetailsPanel {
         let current_binding = self.current_binding.clone();
 
         self.delete_button.connect_clicked(move |_button| {
-            eprintln!("🔍 DEBUG: Delete button clicked!");
-
             // Extract the binding COMPLETELY before calling callback
             // This ensures no borrow is held when callback triggers UI refresh
             let binding = current_binding.borrow();
             let binding_to_delete = binding.as_ref().clone();
 
             if let Some(binding) = binding_to_delete {
-                eprintln!("🔍 DEBUG: Current binding found:");
-                eprintln!("   Key: {}", binding.key_combo);
-                eprintln!("   Dispatcher: {}", binding.dispatcher);
-                eprintln!("   Args: {:?}", binding.args);
                 // No borrow is held here - safe to call callback which may trigger UI refresh
                 callback(&binding);
-            } else {
-                eprintln!("⚠️ DEBUG: No binding stored in RefCell!");
             }
         });
-
-        eprintln!("✅ DEBUG: Delete button callback registered");
     }
 
     /// Connects a callback to the edit button
@@ -427,19 +417,13 @@ impl DetailsPanel {
         let current_binding = self.current_binding.clone();
 
         self.edit_button.connect_clicked(move |_button| {
-            eprintln!("🔍 DEBUG: Edit button clicked!");
-
             // Extract the binding COMPLETELY before calling callback
             // This ensures no borrow is held when callback triggers UI refresh
             let binding_to_edit = current_binding.borrow().as_ref().cloned();
 
             if let Some(binding) = binding_to_edit {
-                eprintln!("✅ DEBUG: Found binding to edit: {} → {}",
-                      binding.key_combo, binding.dispatcher);
                 // No borrow is held here - safe to call callback which may trigger UI refresh
                 callback(&binding);
-            } else {
-                eprintln!("⚠️ DEBUG: No binding stored in RefCell!");
             }
         });
     }

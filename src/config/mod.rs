@@ -719,7 +719,7 @@ impl<'a> ConfigTransaction<'a> {
                     eprintln!("  Binding {}: {}", issue.binding_index, issue.message);
                 }
             }
-            eprintln!("\nThis configuration will NOT be commited.");
+            eprintln!("\nThis configuration will NOT be committed.");
             eprintln!("Fix the {} error(s) above before proceeding.\n", error_count);
 
             return Err(ConfigError::ValidationFailed(
@@ -737,7 +737,7 @@ impl<'a> ConfigTransaction<'a> {
                 }
             }
             eprintln!("This configuration will NOT be committed.");
-            eprintln!("Reemove dangerous commands before proceeding.\n");
+            eprintln!("Remove dangerous commands before proceeding.\n");
 
             return Err(ConfigError::DangerousCommand(
                 "Critical danger detected - commit blocked.".to_string()
@@ -760,7 +760,7 @@ impl<'a> ConfigTransaction<'a> {
             eprintln!("\nProceeding with commit (warnings are informational).\n");
         }
 
-        // Step 5: All checks passed . proceed with atomic commit
+        // Step 5: All checks passed. Proceed with atomic commit
         self.commit(new_content)
     }
 
@@ -1564,7 +1564,7 @@ mod tests {
 
         // Original config should be unchanged
         let current = manager.read_config().unwrap();
-        assert_eq!(current, original_content, "Config should be unchanged after failed retore");
+        assert_eq!(current, original_content, "Config should be unchanged after failed restore");
 
         // No backups should have been created
         let backups = manager.list_backups().unwrap();
@@ -1671,7 +1671,7 @@ mod tests {
         // Original config should be unchanged (transaction rolled back)
         let current = manager.read_config().unwrap();
         assert_eq!(current, "bind = SUPER, K, exec, firefox\n",
-            "Original config should be untoched after failed validation");
+            "Original config should be untouched after failed validation");
     }
 
     #[test]
@@ -1703,7 +1703,7 @@ mod tests {
         // Original config should be unchanged
         let current = manager.read_config().unwrap();
         assert_eq!(current, "bind = SUPER, K, exec, firefox\n",
-            "Original config should be untoched after blocked danger");
+            "Original config should be untouched after blocked danger");
     }
 
     #[test]
@@ -1731,7 +1731,7 @@ mod tests {
 
         // Backup should exist (from transaction begin)
         let backups = manager.list_backups().unwrap();
-        assert_eq!(backups.len(), 1, "Tranasaction should have created backup");
+        assert_eq!(backups.len(), 1, "Transaction should have created backup");
     }
 
     #[test]
