@@ -55,7 +55,8 @@ This document outlines the security architecture, threat model, supported versio
 graph TB
     Input[User Input<br/>Key Combo, Dispatcher, Args]
 
-    subgraph Layer1 [Layer 1: Injection Prevention<br/><br/>]
+    subgraph Layer1 [Layer 1: Injection Prevention]
+        Spacer1[ ]
         WhitelistCheck[Dispatcher Whitelist]
         MetacharCheck[Shell Metacharacter Detection]
         LengthCheck[Argument Length Limit]
