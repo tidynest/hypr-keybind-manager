@@ -52,11 +52,10 @@ This document outlines the security architecture, threat model, supported versio
 ### Three-Layer Defence System
 
 ```mermaid
-graph LR
+graph TB
     Input[User Input<br/>Key Combo, Dispatcher, Args]
 
-    subgraph Layer1 [Layer 1: Injection Prevention]
-        Spacer1[ ]
+    subgraph Layer1 [Layer 1: Injection Prevention<br/><br/>]
         WhitelistCheck[Dispatcher Whitelist]
         MetacharCheck[Shell Metacharacter Detection]
         LengthCheck[Argument Length Limit]
