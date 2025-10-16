@@ -52,7 +52,7 @@ This document outlines the security architecture, threat model, supported versio
 ### Three-Layer Defence System
 
 ```mermaid
-graph TB
+graph LR
     Input[User Input<br/>Key Combo, Dispatcher, Args]
 
     subgraph Layer1 [Layer 1: Injection Prevention]
