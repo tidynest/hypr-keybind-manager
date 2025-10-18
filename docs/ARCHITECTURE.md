@@ -251,6 +251,7 @@ sequenceDiagram
 ### 3. Conflict Detection Flow
 
 ```mermaid
+%%{init: {'flowchart': {'subGraphTitleMargin': {'top': 10, 'bottom': 20}}}}%%
 flowchart TD
     Start([User modifies keybindings]) --> Rebuild[Rebuild ConflictDetector]
     Rebuild --> CreateMap[Create HashMap&lt;KeyCombo, Vec&lt;Keybinding&gt;&gt;]
@@ -261,7 +262,7 @@ flowchart TD
     Hash --> AddToMap[Add to HashMap<br/>key → binding]
     AddToMap --> LoopBindings
 
-    LoopBindings -->|Done| Filter[Filter: len() &gt; 1]
+    LoopBindings -->|Done| Filter[Filter: len&#40;&#41; &gt; 1]
 
     Conflicts -->|Yes| ShowBanner[Show conflict panel<br/>with details]
     Conflicts -->|No| HideBanner[Hide conflict panel]
