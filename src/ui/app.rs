@@ -188,6 +188,7 @@ impl App {
 
         search_bar.widget().connect_search_changed(move |entry| {
             let query = entry.text().to_string();
+            println!("🔍 Search: '{}'", query);
             let filtered = controller_for_search.filter_keybindings(&query);
             keybind_list_for_search.update_with_bindings(filtered);
         });
@@ -229,10 +230,12 @@ impl App {
                 Some(r) => {
                     let index = r.index() as usize;
                     if let Some(binding) = keybind_list_clone.get_binding_at_index(index) {
+                        println!("👆 Selected: {}", binding.key_combo);
                         details_panel_clone.update_binding(Some(&binding));
                     }
                 }
                 None => {
+                    println!("👆 Selection cleared");
                     details_panel_clone.update_binding(None);
                 }
             }
@@ -307,6 +310,8 @@ impl App {
         let conflict_panel_for_delete = conflict_panel.clone();
 
         details_panel.connect_delete(move |binding| {
+            println!("🗑️  Delete button clicked for: {}", binding.key_combo);
+
             // Clone everything needed for the dialog
             let controller_clone = controller_for_delete.clone();
             let keybind_list_clone = keybind_list_for_delete.clone();
@@ -319,7 +324,7 @@ impl App {
             let dialog = gtk4::AlertDialog::builder()
                 .modal(true)
                 .message("Delete Keybinding?")
-                .detail(&format!(
+                .detail(format!(
                     "Are you sure you want to delete:\n\n{} → {} {}",
                     binding.key_combo,
                     binding.dispatcher,
@@ -349,11 +354,13 @@ impl App {
                                     println!("✅ Keybinding deleted successfully");
                                 }
                                 Err(e) => {
+                                    println!("❌ Failed to delete: {}", e);
+
                                     // Show error dialog (use window_for_inner)
                                     let error_dialog = gtk4::AlertDialog::builder()
                                         .modal(true)
                                         .message("Delete Failed")
-                                        .detail(&format!("Failed to delete keybinding:\n{}", e))
+                                        .detail(format!("Failed to delete keybinding:\n{}", e))
                                         .buttons(vec!["OK"])
                                         .build();
 
@@ -363,12 +370,15 @@ impl App {
                         }
                         Ok(0) => {
                             // User clicked Cancel
+                            println!("🚫 Delete cancelled");
                         }
                         Ok(_other) => {
                             // Unexpected button index
+                            println!("? Unexpected button index");
                         }
                         Err(_e) => {
                             // Dialog error
+                            println!("❌ Delete dialog error"); // ADD THIS
                         }
                     }
                 }
@@ -388,6 +398,8 @@ impl App {
         let conflict_panel_for_edit = conflict_panel.clone();
 
         details_panel.connect_edit(move |binding| {
+            println!("✏️  Edit button clicked for: {}", binding.key_combo);
+
             // Clone everything for the nested closures
             let controller_clone = controller_for_edit.clone();
             let keybind_list_clone = keybind_list_for_edit.clone();
@@ -417,17 +429,21 @@ impl App {
                         println!("✅ Keybinding updated successfully");
                     }
                     Err(e) => {
+                        println!("❌ Failed to update: {}", e);
+
                         // Show error dialog
                         let error_dialog = gtk4::AlertDialog::builder()
                             .modal(true)
                             .message("Edit Failed")
-                            .detail(&format!("Failed to update keybinding:\n\n{}", e))
+                            .detail(format!("Failed to update keybinding:\n\n{}", e))
                             .buttons(vec!["OK"])
                             .build();
 
                         error_dialog.show(Some(&window_clone));
                     }
                 }
+            } else {
+                println!("🚫 Edit cancelled");
             }
         });
         // ============================================================================
@@ -444,6 +460,8 @@ impl App {
         let conflict_panel_for_add = conflict_panel.clone();
 
         add_keybinding_button.connect_clicked(move |_| {
+            println!("➕ Add button clicked");
+
             // Clone everything for the nested closures
             let controller_clone = controller_for_add.clone();
             let keybind_list_clone = keybind_list_for_add.clone();
@@ -484,17 +502,21 @@ impl App {
                         println!("✅ Keybinding added successfully");
                     }
                     Err(e) => {
+                        println!("❌ Failed to add: {}", e);
+
                         // Show error dialog
                         let error_dialog = gtk4::AlertDialog::builder()
                             .modal(true)
                             .message("Add Failed")
-                            .detail(&format!("Failed to add keybinding:\n\n{}", e))
+                            .detail(format!("Failed to add keybinding:\n\n{}", e))
                             .buttons(vec!["OK"])
                             .build();
 
                         error_dialog.show(Some(&window_clone));
                     }
                 }
+            } else {
+                println!("🚫 Add cancelled");
             }
         });
         // ============================================================================
@@ -511,6 +533,8 @@ impl App {
         let conflict_panel_for_backup = conflict_panel.clone();
 
         backup_button.connect_clicked(move |_| {
+            println!("📦 Backup manager opened");
+
             // Get list of backups from ConfigManager
             let backups = match controller_for_backup.list_backups() {
                 Ok(b)  => b,

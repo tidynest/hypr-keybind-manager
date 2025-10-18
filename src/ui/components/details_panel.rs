@@ -411,11 +411,11 @@ impl DetailsPanel {
             // Extract the binding COMPLETELY before calling callback
             // This ensures no borrow is held when callback triggers UI refresh
             let binding = current_binding.borrow();
-            let binding_to_delete = binding.as_ref().clone();
+            let binding_to_delete = binding.as_ref();
 
             if let Some(binding) = binding_to_delete {
                 // No borrow is held here - safe to call callback which may trigger UI refresh
-                callback(&binding);
+                callback(binding);
             }
         });
     }

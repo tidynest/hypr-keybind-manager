@@ -29,8 +29,6 @@ use std::rc::Rc;
 /// instead of the raw filename format.
 pub struct BackupDialog {
     window: Window,
-    backups: Vec<PathBuf>,
-    selected_backup: Rc<Cell<Option<usize>>>,  // Index of selected backup
     list_box: ListBox,
 }
 
@@ -199,12 +197,16 @@ impl BackupDialog {
         let window_for_restore = bd_window.clone();
 
         restore_button.connect_clicked(move |_| {
+            println!("♻️  Restore button clicked");
+
             // Get selected backup index
             if let Some(index) = selected_for_restore.get() {
                 if let Some(backup_path) = backups_for_restore.get(index) {
                     // Call the restore callback
                     match on_restore(backup_path) {
                         Ok(()) => {
+                            println!("✅ Backup restored successfully");
+
                             // Show success dialog
                             let success_dialog = gtk4::AlertDialog::builder()
                                 .modal(true)
@@ -216,11 +218,13 @@ impl BackupDialog {
                             success_dialog.show(Some(&window_for_restore));
                         }
                         Err(e) => {
+                            println!("❌ Failed to restore backup: {}", e);
+
                             // Show error dialog
                             let error_dialog = gtk4::AlertDialog::builder()
                                 .modal(true)
                                 .message("Restore Failed")
-                                .detail(&format!("Failed to restore backup:\n\n{}", e))
+                                .detail(format!("Failed to restore backup:\n\n{}", e))
                                 .buttons(vec!["OK"])
                                 .build();
 
@@ -240,12 +244,16 @@ impl BackupDialog {
         let list_for_delete = list_box.clone();
 
         delete_button.connect_clicked(move |_| {
+            println!("🗑️  Delete backup button clicked");
+
             // Get selected backup index
             if let Some(index) = selected_for_delete.get() {
                 if let Some(backup_path) = backup_for_delete.get(index) {
                     // Call the delete callback
                     match on_delete(backup_path) {
                         Ok(()) => {
+                            println!("✅ Backup deleted successfully");
+
                             // Show success dialog
                             let success_dialog = gtk4::AlertDialog::builder()
                                 .modal(true)
@@ -262,11 +270,13 @@ impl BackupDialog {
                             }
                         }
                         Err(e) => {
+                            println!("❌ Failed to delete backup: {}", e);
+
                             // Show error dialog
                             let error_dialog = gtk4::AlertDialog::builder()
                                 .modal(true)
                                 .message("Delete Failed")
-                                .detail(&format!("Failed to delete backup:\n\n{}", e))
+                                .detail(format!("Failed to delete backup:\n\n{}", e))
                                 .buttons(vec!["OK"])
                                 .build();
 
@@ -278,13 +288,12 @@ impl BackupDialog {
         });
 
         close_button.connect_clicked(move |_| {
+            println!("❌ Backup dialog closed");
             window_for_close.close()
         });
 
         Self {
             window: bd_window,
-            backups,
-            selected_backup,
             list_box,
         }
     }

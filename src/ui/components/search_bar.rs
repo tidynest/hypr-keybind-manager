@@ -25,6 +25,12 @@ pub struct SearchBar {
     widget: SearchEntry,
 }
 
+impl Default for SearchBar {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SearchBar {
     /// Creates a new search bar
     ///
@@ -46,16 +52,11 @@ impl SearchBar {
     /// ```
     pub fn new() -> Self {
         // Create search entry widget
-        let entry = SearchEntry::builder()
+        let _entry = SearchEntry::builder()
             .placeholder_text("Search keybindings...")
-            .hexpand(true)
-            .margin_start(10)
-            .margin_end(10)
-            .margin_top(10)
-            .margin_bottom(10)
             .build();
 
-        Self { widget: entry }
+        Self { widget: SearchEntry::builder().build() }
     }
     /// Returns the root widget for adding to parent container
     pub fn widget(&self) -> &SearchEntry {

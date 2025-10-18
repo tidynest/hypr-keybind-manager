@@ -101,7 +101,7 @@ impl EditDialog {
             .halign(gtk4::Align::End)
             .build();
         let key_entry = Entry::builder()
-            .text(&binding.key_combo.to_string())
+            .text(binding.key_combo.to_string())
             .placeholder_text("e.g., SUPER+SHIFT+M")
             .hexpand(true)
             .build();
@@ -140,7 +140,7 @@ impl EditDialog {
             .halign(gtk4::Align::End)
             .build();
         let bind_type_entry = Entry::builder()
-            .text(&binding.bind_type.to_string())
+            .text(binding.bind_type.to_string())
             .placeholder_text("bind, binde, bindm, etc.")
             .hexpand(true)
             .build();
