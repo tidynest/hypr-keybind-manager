@@ -261,8 +261,7 @@ flowchart TD
     Hash --> AddToMap[Add to HashMap<br/>key → binding]
     AddToMap --> LoopBindings
 
-    LoopBindings -->|Done| Filter[Filter: len() > 1]
-    Filter --> Conflicts{Conflicts found?}
+    LoopBindings -->|Done| Filter[Filter: len() &gt; 1]
 
     Conflicts -->|Yes| ShowBanner[Show conflict panel<br/>with details]
     Conflicts -->|No| HideBanner[Hide conflict panel]
