@@ -208,6 +208,29 @@ cargo build --release
 sudo cp target/release/hypr-keybind-manager /usr/local/bin/
 ```
 
+### Development Workflow
+
+The project includes automatic output filtering for clean terminal logging:
+
+```bash
+# Run during development (GTK warnings automatically filtered)
+cargo run -- gui -c /tmp/hyprland-test.conf
+
+# User action logs appear in real-time with emoji indicators:
+→ Launching GUI...
+👆 Selected: SUPER+SHIFT+W
+✏️  Edit button clicked for: SUPER+SHIFT+W
+✅ Keybinding updated successfully
+```
+
+The `.cargo/config.toml` configures a custom runner that:
+- Filters GTK warnings (`Gtk-WARNING`, `GtkGizmo`, `Unknown key`)
+- Preserves application logs (`eprintln!` with emoji indicators)
+- Removes blank lines for cleaner output
+- Uses `grep --line-buffered` for real-time log display
+
+All user actions are logged to stderr for debugging and visibility.
+
 ### Distribution Packages
 
 > **Future Packages**: AUR package, Nix flake, and prebuilt binaries for Arch, Fedora, and Ubuntu.
@@ -324,6 +347,9 @@ hypr-keybind-manager/
 ├── SECURITY.md                    # Security policy and threat model
 ├── Cargo.toml                     # Rust dependencies and metadata
 ├── build.rs                       # Build-time code generation
+├── .cargo/                        # Project-specific cargo configuration
+│   ├── config.toml                # Custom runner for filtered output
+│   └── runner.sh                  # Output filter script (grep + awk)
 ├── docs/                          # Technical documentation
 │   ├── ARCHITECTURE.md            # System design and data flow
 │   ├── DESIGN_DECISIONS.md        # Rationale for architectural choices

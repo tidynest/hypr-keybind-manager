@@ -1,0 +1,7 @@
+# Project-specific Cargo configuration
+#
+# This automatically filters GTK warnings from all cargo run commands,
+# providing clean terminal output with user action logs visible.
+
+[target.x86_64-unknown-linux-gnu]
+runner = ".cargo/runner.sh"
