@@ -350,6 +350,8 @@ hypr-keybind-manager/
 ├── .cargo/                        # Project-specific cargo configuration
 │   ├── config.toml                # Custom runner for filtered output
 │   └── runner.sh                  # Output filter script (grep + awk)
+├── scripts/                       # Development and release scripts
+│   └── sync-version.sh            # Sync version numbers across docs
 ├── docs/                          # Technical documentation
 │   ├── ARCHITECTURE.md            # System design and data flow
 │   ├── DESIGN_DECISIONS.md        # Rationale for architectural choices
@@ -403,7 +405,36 @@ cargo clippy
 
 # Format code
 cargo fmt
+
+# Sync version numbers across documentation
+./scripts/sync-version.sh
 ```
+
+### Version Management
+
+When updating the project version:
+
+1. **Update Cargo.toml** (single source of truth):
+   ```bash
+   # Edit Cargo.toml and change version = "1.0.3" to new version
+   ```
+
+2. **Sync all documentation**:
+   ```bash
+   ./scripts/sync-version.sh
+   ```
+   This automatically updates version numbers in:
+   - SECURITY.md
+   - docs/ARCHITECTURE.md
+   - docs/DESIGN_DECISIONS.md
+
+3. **Commit and tag**:
+   ```bash
+   git add -A
+   git commit -m "Bump version to X.Y.Z"
+   git tag vX.Y.Z
+   git push origin main --tags
+   ```
 
 **Test Coverage**:
 - ✅ Parser: 42 tests (handles comments, includes, multi-line, edge cases)
