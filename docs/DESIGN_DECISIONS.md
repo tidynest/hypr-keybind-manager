@@ -1022,4 +1022,4 @@ For questions or discussions about design decisions, please open an issue on Git
 ---
 
 **Last Updated**: 2025-01-16
-**Version**: 1.0.0
+**Version**: 1.0.3

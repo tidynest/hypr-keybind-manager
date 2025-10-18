@@ -732,4 +732,4 @@ For implementation details, see [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md).
 ---
 
 **Last Updated**: 2025-01-16
-**Version**: 1.0.0
+**Version**: 1.0.3
