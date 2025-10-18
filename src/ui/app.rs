@@ -188,7 +188,7 @@ impl App {
 
         search_bar.widget().connect_search_changed(move |entry| {
             let query = entry.text().to_string();
-            println!("🔍 Search: '{}'", query);
+            eprintln!("🔍 Search: '{}'", query);
             let filtered = controller_for_search.filter_keybindings(&query);
             keybind_list_for_search.update_with_bindings(filtered);
         });
@@ -230,12 +230,12 @@ impl App {
                 Some(r) => {
                     let index = r.index() as usize;
                     if let Some(binding) = keybind_list_clone.get_binding_at_index(index) {
-                        println!("👆 Selected: {}", binding.key_combo);
+                        eprintln!("👆 Selected: {}", binding.key_combo);
                         details_panel_clone.update_binding(Some(&binding));
                     }
                 }
                 None => {
-                    println!("👆 Selection cleared");
+                    eprintln!("👆 Selection cleared");
                     details_panel_clone.update_binding(None);
                 }
             }
@@ -310,7 +310,7 @@ impl App {
         let conflict_panel_for_delete = conflict_panel.clone();
 
         details_panel.connect_delete(move |binding| {
-            println!("🗑️  Delete button clicked for: {}", binding.key_combo);
+            eprintln!("🗑️  Delete button clicked for: {}", binding.key_combo);
 
             // Clone everything needed for the dialog
             let controller_clone = controller_for_delete.clone();
@@ -351,10 +351,10 @@ impl App {
                                     keybind_list_clone.update_with_bindings(updated);
                                     details_panel_clone.update_binding(None);
                                     conflict_panel_clone.refresh();
-                                    println!("✅ Keybinding deleted successfully");
+                                    eprintln!("✅ Keybinding deleted successfully");
                                 }
                                 Err(e) => {
-                                    println!("❌ Failed to delete: {}", e);
+                                    eprintln!("❌ Failed to delete: {}", e);
 
                                     // Show error dialog (use window_for_inner)
                                     let error_dialog = gtk4::AlertDialog::builder()
@@ -370,15 +370,15 @@ impl App {
                         }
                         Ok(0) => {
                             // User clicked Cancel
-                            println!("🚫 Delete cancelled");
+                            eprintln!("🚫 Delete cancelled");
                         }
                         Ok(_other) => {
                             // Unexpected button index
-                            println!("? Unexpected button index");
+                            eprintln!("? Unexpected button index");
                         }
                         Err(_e) => {
                             // Dialog error
-                            println!("❌ Delete dialog error"); // ADD THIS
+                            eprintln!("❌ Delete dialog error"); // ADD THIS
                         }
                     }
                 }
@@ -398,7 +398,7 @@ impl App {
         let conflict_panel_for_edit = conflict_panel.clone();
 
         details_panel.connect_edit(move |binding| {
-            println!("✏️  Edit button clicked for: {}", binding.key_combo);
+            eprintln!("✏️  Edit button clicked for: {}", binding.key_combo);
 
             // Clone everything for the nested closures
             let controller_clone = controller_for_edit.clone();
@@ -426,10 +426,10 @@ impl App {
                         // Refresh conflicts
                         conflict_panel_clone.refresh();
 
-                        println!("✅ Keybinding updated successfully");
+                        eprintln!("✅ Keybinding updated successfully");
                     }
                     Err(e) => {
-                        println!("❌ Failed to update: {}", e);
+                        eprintln!("❌ Failed to update: {}", e);
 
                         // Show error dialog
                         let error_dialog = gtk4::AlertDialog::builder()
@@ -443,7 +443,7 @@ impl App {
                     }
                 }
             } else {
-                println!("🚫 Edit cancelled");
+                eprintln!("🚫 Edit cancelled");
             }
         });
         // ============================================================================
@@ -460,7 +460,7 @@ impl App {
         let conflict_panel_for_add = conflict_panel.clone();
 
         add_keybinding_button.connect_clicked(move |_| {
-            println!("➕ Add button clicked");
+            eprintln!("➕ Add button clicked");
 
             // Clone everything for the nested closures
             let controller_clone = controller_for_add.clone();
@@ -499,10 +499,10 @@ impl App {
                         // Refresh conflicts
                         conflict_panel_clone.refresh();
 
-                        println!("✅ Keybinding added successfully");
+                        eprintln!("✅ Keybinding added successfully");
                     }
                     Err(e) => {
-                        println!("❌ Failed to add: {}", e);
+                        eprintln!("❌ Failed to add: {}", e);
 
                         // Show error dialog
                         let error_dialog = gtk4::AlertDialog::builder()
@@ -516,7 +516,7 @@ impl App {
                     }
                 }
             } else {
-                println!("🚫 Add cancelled");
+                eprintln!("🚫 Add cancelled");
             }
         });
         // ============================================================================
@@ -533,7 +533,7 @@ impl App {
         let conflict_panel_for_backup = conflict_panel.clone();
 
         backup_button.connect_clicked(move |_| {
-            println!("📦 Backup manager opened");
+            eprintln!("📦 Backup manager opened");
 
             // Get list of backups from ConfigManager
             let backups = match controller_for_backup.list_backups() {

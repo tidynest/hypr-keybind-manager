@@ -197,7 +197,7 @@ impl BackupDialog {
         let window_for_restore = bd_window.clone();
 
         restore_button.connect_clicked(move |_| {
-            println!("♻️  Restore button clicked");
+            eprintln!("♻️  Restore button clicked");
 
             // Get selected backup index
             if let Some(index) = selected_for_restore.get() {
@@ -205,7 +205,7 @@ impl BackupDialog {
                     // Call the restore callback
                     match on_restore(backup_path) {
                         Ok(()) => {
-                            println!("✅ Backup restored successfully");
+                            eprintln!("✅ Backup restored successfully");
 
                             // Show success dialog
                             let success_dialog = gtk4::AlertDialog::builder()
@@ -218,7 +218,7 @@ impl BackupDialog {
                             success_dialog.show(Some(&window_for_restore));
                         }
                         Err(e) => {
-                            println!("❌ Failed to restore backup: {}", e);
+                            eprintln!("❌ Failed to restore backup: {}", e);
 
                             // Show error dialog
                             let error_dialog = gtk4::AlertDialog::builder()
@@ -244,7 +244,7 @@ impl BackupDialog {
         let list_for_delete = list_box.clone();
 
         delete_button.connect_clicked(move |_| {
-            println!("🗑️  Delete backup button clicked");
+            eprintln!("🗑️  Delete backup button clicked");
 
             // Get selected backup index
             if let Some(index) = selected_for_delete.get() {
@@ -252,7 +252,7 @@ impl BackupDialog {
                     // Call the delete callback
                     match on_delete(backup_path) {
                         Ok(()) => {
-                            println!("✅ Backup deleted successfully");
+                            eprintln!("✅ Backup deleted successfully");
 
                             // Show success dialog
                             let success_dialog = gtk4::AlertDialog::builder()
@@ -270,7 +270,7 @@ impl BackupDialog {
                             }
                         }
                         Err(e) => {
-                            println!("❌ Failed to delete backup: {}", e);
+                            eprintln!("❌ Failed to delete backup: {}", e);
 
                             // Show error dialog
                             let error_dialog = gtk4::AlertDialog::builder()
@@ -288,7 +288,7 @@ impl BackupDialog {
         });
 
         close_button.connect_clicked(move |_| {
-            println!("❌ Backup dialog closed");
+            eprintln!("❌ Backup dialog closed");
             window_for_close.close()
         });
 

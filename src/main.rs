@@ -258,7 +258,7 @@ fn launch_gui(config_path: &Path) -> anyhow::Result<()> {
     );
     let expanded_path = PathBuf::from(expanded_path.as_ref());
 
-    println!("{} Launching GUI...", "→".cyan());
+    eprintln!("{} Launching GUI...", "→".cyan());
 
     // Create and run app
     let app = App::new(expanded_path)
