@@ -14,6 +14,10 @@ fi
 
 echo "📦 Syncing version to: $VERSION"
 
+# Update README.md badge
+sed -i "s|badge/version-[0-9]\+\.[0-9]\+\.[0-9]\+-blue|badge/version-$VERSION-blue|" README.md
+echo "  ✅ Updated README.md badge"
+
 # Update SECURITY.md
 sed -i "s/^\*\*Version\*\*: [0-9]\+\.[0-9]\+\.[0-9]\+/**Version**: $VERSION/" SECURITY.md
 echo "  ✅ Updated SECURITY.md"
