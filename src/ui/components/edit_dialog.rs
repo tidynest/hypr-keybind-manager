@@ -187,7 +187,18 @@ impl EditDialog {
         {
             let response = response.clone();
             let window = dialog_window.clone();
+            let key_entry = key_entry.clone();
+            let dispatcher_entry = dispatcher_entry.clone();
+            let args_entry = args_entry.clone();
+            let bind_type_entry = bind_type_entry.clone();
+
             cancel_button.connect_clicked(move |_| {
+                // Clear selections
+                key_entry.select_region(0, 0);
+                dispatcher_entry.select_region(0, 0);
+                args_entry.select_region(0, 0);
+                bind_type_entry.select_region(0, 0);
+
                 response.set(Some(DialogResponse::Cancel));
                 window.close();
             });
@@ -196,10 +207,19 @@ impl EditDialog {
         // Connect Save button
         {
             let response = response.clone();
-            let window = dialog_window.clone();
+            let key_entry = key_entry.clone();
+            let dispatcher_entry = dispatcher_entry.clone();
+            let args_entry = args_entry.clone();
+            let bind_type_entry = bind_type_entry.clone();
+
             save_button.connect_clicked(move |_| {
+                // Clear selections
+                key_entry.select_region(0, 0);
+                dispatcher_entry.select_region(0, 0);
+                args_entry.select_region(0, 0);
+                bind_type_entry.select_region(0, 0);
+
                 response.set(Some(DialogResponse::Save));
-                window.close();
             });
         }
 
@@ -222,6 +242,14 @@ impl EditDialog {
             bind_type_entry,
             response,
         }
+    }
+
+    /// Clears text selections in all entry fields
+    fn clear_selections(&self) {
+        self.key_entry.select_region(0, 0);
+        self.dispatcher_entry.select_region(0, 0);
+        self.args_entry.select_region(0, 0);
+        self.bind_type_entry.select_region(0, 0);
     }
 
     /// Parses the form fields and returns a new Keybinding if valid
@@ -298,6 +326,7 @@ impl EditDialog {
         self.dialog_window.present();
 
         let main_context = glib::MainContext::default();
+        self.clear_selections();
 
         // Keep looping until we get a valid response or user cancels
         loop {

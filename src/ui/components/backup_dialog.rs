@@ -30,6 +30,7 @@ use std::rc::Rc;
 pub struct BackupDialog {
     window: Window,
     list_box: ListBox,
+    dialog_ready: Rc<Cell<bool>>,
 }
 
 impl BackupDialog {
@@ -103,6 +104,7 @@ impl BackupDialog {
 
         // Initialise selection state
         let selected_backup = Rc::new(Cell::new(None));
+        let dialog_ready = Rc::new(Cell::new(false));
 
         // Create main vertical box
         let main_vbox = gtk4::Box::new(Orientation::Vertical, 12);
@@ -163,16 +165,29 @@ impl BackupDialog {
 
         main_vbox.append(&button_box);
 
+        // Deselect all rows initially (user must explicitly choose)
+        list_box.unselect_all();
+
         // ===== SELECTION CALLBACK START =====
         // Wire up selection callback to enable/disable buttons
+        let backups_for_selection = backups.clone();
         let selected_backup_clone = selected_backup.clone();
         let restore_clone = restore_button.clone();
         let delete_clone = delete_button.clone();
+        let read_clone = dialog_ready.clone();
 
         list_box.connect_row_selected(move |_list, row| {
             match row {
                 Some(r) => {
                     let row_index = r.index() as usize;
+
+                    if let Some(backup_path) = backups_for_selection.get(row_index) {
+                        // Only log if dialog is fully shown (not during initialisation)
+                        if read_clone.get() {
+                            eprintln!("📂 Backup selected: {}", backup_path.display());
+                        }
+                    }
+
                     selected_backup_clone.set(Some(row_index));
                     restore_clone.set_sensitive(true);
                     delete_clone.set_sensitive(true);
@@ -185,10 +200,6 @@ impl BackupDialog {
             }
         });
         // ===== END OF SELECTION CALLBACK =====
-
-        // Deselect all rows initially (user must explicitly choose)
-        list_box.unselect_all();
-
         bd_window.set_child(Some(&main_vbox));
 
         // ===== RESTORE BUTTON CALLBACK =====
@@ -295,6 +306,7 @@ impl BackupDialog {
         Self {
             window: bd_window,
             list_box,
+            dialog_ready,
         }
     }
 
@@ -304,7 +316,13 @@ impl BackupDialog {
     /// selected backup to ensure the user makes an explicit choice.
     pub fn show(&self) {
         self.window.present();
+
+        // Let GTK finish presenting before deselecting
+        let main_context = glib::MainContext::default();
+        main_context.iteration(false);
+
         self.list_box.unselect_all();
+        self.dialog_ready.set(true);
     }
 }
 
