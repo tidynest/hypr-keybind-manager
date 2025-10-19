@@ -259,10 +259,10 @@ hypr-keybind-manager gui -c /tmp/test-hyprland.conf
 hypr-keybind-manager [COMMAND] [OPTIONS]
 
 Commands:
-  gui         Launch graphical interface (default)
-  validate    Validate config file without opening GUI
-  list        List all keybindings in config
-  help        Display help information
+  check       Check for keybinding conflicts
+  list        List all keybindings
+  gui         Launch GUI overlay
+  help        Print this message or the help of the given subcommand(s)
 
 Options:
   -c, --config <FILE>    Specify config file path
@@ -525,7 +525,7 @@ This project maintains comprehensive technical documentation for developers, con
 
 | Document | Description | Lines | Status |
 |----------|-------------|-------|--------|
-| **[ENTROPY_DETECTION.md](docs/ENTROPY_DETECTION.md)** | Shannon entropy theory, implementation, empirical validation | 929 | Complete |
+| **[ENTROPY_DETECTION.md](docs/ENTROPY_DETECTION.md)** | Shannon entropy theory, implementation, empirical validation | 928 | Complete |
 
 **ENTROPY_DETECTION.md** provides a comprehensive technical analysis of using Shannon entropy for detecting obfuscated malicious commands (base64/hex encoding). It covers:
 - Shannon entropy fundamentals and mathematical foundation
@@ -589,7 +589,7 @@ See the [LICENSE](LICENSE) file for full details.
 - **Lines of Code**: ~6,000 (excluding tests and docs)
 - **Test Coverage**: 165 passing tests (7 ignored edge cases)
 - **Documentation**: 100% of public APIs documented
-- **Dependencies**: 10 direct, all security-audited
+- **Dependencies**: 13 direct, all security-audited
 - **Build Time**: <30 seconds (release build)
 
 ---

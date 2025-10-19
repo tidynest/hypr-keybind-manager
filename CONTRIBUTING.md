@@ -49,7 +49,7 @@ Thank you for your interest in contributing to Hyprland Keybinding Manager! This
 
 Before submitting a bug report, please:
 - Check existing issues to avoid duplicates
-- Test with the latest version from the `master` branch
+- Test with the latest version from the `main` branch
 - Reproduce the bug with a minimal test case
 
 **Create a GitHub Issue** with:
@@ -143,7 +143,7 @@ If you're interested in exploring the codebase or preparing for future contribut
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/hypr-keybind-manager.git
+git clone https://github.com/tidynest/hypr-keybind-manager.git
 cd hypr-keybind-manager
 
 # Build the project
@@ -246,7 +246,7 @@ test(conflict): add test for normalised key combo equality
 ### Pull Request Process
 
 1. **Fork** the repository
-2. **Create a branch** from `master`: `git checkout -b feat/your-feature`
+2. **Create a branch** from `main`: `git checkout -b feat/your-feature`
 3. **Make changes** with commits following message format
 4. **Add tests** covering your changes
 5. **Update documentation** if needed
@@ -287,7 +287,7 @@ By contributing, you agree that your contributions will be licensed under the sa
 
 ## Contact
 
-**Maintainer**: bakri
+**Maintainer**: Eric Jingryd
 **Email**: tidynest@proton.me
 **System**: Arch Linux (TidyNest)
 
@@ -303,5 +303,5 @@ Even though direct contributions aren't being accepted yet, your **feedback, bug
 
 ---
 
-**Last Updated**: 2025-01-16
-**Version**: 1.0.0
+**Last Updated**: 2025-10-19
+**Version**: 1.0.3

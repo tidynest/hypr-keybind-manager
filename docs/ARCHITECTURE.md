@@ -441,6 +441,7 @@ pub struct Controller {
 ```rust
 pub struct ConfigManager {
     config_path: PathBuf,
+    backup_dir: PathBuf,
 }
 
 pub struct ConfigTransaction<'a> {
@@ -535,8 +536,9 @@ pub struct ConfigValidator {
 }
 
 pub struct ValidationReport {
-    pub errors: Vec<ValidationError>,
-    pub warnings: Vec<ValidationWarning>,
+    pub issues:             Vec<ValidationIssue>,
+    pub highest_danger:     Vec<DangerLevel>,
+    pub dangerour_command:  Vec<(usize, DangerAssessment)>,
 }
 ```
 
@@ -572,9 +574,23 @@ pub struct ValidationReport {
    ```
 
 4. **Shannon Entropy Detection** (Encoding detection)
-   ```rust
-   entropy(data) > 4.5 → likely base64
-   entropy(data) > 3.5 → likely hex
+
+   Detection uses **structural validation first**, then combines with entropy
+   analysis:
+
+    - **`is_likely_base64()`** - Checks base64 alphabet, length % 4 == 0, padding
+      rules, then confirms with entropy
+    - **`is_likely_hex()`** - Checks hex alphabet ([0-9a-fA-F]), even length,
+      character variety, then confirms with entropy
+
+   Structural properties are the primary detection method because:
+    - Base64: Must use only [A-Za-z0-9+/=], length divisible by 4, padding only
+      at end
+    - Hex: Must use only [0-9a-fA-F], even length (2 hex digits = 1 byte)
+
+   Entropy is **supplementary evidence**, not a hard threshold. Real-world
+   encoded strings have lower entropy than theoretical maximums due to short length
+   and source data patterns.
    ```
 
 **Key Methods**:
@@ -731,5 +747,5 @@ For implementation details, see [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md).
 
 ---
 
-**Last Updated**: 2025-01-16
+**Last Updated**: 2025-10-19
 **Version**: 1.0.3

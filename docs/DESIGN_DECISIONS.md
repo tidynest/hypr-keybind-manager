@@ -373,7 +373,7 @@ bind = SUPER, K, exec, echo 'cm0gLXJmIC8=' | base64 -d | sh
 ```rust
 const ALLOWED_DISPATCHERS: &[&str] = &[
     "exec", "workspace", "killactive", "togglefloating",
-    // ... 42 total dispatchers
+    // ... 41 total dispatchers
 ];
 
 pub fn validate_dispatcher(name: &str) -> Result<(), ValidationError> {
@@ -1021,5 +1021,5 @@ For questions or discussions about design decisions, please open an issue on Git
 
 ---
 
-**Last Updated**: 2025-01-16
+**Last Updated**: 2025-10-19
 **Version**: 1.0.3
