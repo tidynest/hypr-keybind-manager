@@ -352,7 +352,8 @@ hypr-keybind-manager/
 │   ├── config.toml                # Custom runner for filtered output
 │   └── runner.sh                  # Output filter script (grep + awk)
 ├── scripts/                       # Development and release scripts
-│   └── sync-version.sh            # Sync version numbers across docs
+│   ├── sync-version.sh            # Sync version numbers across docs
+│   └── tag-release.sh             # Automated release tagging (creates git tag)
 ├── docs/                          # Technical documentation
 │   ├── ARCHITECTURE.md            # System design and data flow
 │   ├── DESIGN_DECISIONS.md        # Rationale for architectural choices
@@ -413,29 +414,31 @@ cargo fmt
 
 ### Version Management
 
-When updating the project version:
+**Fully automated release process** - one command does everything:
 
-1. **Update Cargo.toml** (single source of truth):
-   ```bash
-   # Edit Cargo.toml and change version = "1.0.3" to new version
-   ```
+```bash
+# Create a new release (updates all files, commits, and tags)
+./scripts/tag-release.sh 1.0.5
 
-2. **Sync all documentation**:
-   ```bash
-   ./scripts/sync-version.sh
-   ```
-   This automatically updates version numbers in:
+# Then push to GitHub
+git push origin main && git push origin v1.0.5
+```
+
+**What happens automatically:**
+1. ✅ Updates `Cargo.toml` version (single source of truth)
+2. ✅ Syncs version to all documentation files:
    - README.md (version badge)
    - SECURITY.md
    - docs/ARCHITECTURE.md
    - docs/DESIGN_DECISIONS.md
+3. ✅ Updates `Cargo.lock` via `cargo check`
+4. ✅ Commits all changes with proper message
+5. ✅ Creates git tag `vX.Y.Z`
+6. ⚠️  Reminds you to push to GitHub (manual step)
 
-3. **Commit and tag**:
-   ```bash
-   git add -A
-   git commit -m "Bump version to X.Y.Z"
-   git tag vX.Y.Z
-   git push origin main --tags
+**Manual version sync** (if needed):
+```bash
+./scripts/sync-version.sh  # Reads version from Cargo.toml and updates docs
    ```
 
 **Test Coverage**:
