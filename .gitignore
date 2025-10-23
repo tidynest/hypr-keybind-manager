@@ -19,3 +19,6 @@ Thumbs.db
 
 # Random files (debug, notes, etc.)
 /output.log
+
+# GTK Inspector
+/docs/GTK_INSPECTOR_GUIDE.md

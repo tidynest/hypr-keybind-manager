@@ -27,7 +27,7 @@
 //! ```
 
 use gtk4::prelude::*;
-use gtk4::{gdk, Application, ApplicationWindow, Button, CssProvider, Orientation, Paned};
+use gtk4::{gio, gdk, Application, ApplicationWindow, Button, CssProvider, HeaderBar, FileDialog, Orientation, Paned, MenuButton};
 use std::path::PathBuf;
 use std::rc::Rc;
 use crate::ui::components::{BackupDialog, ConflictPanel, DetailsPanel, EditDialog, KeybindList, SearchBar};
@@ -134,16 +134,121 @@ impl App {
             return;
         }
 
-        // Load custom CSS styling
+        // Quit action
+        let quit_action = gio::SimpleAction::new("quit", None);  // Create action
+        let app_for_quit = app.clone();                          // Clone app reference for usage inside the closure
+        quit_action.connect_activate(move |_, _| {
+            app_for_quit.quit();                                 // Register action
+        });
+        app.add_action(&quit_action);                            // Trigger action & closure
+
         Self::load_css();
 
-        // Create application window
+        // Header bar
+        let header_bar = HeaderBar::new();
+
+        // Menu options
+        let menu = gio::Menu::new();
+        menu.append(Some("Export..."), Some("app.export"));
+        menu.append(Some("Import..."), Some("app.import"));
+        menu.append(Some("Quit..."),   Some("app.quit"));
+
+        // Menu button
+        let menu_button = MenuButton::new();
+        menu_button.set_icon_name("open-menu-symbolic");
+        menu_button.set_menu_model(Some(&menu));
+        header_bar.pack_end(&menu_button);
+
         let window = ApplicationWindow::builder()
             .application(app)
             .title("Hyprland Keybinding Manager")
             .default_width(1000)
             .default_height(800)
+            .titlebar(&header_bar)
             .build();
+
+        // Export action
+        let export_action = gio::SimpleAction::new("export", None);
+        let controller_for_export = controller.clone();
+        let window_for_export = window.clone();
+
+        export_action.connect_activate(move |_, _| {
+            eprintln!("💾 Export clicked");
+
+            // Create file save dialog
+            let file_dialog = FileDialog::builder()
+                .title("Export Keybindings")
+                .initial_name("hyprland-keybindings.conf")
+                .build();
+
+            let controller_clone = controller_for_export.clone();
+
+            file_dialog.save(Some(&window_for_export), None::<&gio::Cancellable>, move |result| {
+                match result {
+                    Ok(file) => {
+                        let path = file.path().unwrap();
+                        eprintln!("💾 Exporting to: {:?}", path);
+
+                        match controller_clone.export_to(&path) {
+                            Ok(()) => eprintln!("✅ Export successful!"),
+                            Err(e) => eprintln!("❌ Export failed: {}", e),
+                        }
+                    }
+                    Err(_) => eprintln!("🚫 Export cancelled"),
+                }
+            });
+        });
+
+        app.add_action(&export_action);
+
+        /*// Import action
+        let import_action = gio::SimpleAction::new("import", None);
+        let controller_for_import = controller.clone();
+        let window_for_import = window.clone();
+
+        // Clone Rc pointers
+        let keybind_list_for_import   = keybind_list.clone();
+        let details_panel_for_import  = details_panel.clone();
+        let conflict_panel_for_import = conflict_panel.clone();
+
+        import_action.connect_activate(move |_, _| {
+            eprintln!("📥 Import clicked");
+
+            // Create file open dialog
+            let file_dialog = gtk4::FileDialog::builder()
+                .title("Import Keybindings")
+                .build();
+
+            // Clone widgets for the file dialog callback to refresh UI after import
+            let controller_clone     = controller_for_import.clone();
+            let keybind_list_clone   = keybind_list_for_import.clone();
+            let details_panel_clone  = details_panel_for_import.clone();
+            let conflict_panel_clone = conflict_panel_for_import.clone();
+
+            // File dialog callback
+            file_dialog.open(Some(&window_for_import), None::<&gio::Cancellable>, move |result| {
+                match result {
+                    Ok(file) => {
+                        let path = file.path().unwrap();
+                        eprintln!("📥 Importing from: {:?}", path);
+
+                        match controller_clone.import_from(&path) {
+                            Ok(()) => {
+                                eprintln!("✅ Import successful!");
+                                let updated_bindings = controller_clone.get_keybindings();  // Refresh UI after import
+                                keybind_list_clone.update_with_bindings(updated_bindings);  // Update keybindings list
+                                details_panel_clone.update_binding(None);  // Clear details panel
+                                conflict_panel_clone.refresh();  // Refresh conflicts
+                            },
+                            Err(e) => eprintln!("❌ Import failed: {}", e),
+                        }
+                    }
+                    Err(_) => eprintln!("🚫 Import cancelled"),
+                }
+            });
+        });
+
+        app.add_action(&import_action);*/
 
         // Create main vertical box
         let main_vbox = gtk4::Box::new(Orientation::Vertical, 0);
@@ -220,6 +325,55 @@ impl App {
 
         // Set window content
         window.set_child(Some(&main_vbox));
+
+        // Import action
+        let import_action = gio::SimpleAction::new("import", None);
+        let controller_for_import = controller.clone();
+        let window_for_import = window.clone();
+
+        // Clone Rc pointers
+        let keybind_list_for_import   = keybind_list.clone();
+        let details_panel_for_import  = details_panel.clone();
+        let conflict_panel_for_import = conflict_panel.clone();
+
+        import_action.connect_activate(move |_, _| {
+            eprintln!("📥 Import clicked");
+
+            // Create file open dialog
+            let file_dialog = gtk4::FileDialog::builder()
+                .title("Import Keybindings")
+                .build();
+
+            // Clone widgets for the file dialog callback to refresh UI after import
+            let controller_clone     = controller_for_import.clone();
+            let keybind_list_clone   = keybind_list_for_import.clone();
+            let details_panel_clone  = details_panel_for_import.clone();
+            let conflict_panel_clone = conflict_panel_for_import.clone();
+
+            // File dialog callback
+            file_dialog.open(Some(&window_for_import), None::<&gio::Cancellable>, move |result| {
+                match result {
+                    Ok(file) => {
+                        let path = file.path().unwrap();
+                        eprintln!("📥 Importing from: {:?}", path);
+
+                        match controller_clone.import_from(&path) {
+                            Ok(()) => {
+                                eprintln!("✅ Import successful!");
+                                let updated_bindings = controller_clone.get_keybindings();  // Refresh UI after import
+                                keybind_list_clone.update_with_bindings(updated_bindings);  // Update keybindings list
+                                details_panel_clone.update_binding(None);  // Clear details panel
+                                conflict_panel_clone.refresh();  // Refresh conflicts
+                            },
+                            Err(e) => eprintln!("❌ Import failed: {}", e),
+                        }
+                    }
+                    Err(_) => eprintln!("🚫 Import cancelled"),
+                }
+            });
+        });
+
+        app.add_action(&import_action);
 
         // Connect row selection signal
         let details_panel_clone = details_panel.clone();
@@ -340,7 +494,7 @@ impl App {
 
             dialog.choose(
                 Some(&window_clone),  // Borrows window_clone here
-                None::<&gtk4::gio::Cancellable>,
+                None::<&gio::Cancellable>,
                 move |response| {  // Moves window_for_inner here (different variable!)
                     match response {
                         Ok(1) => {  // 1 = Delete button (second button)

@@ -28,6 +28,7 @@
 //! about GTK4 widgets. This keeps business logic separate from presentation.
 
 use std::cell::RefCell;
+use std::fs::read_to_string;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -425,6 +426,59 @@ impl Controller {
         Ok(())
     }
 
+    /// Exports a keybinding configuration file to a specific file path
+    ///
+    /// # Arguments
+    ///
+    /// * `export_path` - Path to export file that's created
+    ///
+    /// # Returns
+    ///
+    /// * `OK(())` - Successfully exported
+    /// * `Err(String)` - Export failed (...)
+    pub fn export_to(&self, export_path: &Path) -> Result<(), String> {
+        // Get bindings from controller's storage
+        let bindings = self.keybindings.borrow();
+
+        self.config_manager
+            .borrow_mut()
+            .export_to(export_path, &bindings)
+            .map_err(|e| format!("Failed to export config: {}", e))?;
+
+        Ok(())
+    }
+
+    pub fn import_from(&self, import_path: &Path) -> Result<(), String> {
+        // Read the import file
+        let content = read_to_string(import_path)
+            .map_err(|e| format!("Failed to read import file: {}", e))?;
+
+        // Parse bindings from import file
+        use crate::core::parser::parse_config_file;
+        let imported_bindings = parse_config_file(&content, import_path)
+            .map_err(|e| format!("Failed to parse import file: {}", e))?;
+
+        // Replace current bindings in memory
+        self.keybindings.borrow_mut().clear();
+        self.keybindings.borrow_mut().extend(imported_bindings.clone());
+
+        // Write to config file
+        let bindings: Vec<_> = self.keybindings.borrow().clone();
+        self.config_manager
+            .borrow_mut()
+            .write_bindings(&bindings)
+            .map_err(|e| format!("Failed to write imported bindings: {}", e))?;
+
+        // Rebuild conflict detector
+        let mut detector = ConflictDetector::new();
+        for binding in &imported_bindings {
+            detector.add_binding(binding.clone());
+        }
+        *self.conflict_detector.borrow_mut() = detector;
+
+        Ok(())
+    }
+
     /// Updates an existing keybinding with new values
     ///
     /// This method:
@@ -593,4 +647,3 @@ bind = SUPER, K, exec, chrome
         assert_eq!(controller.conflict_count(), 1);
     }
 }
-
