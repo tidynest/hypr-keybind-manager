@@ -617,7 +617,7 @@ src/config/danger/
 **Responsibility**: Block shell injection attempts using whitelist validation.
 
 **Checks**:
-1. **Dispatcher Whitelist**: Only 42 allowed dispatchers
+1. **Dispatcher Whitelist**: Only 41 allowed dispatchers
 2. **Shell Metacharacters**: Block `;`, `|`, `&`, `$`, backticks, etc.
 3. **Argument Length**: Max 1000 characters
 4. **Key Name Format**: Alphanumeric + safe special chars

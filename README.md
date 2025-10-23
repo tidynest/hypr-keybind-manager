@@ -364,20 +364,34 @@ hypr-keybind-manager/
     ├── config/                    # Config file I/O
     │   ├── mod.rs                 # ConfigManager (reads/writes with backups)
     │   ├── validator.rs           # Config validation (Layer 3)
-    │   └── danger/                # Dangerous command detection (Layer 2)
-    │       ├── mod.rs             # DangerDetector core
-    │       ├── types.rs           # DangerLevel, DangerAssessment
-    │       ├── patterns.rs        # Pattern builders
-    │       ├── entropy.rs         # Shannon entropy detection
-    │       └── tests/             # Modular test suite
+    │   ├── danger/                # Dangerous command detection (Layer 2)
+    │   │   ├── mod.rs             # DangerDetector core
+    │   │   ├── types.rs           # DangerLevel, DangerAssessment
+    │   │   ├── patterns.rs        # Pattern builders
+    │   │   ├── entropy.rs         # Shannon entropy detection
+    │   │   └── tests/             # Modular test suite
+    │   └── tests/                 # Config validation tests
+    │       ├── mod.rs
+    │       └── validator_tests.rs
     ├── core/                      # Business logic
     │   ├── types.rs               # Keybinding, KeyCombo, Modifier, BindType
     │   ├── parser.rs              # Parse Hyprland config syntax (nom)
     │   ├── conflict.rs            # ConflictDetector engine (HashMap)
     │   ├── validator.rs           # Injection prevention (Layer 1)
-    │   └── mod.rs                 # Core module exports
+    │   ├── mod.rs                 # Core module exports
+    │   └── tests/                 # Core tests (extracted)
+    │       ├── mod.rs
+    │       ├── conflict_tests.rs
+    │       ├── validator_tests.rs
+    │       └── types_tests.rs
     ├── ui/                        # GTK4 GUI (MVC pattern)
-    │   ├── app.rs                 # Main window setup
+    │   ├── app.rs                 # Main window coordination (208 lines)
+    │   ├── actions.rs             # GTK action setup (121 lines)
+    │   ├── builders/              # UI builder modules (483 lines total)
+    │   │   ├── mod.rs             # Module exports (7 lines)
+    │   │   ├── header.rs          # Header bar with menu (32 lines)
+    │   │   ├── layout.rs          # Main layout construction (104 lines)
+    │   │   └── handlers.rs        # Event handler wiring (340 lines)
     │   ├── controller.rs          # MVC Controller (mediates Model ↔ View)
     │   ├── style.css              # GTK CSS styling
     │   ├── mod.rs                 # UI module exports
@@ -390,7 +404,9 @@ hypr-keybind-manager/
     │       ├── backup_dialog.rs   # Backup management
     │       └── mod.rs             # Component exports
     └── ipc/                       # (Future: Hyprland IPC integration)
-        └── mod.rs
+        ├── mod.rs
+        └── tests/                 # IPC tests (extracted)
+            └── mod.rs
 ```
 
 For detailed architecture documentation, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).

@@ -170,9 +170,11 @@ src/config/danger/
 
 ---
 
-## 🎯 Phase 3: src/ui/app.rs (746 → ~300 lines)
+## 🎯 Phase 3: src/ui/app.rs (746 → 208 lines) ✅ **COMPLETE**
 
-**Current Structure:**
+**Completed:** 2025-10-23
+
+**Original Structure:**
 ```
 src/ui/app.rs (746 lines)
 ├─ App struct (43 lines)
@@ -184,91 +186,134 @@ src/ui/app.rs (746 lines)
     └─ Button wiring
 ```
 
-**Target Structure:**
+**Achieved Structure:**
 ```
 src/ui/
-├─ app.rs (~150 lines - App struct + main flow)
-├─ actions.rs (~150 lines - GTK actions)
-├─ builders/
-│   ├─ mod.rs
-│   ├─ header.rs (~50 lines - HeaderBar)
-│   ├─ layout.rs (~100 lines - Paned structure)
-│   └─ handlers.rs (~250 lines - button handlers)
+├─ app.rs (208 lines - App struct + coordination)
+├─ actions.rs (121 lines - GTK actions setup)
+├─ builders/ (604 lines total)
+│   ├─ mod.rs (7 lines)
+│   ├─ header.rs (32 lines - HeaderBar)
+│   ├─ layout.rs (104 lines - Layout construction)
+│   └─ handlers.rs (340 lines - Event handlers)
 ```
 
+**Results:**
+- **Reduction:** 746 → 208 lines (72% reduction, 538 lines removed from app.rs)
+- **Tests:** All 165 tests passing
+- **Clippy:** Clean, no warnings
+- **GUI:** All functionality verified working
+
 ### Step 3.1: Create Directory Structure
-- [ ] Create `src/ui/builders/` directory
+- [x] Create `src/ui/builders/` directory
 
 ### Step 3.2: Extract Actions Module
-- [ ] Create `src/ui/actions.rs`
-- [ ] Extract quit action setup (lines 138-143)
-- [ ] Extract export action setup (lines 170-202)
-- [ ] Extract import action setup (lines 329-376)
-- [ ] Create helper functions with clear signatures
+- [x] Create `src/ui/actions.rs`
+- [x] Extract quit action setup
+- [x] Extract export action setup
+- [x] Extract import action setup
 
 ### Step 3.3: Extract Header Builder
-- [ ] Create `src/ui/builders/header.rs`
-- [ ] Extract HeaderBar creation (lines 147-160)
-- [ ] Make it a standalone function returning HeaderBar
+- [x] Create `src/ui/builders/header.rs`
+- [x] Extract HeaderBar creation with menu
 
 ### Step 3.4: Extract Layout Builder
-- [ ] Create `src/ui/builders/layout.rs`
-- [ ] Extract left panel creation (lines 264-288)
-- [ ] Extract details panel creation (line 302)
-- [ ] Extract Paned configuration (lines 304-324)
+- [x] Create `src/ui/builders/layout.rs`
+- [x] Extract layout construction
+- [x] Returns tuple of widgets for wiring
 
 ### Step 3.5: Extract Event Handlers
-- [ ] Create `src/ui/builders/handlers.rs`
-- [ ] Extract delete handler (lines 466-540)
-- [ ] Extract edit handler (lines 554-602)
-- [ ] Extract add handler (lines 616-675)
-- [ ] Extract backup handler (lines 689-741)
+- [x] Create `src/ui/builders/handlers.rs`
+- [x] Extract all event handlers (delete, edit, add, backup, row selection, keyboard nav)
 
 ### Step 3.6: Refactor build_ui()
-- [ ] Reduce `build_ui()` to coordinate calls
-- [ ] Each section becomes a function call
-- [ ] Should be ~50 lines of coordination logic
+- [x] Reduced `build_ui()` to coordination calls
+- [x] Clean separation of concerns
 
 ### Step 3.7: Final Verification
-- [ ] Run `cargo clippy`
-- [ ] Run `cargo build`
-- [ ] Test GUI functionality manually
-- [ ] Verify all interactions work
+- [x] Run `cargo clippy` - clean
+- [x] Run `cargo build` - success
+- [x] Test GUI functionality manually - working
+- [x] Verify all interactions work - confirmed
 
 ---
 
-## 🎯 Phase 4: src/ui/controller.rs (649 lines - Minor cleanup)
+## 🎯 Phase 4: Test Extraction Across Multiple Files ✅ **COMPLETE**
 
-**Action:** Only extract tests to separate file
+**Completed:** 2025-10-23
 
-### Step 4.1: Extract Tests
-- [ ] Create `src/ui/controller_tests.rs`
-- [ ] Move all tests (lines 537-649)
-- [ ] Update imports
+**Action:** Extract tests from files with high test-to-code ratio
 
-### Step 4.2: Final Verification
-- [ ] Run `cargo test`
-- [ ] Verify all tests pass
+**Files Refactored:**
+```
+src/core/tests/
+├─ mod.rs
+├─ conflict_tests.rs (128 lines, 8 tests)
+├─ validator_tests.rs (139 lines, 14 tests)
+└─ types_tests.rs (65 lines, 6 tests)
+
+src/ipc/tests/
+└─ mod.rs (184 lines, 11 tests including 1 ignored)
+
+src/config/tests/
+├─ mod.rs
+└─ validator_tests.rs (123 lines, 5 tests)
+```
+
+**Tests Kept Inline (with rationale):**
+- `src/core/parser.rs` - Tests need access to private functions
+- `src/ui/controller.rs` - Only 17% tests (acceptable)
+- `src/ui/components/backup_dialog.rs` - Only 14% tests (acceptable)
+
+**Results:**
+- **Total tests extracted:** 44 tests across 5 files
+- **All 165 tests passing** (124 + 41)
+- **Clippy:** Clean, no warnings
+- **Better organization:** Tests grouped by module
+
+### Step 4.1: Identify High-Test Files
+- [x] Analyzed all Rust files for test percentage
+- [x] Identified 8 files with >20% tests
+- [x] Prioritized 5 files for extraction
+
+### Step 4.2: Extract Core Tests
+- [x] Created `src/core/tests/` directory
+- [x] Extracted conflict tests
+- [x] Extracted validator tests
+- [x] Extracted types tests
+
+### Step 4.3: Extract IPC Tests
+- [x] Created `src/ipc/tests/` directory
+- [x] Extracted all IPC tests
+
+### Step 4.4: Extract Config Tests
+- [x] Created `src/config/tests/` directory structure
+- [x] Extracted validator tests
+
+### Step 4.5: Final Verification
+- [x] Run `cargo test` - all 165 pass
+- [x] Run `cargo clippy` - clean
+- [x] Verify test organization improved
 
 ---
 
 ## ✅ Final Checklist
 
-- [ ] All phases complete
-- [ ] Run `cargo clippy` on entire project
-- [ ] Run `cargo test` - all 165 tests pass
-- [ ] Run `cargo build --release` - no warnings
-- [ ] Manual GUI testing - all features work
-- [ ] **Documentation Verification (CRITICAL):**
-  - [ ] README.md: Project structure, line counts, stats
-  - [ ] SECURITY.md: Thresholds, line counts, file paths
-  - [ ] ARCHITECTURE.md: Module structure, line counts
-  - [ ] DESIGN_DECISIONS.md: File paths, code examples
-  - [ ] ENTROPY_DETECTION.md: Thresholds, examples
-  - [ ] CLAUDE.md: Test counts, line counts, status
-- [ ] Update CLAUDE.md with refactoring completion notes
-- [ ] Commit changes with descriptive message
-- [ ] Delete this file (`docs/refactoring_steps.md`)
+- [x] All phases complete (Phases 1-4 done!)
+- [x] Run `cargo clippy` on entire project - clean
+- [x] Run `cargo test` - all 165 tests pass
+- [x] Run `cargo build --release` - no warnings
+- [x] Manual GUI testing - all features work
+- [x] **Documentation Verification (CRITICAL):**
+  - [x] README.md: Project structure updated with UI builders + test modules
+  - [x] SECURITY.md: No changes needed (correct)
+  - [x] ARCHITECTURE.md: Fixed dispatcher count (42 → 41)
+  - [x] DESIGN_DECISIONS.md: No changes needed (correct)
+  - [x] ENTROPY_DETECTION.md: No changes needed (correct)
+  - [x] CLAUDE.md: Updated with Phase 3-4 completion status
+- [x] Update CLAUDE.md with refactoring completion notes - done
+- [x] Update this file to reflect completed work - done
+- [ ] **READY TO COMMIT** - All work complete, docs audited
 
 ---
 

@@ -27,12 +27,16 @@
 //! ├── mod.rs          // This file - exports and initialisation
 //! ├── app.rs          // GTK4 Application setup
 //! ├── controller.rs   // MVC Controller
+//! ├── actions.rs      // GTK action setup (quit, export, import)
+//! ├── builders/       // UI building functions
 //! └── components/     // Reusable UI widgets
 //! ```
 
 pub mod app;
 pub mod controller;
 pub mod components;
+mod actions;
+mod builders;
 
 pub use app::App;
 pub use controller::Controller;

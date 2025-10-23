@@ -34,3 +34,6 @@ pub mod validator;
 pub use conflict::{ConflictDetector, Conflict};
 pub use types::*;
 pub use validator::{validate_keybinding, ValidationError};
+
+#[cfg(test)]
+mod tests;
