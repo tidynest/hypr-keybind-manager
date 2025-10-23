@@ -304,7 +304,7 @@ The application uses a **[HashMap](https://doc.rust-lang.org/std/collections/str
 - Argument length limits (max 1000 characters)
 - Key name validation (alphanumeric + safe special chars)
 
-**Layer 2: Dangerous Command Detection** (`config/danger.rs`)
+**Layer 2: Dangerous Command Detection** (`config/danger/`)
 - Regex pattern matching for critical commands (`rm -rf /`, `dd if=/dev/zero of=/dev/sda`)
 - HashSet lookup for dangerous executables (`sudo`, `chmod 777`, `mkfs`)
 - Context-aware analysis (`chmod 644` flagged but explained)
@@ -364,7 +364,12 @@ hypr-keybind-manager/
     ├── config/                    # Config file I/O
     │   ├── mod.rs                 # ConfigManager (reads/writes with backups)
     │   ├── validator.rs           # Config validation (Layer 3)
-    │   └── danger.rs              # Dangerous command detection (Layer 2)
+    │   └── danger/                # Dangerous command detection (Layer 2)
+    │       ├── mod.rs             # DangerDetector core
+    │       ├── types.rs           # DangerLevel, DangerAssessment
+    │       ├── patterns.rs        # Pattern builders
+    │       ├── entropy.rs         # Shannon entropy detection
+    │       └── tests/             # Modular test suite
     ├── core/                      # Business logic
     │   ├── types.rs               # Keybinding, KeyCombo, Modifier, BindType
     │   ├── parser.rs              # Parse Hyprland config syntax (nom)

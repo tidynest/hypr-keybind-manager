@@ -415,7 +415,7 @@ fn test_restore_creates_safety_backup() {
 
     // Verify the safety backup contains the "current content" we had before restore
     let safety_backup = &backups_after[0];  // Most recent backup
-    let safety_content = fs::read_to_string(&safety_backup).unwrap();
+    let safety_content = fs::read_to_string(safety_backup).unwrap();
     assert_eq!(safety_content, current_content,
                "Safety backup should contain content from before restore");
 }

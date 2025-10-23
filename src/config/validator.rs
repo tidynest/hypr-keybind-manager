@@ -16,7 +16,7 @@
 //!
 //! This module coordinates all validation layers:
 //! - **Layer 1** (`core/validator.rs`): Injection prevention
-//! - **Layer 2** (`config/danger.rs`): Dangerous command detection
+//! - **Layer 2** (`config/danger_old`): Dangerous command detection
 //! - **Layer 3** (this module): Complete config validation
 //!
 //! The validator parses the entire config file and runs all security

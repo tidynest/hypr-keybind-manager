@@ -38,7 +38,7 @@
 //! This crate is designed with security-first principles:
 //!
 //! - **Layer 1:** Input validation (core/validator.rs)
-//! - **Layer 2:** Dangerous command detection (config/danger.rs)
+//! - **Layer 2:** Dangerous command detection (config/danger_old)
 //! - **Layer 3:** Config validation (config/validator.rs)
 //! - **Atomic file operations:** No partial writes
 //! - **No arbitrary code execution:** Whitelist-based validation

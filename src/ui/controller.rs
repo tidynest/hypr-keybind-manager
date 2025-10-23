@@ -232,7 +232,7 @@ impl Controller {
     ///
     /// Runs:
     /// - Layer 1: Injection prevention (core/validator.rs)
-    /// - Layer 2: Danger detection (config/danger.rs)
+    /// - Layer 2: Danger detection (config/danger_old)
     /// - Layer 3: Config validation (config/validator.rs)
     ///
     /// # Arguments

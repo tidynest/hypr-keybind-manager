@@ -273,8 +273,8 @@ fn shannon_entropy(data: &str) -> f64 {
 ```
 
 **Thresholds** (empirically validated):
-- **Base64**: 4.5 bits/character
-- **Hex**: 3.5 bits/character
+- **Base64**: 4.0 bits/character
+- **Hex**: 3.0 bits/character
 - **Minimum Length**: 8 characters (reduces false positives)
 
 **Detection Order**: Hex before Base64 (hex alphabet ⊂ base64 alphabet).

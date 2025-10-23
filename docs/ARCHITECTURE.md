@@ -136,7 +136,7 @@ graph LR
 
     Config --> ConfigMgr[mod.rs ConfigManager]
     Config --> ConfigVal[validator.rs]
-    Config --> Danger[danger.rs]
+    Config --> Danger[danger/]
 
     Core --> Types[types.rs]
     Core --> Parser[parser.rs]
@@ -550,55 +550,65 @@ pub struct ValidationReport {
 
 ---
 
-### `src/config/danger.rs` - DangerDetector (Layer 2)
+### `src/config/danger/` - DangerDetector (Layer 2)
 
 **Responsibility**: Detect dangerous commands using multiple techniques.
 
+**Modular Structure** (878 lines across 4 modules):
+```
+src/config/danger/
+├── mod.rs (395 lines)         - DangerDetector core, assess_command()
+├── types.rs (27 lines)        - DangerLevel, DangerAssessment
+├── patterns.rs (171 lines)    - Pattern builders (critical/dangerous/suspicious/safe)
+├── entropy.rs (285 lines)     - Shannon entropy calculation and detection
+└── tests/ (696 lines)         - Comprehensive test suite (27 tests)
+```
+
 **Detection Techniques**:
 
-1. **Critical Pattern Matching** (Regex)
+1. **Critical Pattern Matching** (Regex) - `patterns.rs`
    ```rust
    rm\s+-rf\s+/
    dd\s+if=/dev/\w+\s+of=/dev/\w+
    :\(\)\{\s*:\s*\|:\s*&\s*\};\s*:  // fork bomb
    ```
 
-2. **Dangerous Command HashSet** (O(1) lookup)
+2. **Dangerous Command HashSet** (O(1) lookup) - `patterns.rs`
    ```rust
    { "sudo", "chmod 777", "mkfs", "fdisk", "parted", ... }
    ```
 
-3. **Suspicious Command Flagging** (Warnings)
+3. **Suspicious Command Flagging** (Warnings) - `patterns.rs`
    ```rust
    { "base64", "wget", "curl", "eval", "exec", ... }
    ```
 
-4. **Shannon Entropy Detection** (Encoding detection)
+4. **Shannon Entropy Detection** (Encoding detection) - `entropy.rs`
 
-   Detection uses **structural validation first**, then combines with entropy
-   analysis:
+   Detection uses **two-stage validation**:
 
-    - **`is_likely_base64()`** - Checks base64 alphabet, length % 4 == 0, padding
-      rules, then confirms with entropy
-    - **`is_likely_hex()`** - Checks hex alphabet ([0-9a-fA-F]), even length,
-      character variety, then confirms with entropy
+    - **`is_likely_base64(s)`** (threshold: 4.0 bits/char)
+      1. Alphabet check: ≥90% base64 chars `[A-Za-z0-9+/=]`
+      2. Entropy check: Must exceed 4.0 bits/char
 
-   Structural properties are the primary detection method because:
-    - Base64: Must use only [A-Za-z0-9+/=], length divisible by 4, padding only
-      at end
-    - Hex: Must use only [0-9a-fA-F], even length (2 hex digits = 1 byte)
+    - **`is_likely_hex(s)`** (threshold: 3.0 bits/char)
+      1. Alphabet check: ≥95% hex chars `[0-9a-fA-F]`
+      2. Entropy check: Must exceed 3.0 bits/char
 
-   Entropy is **supplementary evidence**, not a hard threshold. Real-world
-   encoded strings have lower entropy than theoretical maximums due to short length
-   and source data patterns.
-   ```
+   **Empirical thresholds** (adjusted from theoretical maximums):
+    - Base64: 4.0 bits/char (realistic attacks: 4.0-4.3 bits)
+    - Hex: 3.0 bits/char (realistic attacks: 3.0-3.5 bits)
 
-**Key Methods**:
-- `assess_command(cmd)` → `CommandAssessment`
-- `is_critical(cmd)` → `bool`
-- `is_dangerous(cmd)` → `bool`
-- `is_suspicious(cmd)` → `bool`
-- `calculate_entropy(data)` → `f64`
+   **Detection order matters**: Hex → Base64 (hex alphabet ⊂ base64 alphabet)
+
+**Key Methods** (in `mod.rs`):
+- `assess_command(cmd)` → `DangerAssessment`
+- `check_dangerous_arguments(cmd)` → `Option<DangerAssessment>`
+
+**Key Functions** (in `entropy.rs`):
+- `calculate_entropy(s)` → `f32`
+- `is_likely_base64(s)` → `bool`
+- `is_likely_hex(s)` → `bool`
 
 ---
 

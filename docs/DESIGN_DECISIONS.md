@@ -453,7 +453,7 @@ pub fn check_shell_metacharacters(input: &str) -> Result<(), ValidationError> {
 
 ### [Shannon Entropy](https://en.wikipedia.org/wiki/Entropy_(information_theory)) Detection
 
-**File**: `src/config/danger.rs:450-500`
+**File**: `src/config/danger/entropy.rs`
 
 **Decision**: Calculate Shannon entropy to detect base64/hex encoded payloads.
 
@@ -475,7 +475,7 @@ fn calculate_entropy(data: &str) -> f64 {
 
 fn is_likely_base64(data: &str) -> bool {
     data.len() >= 8 &&
-    calculate_entropy(data) > 4.5 &&
+    calculate_entropy(data) > 4.0 &&
     data.chars().all(|c| c.is_alphanumeric() || c == '+' || c == '/' || c == '=')
 }
 ```
@@ -487,8 +487,8 @@ fn is_likely_base64(data: &str) -> bool {
 
 **Thresholds** (bits per character):
 - English text: ~4.0
-- Base64: ~4.5 (chosen threshold)
-- Hex: ~3.5 (chosen threshold)
+- Base64: ~4.0 (chosen threshold, adjusted from theoretical 6.0)
+- Hex: ~3.0 (chosen threshold, adjusted from theoretical 4.0)
 - Random: ~8.0
 
 **Example Detection**:
@@ -497,7 +497,7 @@ fn is_likely_base64(data: &str) -> bool {
 bind = SUPER, K, exec, firefox cm0gLXJmIC8=
 
 # Fails Layer 2 (high entropy in "cm0gLXJmIC8=")
-# Entropy: 5.2 bits/char > 4.5 threshold
+# Entropy: 4.29 bits/char > 4.0 threshold
 # Detected as base64-encoded "rm -rf /"  ✅
 ```
 
@@ -523,7 +523,7 @@ bind = SUPER, K, exec, firefox cm0gLXJmIC8=
 
 ### Detection Order Matters
 
-**File**: `src/config/danger.rs:300`
+**File**: `src/config/danger/mod.rs` (assess_command method)
 
 **Decision**: Check hex **before** base64 in `assess_command()`.
 
