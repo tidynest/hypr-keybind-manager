@@ -6,8 +6,7 @@
 //! - Delete/Edit/Add buttons
 //! - Backup manager
 
-use gtk4::prelude::*;
-use gtk4::{gio, gdk, ApplicationWindow, Button, EventControllerKey};
+use gtk4::{prelude::*, gio, gdk, ApplicationWindow, Button, EventControllerKey};
 use std::rc::Rc;
 use crate::core::types::{BindType, KeyCombo, Keybinding};
 use crate::ui::components::{BackupDialog, ConflictPanel, DetailsPanel, EditDialog, KeybindList};

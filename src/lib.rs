@@ -1,4 +1,4 @@
-// Copyright 2025 bakri (tidynest@proton.me)
+// Copyright 2025 Eric Jingryd (tidynest@proton.me)
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -38,7 +38,7 @@
 //! This crate is designed with security-first principles:
 //!
 //! - **Layer 1:** Input validation (core/validator.rs)
-//! - **Layer 2:** Dangerous command detection (config/danger_old)
+//! - **Layer 2:** Dangerous command detection (config/danger)
 //! - **Layer 3:** Config validation (config/validator.rs)
 //! - **Atomic file operations:** No partial writes
 //! - **No arbitrary code execution:** Whitelist-based validation

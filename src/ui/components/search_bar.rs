@@ -16,8 +16,7 @@
 //!
 //! Provides real-time filtering of keybindings as the user types.
 
-use gtk4::prelude::*;
-use gtk4::SearchEntry;
+use gtk4::{prelude::*, SearchEntry};
 
 /// Search bar for filtering keybindings
 pub struct SearchBar {
@@ -52,11 +51,11 @@ impl SearchBar {
     /// ```
     pub fn new() -> Self {
         // Create search entry widget
-        let _entry = SearchEntry::builder()
+        let widget = SearchEntry::builder()
             .placeholder_text("Search keybindings...")
             .build();
 
-        Self { widget: SearchEntry::builder().build() }
+        Self { widget }
     }
     /// Returns the root widget for adding to parent container
     pub fn widget(&self) -> &SearchEntry {

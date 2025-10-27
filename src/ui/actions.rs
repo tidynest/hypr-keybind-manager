@@ -3,7 +3,7 @@
 //! This module contains all GTK action definitions (quit, export, import)
 //! and their setup functions
 
-use gtk4::{gio, prelude::*, Application, ApplicationWindow, FileDialog};
+use gtk4::{prelude::*, gio, Application, ApplicationWindow, FileDialog};
 use std::rc::Rc;
 use crate::ui::Controller;
 use crate::ui::controller::ImportMode;
@@ -189,7 +189,7 @@ pub fn setup_import_action(
 
         // Import button
         let import_button = Button::with_label("Continue");
-        import_button.add_css_class("suggested.action");
+        import_button.add_css_class("suggested-action");
         let dialog_for_import = dialog.clone();
         let response_clone = response.clone();
         let replace_clone = replace_radio.clone();

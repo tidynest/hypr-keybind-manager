@@ -27,10 +27,7 @@
 //! The Controller holds references to Model components but doesn't know
 //! about GTK4 widgets. This keeps business logic separate from presentation.
 
-use std::cell::RefCell;
-use std::fs::read_to_string;
-use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::{cell::RefCell, fs::read_to_string, path::{Path, PathBuf}, rc::Rc};
 
 use crate::config::{ConfigError, ConfigManager};
 use crate::core::{Conflict, ConflictDetector, Keybinding};
@@ -245,7 +242,7 @@ impl Controller {
     ///
     /// Runs:
     /// - Layer 1: Injection prevention (core/validator.rs)
-    /// - Layer 2: Danger detection (config/danger_old)
+    /// - Layer 2: Danger detection (config/danger)
     /// - Layer 3: Config validation (config/validator.rs)
     ///
     /// # Arguments

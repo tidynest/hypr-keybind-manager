@@ -1,4 +1,4 @@
-// Copyright 2025 bakri (tidynest@proton.me)
+// Copyright 2025 Eric Jingryd (tidynest@proton.me)
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -33,15 +33,8 @@
 //! The parser only reads and structures data - it never executes commands
 //! or modifies files. All validation happens in validator.rs after parsing.
 
-use nom::{
-    branch::alt,
-    bytes::complete::{tag, take_until, take_while1},
-    character::complete::{char, space0},
-    combinator::{map, opt},
-    sequence::preceded, IResult, Parser
-};
-use std::collections::HashMap;
-use std::path::Path;
+use nom::{branch::alt, bytes::complete::{tag, take_until, take_while1}, character::complete::{char, space0}, combinator::{map, opt}, sequence::preceded, IResult, Parser};
+use std::{collections::HashMap, path::Path};
 use thiserror::Error;
 
 use crate::core::types::{BindType, Keybinding, KeyCombo, Modifier};

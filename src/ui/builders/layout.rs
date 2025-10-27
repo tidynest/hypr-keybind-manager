@@ -2,7 +2,7 @@
 //!
 //! Creates the main application layout structure.
 
-use gtk4::{prelude::*, Button, Orientation, Paned};
+use gtk4::{prelude::*, Box as GtkBox, Button, Orientation, Paned};
 use std::rc::Rc;
 use crate::ui::components::{ConflictPanel, DetailsPanel, KeybindList, SearchBar};
 use crate::ui::Controller;
@@ -21,15 +21,15 @@ use crate::ui::Controller;
 pub fn build_main_layout(
     controller: Rc<Controller>,
 ) -> (
-    gtk4::Box,
+    GtkBox,
     Rc<KeybindList>,
     Rc<DetailsPanel>,
     Rc<ConflictPanel>,
-    gtk4::Button,
-    gtk4::Button,
+    Button,
+    Button,
 ) {
     // Create main vertical box
-    let main_vbox = gtk4::Box::new(Orientation::Vertical, 0);
+    let main_vbox = GtkBox::new(Orientation::Vertical, 0);
 
     // Create conflict panel at top
     let conflict_panel = Rc::new(ConflictPanel::new(controller.clone()));
@@ -39,7 +39,7 @@ pub fn build_main_layout(
     let paned = Paned::new(Orientation::Horizontal);
 
     // LEFT SIDE: Search + List (resizable)
-    let left_vbox = gtk4::Box::new(Orientation::Vertical, 10);
+    let left_vbox = GtkBox::new(Orientation::Vertical, 10);
     left_vbox.set_margin_start(10);
     left_vbox.set_margin_end(10);
     left_vbox.set_margin_bottom(10);

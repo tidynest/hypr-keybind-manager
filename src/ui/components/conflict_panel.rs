@@ -51,8 +51,7 @@
 //! panel.refresh();  // Shows banner if conflicts exist
 //! ```
 
-use gtk4::prelude::*;
-use gtk4::{Box as GtkBox, Button, Label, Orientation, Revealer};
+use gtk4::{prelude::*, Box as GtkBox, Button, Label, Orientation, Revealer};
 use std::rc::Rc;
 
 use crate::ui::components::KeybindList;

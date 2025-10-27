@@ -19,10 +19,8 @@
 //! conflict status.
 
 use gtk4::pango::WrapMode::WordChar;
-use gtk4::prelude::*;
-use gtk4::{Frame, Grid, Label, Align};
-use std::cell::RefCell;
-use std::rc::Rc;
+use gtk4::{prelude::*, Align, Box as GtkBox, Button, Frame, Grid, Label, Orientation, Separator};
+use std::{cell::RefCell, rc::Rc};
 
 use crate::core::types::Keybinding;
 use crate::ui::Controller;
@@ -83,7 +81,7 @@ impl DetailsPanel {
             .build();
 
         // Create main vertical box to hold grid + button
-        let vbox = gtk4::Box::new(gtk4::Orientation::Vertical, 10);
+        let vbox = GtkBox::new(Orientation::Vertical, 10);
         vbox.set_margin_start(15);
         vbox.set_margin_end(15);
         vbox.set_margin_top(15);
@@ -199,20 +197,20 @@ impl DetailsPanel {
         vbox.append(&grid);
 
         // Add separator
-        let separator = gtk4::Separator::new(gtk4::Orientation::Horizontal);
+        let separator = Separator::new(Orientation::Horizontal);
         separator.set_margin_top(10);
         separator.set_margin_bottom(10);
         vbox.append(&separator);
 
         // Add edit button
-        let edit_button = gtk4::Button::builder()
+        let edit_button = Button::builder()
             .label("✏️ Edit Keybinding")
             .sensitive(false)  // Disabled until a binding is selected
             .build();
         vbox.append(&edit_button);
 
         // Add delete button
-        let delete_button = gtk4::Button::builder()
+        let delete_button = Button::builder()
             .label("🗑️  Delete Keybinding")
             .sensitive(false)  // Disabled until a binding is selected
             .build();

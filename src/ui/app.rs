@@ -26,10 +26,9 @@
 //!   └─ Connects components to Controller
 //! ```
 
-use gtk4::prelude::*;
-use gtk4::{gdk, Application, ApplicationWindow, CssProvider, Paned};
-use std::path::PathBuf;
-use std::rc::Rc;
+use gtk4::{prelude::*, gdk, Application, ApplicationWindow, CssProvider, Paned};
+use std::{path::PathBuf, rc::Rc};
+
 use crate::ui::actions;
 use crate::ui::builders;
 use crate::ui::Controller;
@@ -84,7 +83,7 @@ impl App {
             let config_path = controller.config_path().to_path_buf();
             FileWatcher::new(config_path)
                 .map_err(|e| eprintln!("⚠️  File watcher setup failed: {}", e))
-                    .ok()
+                .ok()
         };
 
         Ok(Self { app, controller, file_watcher })
@@ -106,7 +105,7 @@ impl App {
     /// ```
     pub fn run(self) {
         let controller = self.controller.clone();
-        let file_watcher = self.file_watcher.map(|fw| Rc::new(fw));
+        let file_watcher = self.file_watcher.map(Rc::new);
 
         // Connect activate signal (called when app starts)
         self.app.connect_activate(move |app| {

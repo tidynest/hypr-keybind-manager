@@ -1,4 +1,4 @@
-// Copyright 2025 bakri (tidynest@proton.me)
+// Copyright 2025 Eric Jingryd (tidynest@proton.me)
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 //!
 //! This module coordinates all validation layers:
 //! - **Layer 1** (`core/validator.rs`): Injection prevention
-//! - **Layer 2** (`config/danger_old`): Dangerous command detection
+//! - **Layer 2** (`config/danger`): Dangerous command detection
 //! - **Layer 3** (this module): Complete config validation
 //!
 //! The validator parses the entire config file and runs all security

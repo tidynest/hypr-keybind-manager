@@ -1,4 +1,4 @@
-// Copyright 2025 bakri (tidynest@proton.me)
+// Copyright 2025 Eric Jingryd (tidynest@proton.me)
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -33,9 +33,9 @@
 
 use clap::{Parser, Subcommand};
 use colored::*;
+use std::{fs, path::{Path, PathBuf}};
+
 use hypr_keybind_manager::core::{parser::parse_config_file, conflict::ConflictDetector};
-use std::fs;
-use std::path::{Path, PathBuf};
 
 /// Command-line interface for Hyprland Keybinding Manager.
 ///

@@ -74,16 +74,16 @@ entry.search {
 }
 
 /* Resolve Conflicts button styling */
-  .warning-banner button {
-      background: rgba(255, 255, 255, 0.2);
-      border: 1px solid #d97706;
-      border-radius: 6px;
-      padding: 6px 12px;
-      color: #78350f;
-      font-weight: 600;
-  }
+.warning-banner button {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid #d97706;
+    border-radius: 6px;
+    padding: 6px 12px;
+    color: #78350f;
+    font-weight: 600;
+}
 
 .warning-banner button:hover {
-      background: rgba(255, 255, 255, 0.4);
-      border-color: #b45309;
-  }
+    background: rgba(255, 255, 255, 0.4);
+    border-color: #b45309;
+}

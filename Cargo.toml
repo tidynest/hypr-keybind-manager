@@ -43,9 +43,9 @@ pkg-config = "0.3.32"
 tempfile = "3.23.0"
 
 [profile.release]
-codegen-units = 1    # Better optimization
-lto = true           # Link-time optimization
-opt-level = "z"      # Optimize for size
+codegen-units = 1    # Better optimisation
+lto = true           # Link-time optimisation
+opt-level = "z"      # Optimise for size
 panic = "abort"      # Smaller binary
 strip = true         # Remove debug symbols
 

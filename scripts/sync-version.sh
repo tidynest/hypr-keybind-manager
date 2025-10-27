@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sync version numbers across all project documentation
+# Synchronise version numbers across all project documentation
 # Uses Cargo.toml as the single source of truth
 
 set -e
@@ -12,7 +12,7 @@ if [ -z "$VERSION" ]; then
     exit 1
 fi
 
-echo "📦 Syncing version to: $VERSION"
+echo "📦 Synchronising version to: $VERSION"
 
 # Update README.md badge
 sed -i "s|badge/version-[0-9]\+\.[0-9]\+\.[0-9]\+-blue|badge/version-$VERSION-blue|" README.md
@@ -30,4 +30,4 @@ echo "  ✅ Updated docs/ARCHITECTURE.md"
 sed -i "s/^\*\*Version\*\*: [0-9]\+\.[0-9]\+\.[0-9]\+/**Version**: $VERSION/" docs/DESIGN_DECISIONS.md
 echo "  ✅ Updated docs/DESIGN_DECISIONS.md"
 
-echo "✨ Version sync complete! All files now at v$VERSION"
+echo "✨ Version synchronisation complete! All files now at v$VERSION"

@@ -17,10 +17,8 @@
 //! Displays all keybindings in a scrollable list view.
 //! Each row shows the key combination, dispatcher, and arguments.
 
-use gtk4::prelude::*;
-use gtk4::{Box as GtkBox, Label, ListBox, Orientation, ScrolledWindow};
-use std::cell::RefCell;
-use std::rc::Rc;
+use gtk4::{prelude::*, Box as GtkBox, Label, ListBox, Orientation, ScrolledWindow};
+use std::{cell::RefCell, rc::Rc};
 
 use crate::core::types::Keybinding;
 use crate::ui::Controller;

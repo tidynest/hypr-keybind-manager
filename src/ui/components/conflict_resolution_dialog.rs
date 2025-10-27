@@ -1,6 +1,27 @@
-use gtk4::prelude::*;
-use gtk4::{Box as GtkBox, Button, Orientation, ScrolledWindow, Window};
+// Copyright 2025 Eric Jingryd (tidynest@proton.me)
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+//! Conflict resolution dialog component
+//!
+//! Provides a modal dialog for resolving keybinding conflicts.
+//! Displays all conflicts grouped by key combination, with delete buttons
+//! for each conflicting binding. Automatically refreshes the UI after
+//! deletions and closes when all conflicts in view are resolved.
+
+use gtk4::{prelude::*, Align, Box as GtkBox, Button, Label, Orientation, ScrolledWindow, Window};
 use std::rc::Rc;
+
 use crate::ui::Controller;
 use crate::ui::components::{ConflictPanel, KeybindList};
 
@@ -50,8 +71,8 @@ impl ConflictResolutionDialog {
             group_box.set_margin_start(20);
 
             // Header showing conflicted key combo
-            let header = gtk4::Label::new(Some(&format!("⚠️ Conflict: {}", conflict.key_combo)));
-            header.set_halign(gtk4::Align::Start);
+            let header = Label::new(Some(&format!("⚠️ Conflict: {}", conflict.key_combo)));
+            header.set_halign(Align::Start);
             header.add_css_class("conflict-header");
             group_box.append(&header);
 
@@ -67,8 +88,8 @@ impl ConflictResolutionDialog {
                     binding.dispatcher.clone()
                 };
 
-                let label = gtk4::Label::new(Some(&description));
-                label.set_halign(gtk4::Align::Start);
+                let label = Label::new(Some(&description));
+                label.set_halign(Align::Start);
                 label.set_hexpand(true);
                 binding_row.append(&label);
 

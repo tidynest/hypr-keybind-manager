@@ -49,10 +49,8 @@
 //! # }
 //! ```
 
-use gtk4::prelude::*;
-use gtk4::{ApplicationWindow, Box as GtkBox, Button, Entry, Grid, Label, Orientation, Window};
-use std::cell::Cell;
-use std::rc::Rc;
+use gtk4::{prelude::*, ApplicationWindow, Box as GtkBox, Button, Entry, Grid, Label, Orientation, Window};
+use std::{cell::Cell, rc::Rc};
 
 use crate::core::types::{Keybinding, KeyCombo, Modifier, BindType};
 

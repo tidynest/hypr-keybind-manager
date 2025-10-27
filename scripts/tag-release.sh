@@ -45,7 +45,7 @@ sed -i "s/^version = \"[0-9]\+\.[0-9]\+\.[0-9]\+\"/version = \"$NEW_VERSION\"/" 
 echo "  ✅ Cargo.toml updated to v$NEW_VERSION"
 echo ""
 
-echo "📝 Step 2/6: Syncing version to documentation files"
+echo "📝 Step 2/6: Synchronising version to documentation files"
 ./scripts/sync-version.sh
 echo ""
 

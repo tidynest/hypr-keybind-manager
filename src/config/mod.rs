@@ -1,4 +1,4 @@
-// Copyright 2025 bakri (tidynest@proton.me)
+// Copyright 2025 Eric Jingryd (tidynest@proton.me)
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -41,9 +41,10 @@ pub mod validator;
 
 pub use error::ConfigError;
 pub use transaction::ConfigTransaction;
+
 use chrono::Local;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::{fs, path::{Path, PathBuf}};
+
 use crate::Keybinding;
 
 /// Manages Hyprland configuration files with safe atomic operations.

@@ -12,11 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use gtk4::prelude::*;
-use gtk4::{Button, ListBox, Orientation, ScrolledWindow, Window};
-use std::cell::Cell;
-use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use gtk4::{prelude::*, Align, Box as GtkBox, Button, Label, ListBox, Orientation, ScrolledWindow, Window};
+use std::{cell::Cell, path::{Path, PathBuf}, rc::Rc};
 
 /// Dialog for managing configuration file backups.
 ///
@@ -107,7 +104,7 @@ impl BackupDialog {
         let dialog_ready = Rc::new(Cell::new(false));
 
         // Create main vertical box
-        let main_vbox = gtk4::Box::new(Orientation::Vertical, 12);
+        let main_vbox = GtkBox::new(Orientation::Vertical, 12);
         main_vbox.set_margin_start(12);
         main_vbox.set_margin_end(12);
         main_vbox.set_margin_top(12);
@@ -125,8 +122,8 @@ impl BackupDialog {
         for backup_path in &backups {
             let display_text = Self::format_backup_display(backup_path);
 
-            let label = gtk4::Label::new(Some(&display_text));
-            label.set_halign(gtk4::Align::Start);
+            let label = Label::new(Some(&display_text));
+            label.set_halign(Align::Start);
             label.set_margin_start(8);
             label.set_margin_end(8);
             label.set_margin_top(8);
@@ -140,8 +137,8 @@ impl BackupDialog {
         main_vbox.append(&scrolled_window);
 
         // Create button row
-        let button_box = gtk4::Box::new(Orientation::Horizontal, 12);
-        button_box.set_halign(gtk4::Align::End);  // Push buttons to the right
+        let button_box = GtkBox::new(Orientation::Horizontal, 12);
+        button_box.set_halign(Align::End);  // Push buttons to the right
 
         let restore_button = Button::builder()
             .label("Restore")

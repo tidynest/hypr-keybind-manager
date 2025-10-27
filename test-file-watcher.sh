@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Automated test script for Phase 6.8 - File Watcher
 # Tests live config file monitoring functionality
 

@@ -4,8 +4,7 @@
 //! Zero CPU overhead when file unchanged, instant UI refresh on modification.
 
 use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
-use std::path::PathBuf;
-use std::sync::mpsc::{channel, Receiver};
+use std::{path::PathBuf, sync::mpsc::{channel, Receiver}};
 
 /// Watches Hyprland.conf file for modifications and notifies via callback
 pub struct FileWatcher {
