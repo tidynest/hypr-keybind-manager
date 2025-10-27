@@ -1,4 +1,4 @@
-// Copyright 2025 bakri (tidynest@proton.me)
+// Copyright 2025 Eric Jingryd (tidynest@proton.me)
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -208,6 +208,9 @@ impl App {
             details_panel.clone(),
             conflict_panel.clone(),
         );
+        
+        // Setup apply to Hyprland action
+        actions::setup_apply_action(app, controller.clone());
 
         // Wire up all event handlers
         builders::wire_up_handlers(

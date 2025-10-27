@@ -35,9 +35,12 @@
 pub mod app;
 pub mod controller;
 pub mod components;
+pub mod file_watcher;
 mod actions;
 mod builders;
-pub mod file_watcher;
 
 pub use app::App;
 pub use controller::Controller;
+
+#[cfg(test)]
+mod tests;

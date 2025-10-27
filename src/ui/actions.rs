@@ -1,18 +1,32 @@
+// Copyright 2025 Eric Jingryd (tidynest@proton.me)
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 //! GTK Action setup for the application
 //!
 //! This module contains all GTK action definitions (quit, export, import)
 //! and their setup functions
 
-use gtk4::{prelude::*, gio, Application, ApplicationWindow, FileDialog};
+use gtk4::{prelude::*, gio::{Cancellable, SimpleAction}, Application, ApplicationWindow, FileDialog};
 use std::rc::Rc;
-use crate::ui::Controller;
-use crate::ui::controller::ImportMode;
+
+use crate::ui::{{controller::ImportMode}, Controller};
 
 /// Sets up the quit action
 ///
 /// Creates a GTK action that quits the application when triggered.
 pub fn setup_quit_action(app: &Application) {
-    let quit_action = gio::SimpleAction::new("quit", None);
+    let quit_action = SimpleAction::new("quit", None);
     let app_for_quit = app.clone();
 
     quit_action.connect_activate(move |_, _| {
@@ -31,7 +45,7 @@ pub fn setup_export_action(
     window: &ApplicationWindow,
     controller: Rc<Controller>
 ) {
-    let export_action = gio::SimpleAction::new("export", None);
+    let export_action = SimpleAction::new("export", None);
     let controller_for_export = controller.clone();
     let window_for_export = window.clone();
 
@@ -46,7 +60,7 @@ pub fn setup_export_action(
         let controller_clone = controller_for_export.clone();
         let window_clone = window_for_export.clone();
 
-        file_dialog.save(Some(&window_clone), None::<&gio::Cancellable>, move |result| {
+        file_dialog.save(Some(&window_clone), None::<&Cancellable>, move |result| {
             match result {
                 Ok(file) => {
                     let path = file.path().unwrap();
@@ -77,7 +91,7 @@ pub fn setup_import_action(
     details_panel: Rc<crate::ui::components::DetailsPanel>,
     conflict_panel: Rc<crate::ui::components::ConflictPanel>,
 ) {
-    let import_action = gio::SimpleAction::new("import", None);
+    let import_action = SimpleAction::new("import", None);
     let controller_for_import = controller.clone();
     let window_for_import = window.clone();
     let keybind_list_for_import = keybind_list.clone();
@@ -111,7 +125,7 @@ pub fn setup_import_action(
         let conflict_panel_clone = conflict_panel_for_import.clone();
         let window_clone         = window_for_import.clone();
 
-        file_dialog.open(Some(&window_clone), None::<&gio::Cancellable>, move |result| {
+        file_dialog.open(Some(&window_clone), None::<&Cancellable>, move |result| {
             match result {
                 Ok(file) => {
                     let path = file.path().unwrap();
@@ -215,4 +229,33 @@ pub fn setup_import_action(
 
         response
     }
+}
+
+/// Sets up the apply to Hyprland action
+///
+/// Creates a GTK action that triggers Hyprland to reload its configuration,
+/// applying all pending changes immediately without restart.
+pub fn setup_apply_action(
+    app: &Application,
+    controller: Rc<Controller>,
+) {
+    let apply_action = SimpleAction::new("apply-to-hyprland", None);
+    let controller_for_apply = controller.clone();
+
+    apply_action.connect_activate(move |_, _| {
+        eprintln!("🔄 Applying changes to Hyprland...");
+
+        match controller_for_apply.apply_to_hyprland() {
+            Ok(()) => {
+                eprintln!("✅ Hyprland reloaded successfully!");
+                // TODO: Show success notification in UI
+            }
+            Err(e) => {
+                eprintln!("❌ Failed to reload Hyprland: {}", e);
+                // TODO: Show error dialog
+            }
+        }
+    });
+
+    app.add_action(&apply_action);
 }

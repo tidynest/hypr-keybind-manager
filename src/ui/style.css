@@ -83,7 +83,13 @@ entry.search {
     font-weight: 600;
 }
 
+/* Warning banner hover effect */
 .warning-banner button:hover {
     background: rgba(255, 255, 255, 0.4);
     border-color: #b45309;
+}
+
+/* Apply to Hyprland button hover effect */
+.suggested-action:hover {
+    background-color: shade(@theme_selected_bg_color, 1.05);
 }

@@ -16,7 +16,8 @@
 //!
 //! Creates the application header bar with menu
 
-use gtk4::{gio, HeaderBar, MenuButton};
+use gtk4::{{gio::Menu}, Button, HeaderBar, MenuButton};
+use gtk4::prelude::WidgetExt;
 
 /// Builds the application header bar with File menu
 ///
@@ -32,16 +33,26 @@ pub fn build_header_bar() -> HeaderBar {
     let header_bar = HeaderBar::new();
 
     // Menu options
-    let menu = gio::Menu::new();
+    let menu = Menu::new();
     menu.append(Some("Export..."), Some("app.export"));
     menu.append(Some("Import..."), Some("app.import"));
-    menu.append(Some("Quit..."),   Some("app.quit"));
+    menu.append(Some("Quit..."), Some("app.quit"));
 
     // Menu button
     let menu_button = MenuButton::new();
     menu_button.set_icon_name("open-menu-symbolic");
     menu_button.set_menu_model(Some(&menu));
-    header_bar.pack_end(&menu_button);
+
+    // Apply Hyprland button (left side)
+    let apply_button = Button::builder()
+        .label("Apply to Hyprland")
+        .action_name("app.apply-to-hyprland")
+        .tooltip_text("Reload Hyprland with current changes")
+        .build();
+
+    apply_button.add_css_class("suggested-action");  // <- Blue highlight!
+    header_bar.pack_start(&apply_button);  // <- Left side
+    header_bar.pack_end(&menu_button);  // <- Right side
 
     header_bar
 }
