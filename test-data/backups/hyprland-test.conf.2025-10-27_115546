@@ -1,0 +1,19 @@
+# Test configuration for Hyprland Keybinding Manager
+# This file contains intentional conflicts for testing
+
+# Working bindings
+bind = SUPER, M, exec, kitty
+bind = SUPER, Q, killactive
+bind = SUPER, F, togglefloating
+bind = ALT, TAB, cyclenext
+bind = SUPER, K, exec, firefox
+bind = ALT, M, workspace, 1
+bind = ALT, M, exec, spotify
+bind = SUPER, Return, exec, alacritty
+bind = SUPER, D, exec, wofi --show drun
+
+# Conflict 1: SUPER+K used twice
+
+# Conflict 2: ALT+M used twice
+
+# More working bindings

@@ -33,6 +33,7 @@ use std::rc::Rc;
 use crate::ui::actions;
 use crate::ui::builders;
 use crate::ui::Controller;
+use crate::ui::file_watcher::FileWatcher;
 
 /// GTK4 Application for keybinding management
 pub struct App {
@@ -40,6 +41,8 @@ pub struct App {
     app: Application,
     /// MVC Controller
     controller: Rc<Controller>,
+    /// File Watcher
+    file_watcher: Option<FileWatcher>,
 }
 
 impl App {
@@ -77,7 +80,14 @@ impl App {
 
         let controller = Rc::new(controller);
 
-        Ok(Self { app, controller })
+        let file_watcher = {
+            let config_path = controller.config_path().to_path_buf();
+            FileWatcher::new(config_path)
+                .map_err(|e| eprintln!("⚠️  File watcher setup failed: {}", e))
+                    .ok()
+        };
+
+        Ok(Self { app, controller, file_watcher })
     }
 
     /// Runs the GTK4 application
@@ -96,10 +106,15 @@ impl App {
     /// ```
     pub fn run(self) {
         let controller = self.controller.clone();
+        let file_watcher = self.file_watcher.map(|fw| Rc::new(fw));
 
         // Connect activate signal (called when app starts)
         self.app.connect_activate(move |app| {
-            Self::build_ui(app, controller.clone());
+            Self::build_ui(
+                app,
+                controller.clone(),
+                file_watcher.clone()
+            );
         });
 
         // Run the application (blocks until exit)
@@ -127,7 +142,11 @@ impl App {
     ///
     /// This is called when the application activates. It creates
     /// the window and all components.
-    fn build_ui(app: &Application, controller: Rc<Controller>) {
+    fn build_ui(
+        app: &Application,
+        controller: Rc<Controller>,
+        file_watcher: Option<Rc<FileWatcher>>,
+    ) {
         // Load keybindings
         if let Err(e) = controller.load_keybindings() {
             eprintln!("Failed to load keybindings: {}", e);
@@ -174,6 +193,13 @@ impl App {
         // Set window content
         window.set_child(Some(&main_vbox));
 
+        // Connect conflict resolution button
+        conflict_panel.connect_resolve_button(
+            window.upcast_ref(),
+            conflict_panel.clone(),
+            keybind_list.clone(),
+        );
+
         // Setup import action (needs widgets to refresh UI after import)
         actions::setup_import_action(
             app,
@@ -201,6 +227,32 @@ impl App {
 
         // Update conflict panel
         conflict_panel.refresh();
+
+        // Setup file watcher polling (if available)
+        if let Some(file_watcher) = file_watcher {
+            let controller_clone = controller.clone();
+            let keybind_list_clone = keybind_list.clone();
+            let details_panel_clone = details_panel.clone();
+            let conflict_panel_clone = conflict_panel.clone();
+
+            glib::timeout_add_local(std::time::Duration::from_secs(1), move || {
+                if file_watcher.check_for_changes() {
+                    eprintln!("📝 Config file changed - reloading...");
+
+                    if let Err(e) =
+                        controller_clone.load_keybindings() {
+                        eprintln!("❌ Failed to reload: {}", e);
+                    } else {
+                        let all_bindings = controller_clone.get_keybindings();
+                        keybind_list_clone.update_with_bindings(all_bindings);
+                        details_panel_clone.update_binding(None);
+                        conflict_panel_clone.refresh();
+                        eprintln!("✅ Config reloaded successfully");
+                    }
+                }
+                glib::ControlFlow::Continue
+            });
+        }
 
         // Show window
         window.present();

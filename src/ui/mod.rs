@@ -37,6 +37,7 @@ pub mod controller;
 pub mod components;
 mod actions;
 mod builders;
+pub mod file_watcher;
 
 pub use app::App;
 pub use controller::Controller;

@@ -6,6 +6,7 @@
 use gtk4::{gio, prelude::*, Application, ApplicationWindow, FileDialog};
 use std::rc::Rc;
 use crate::ui::Controller;
+use crate::ui::controller::ImportMode;
 
 /// Sets up the quit action
 ///
@@ -86,15 +87,29 @@ pub fn setup_import_action(
     import_action.connect_activate(move |_, _| {
         eprintln!("📥 Import clicked");
 
+        // Step 1: Show mode selection dialog
+        let mode_choice = show_import_mode_dialog(&window_for_import);
+
+        let chosen_mode = match mode_choice.get() {
+            Some(mode) => mode,
+            None => {
+                eprintln!("🚫 Import cancelled (no mode selected)");
+                return;
+            }
+        };
+
+        eprintln!("📋 Import mode: {:?}", chosen_mode);
+
+        // Step 2: Show file picker
         let file_dialog = FileDialog::builder()
             .title("Import Keybindings")
             .build();
 
-        let controller_clone = controller_for_import.clone();
-        let keybind_list_clone = keybind_list_for_import.clone();
-        let details_panel_clone = details_panel_for_import.clone();
+        let controller_clone     = controller_for_import.clone();
+        let keybind_list_clone   = keybind_list_for_import.clone();
+        let details_panel_clone  = details_panel_for_import.clone();
         let conflict_panel_clone = conflict_panel_for_import.clone();
-        let window_clone = window_for_import.clone();
+        let window_clone         = window_for_import.clone();
 
         file_dialog.open(Some(&window_clone), None::<&gio::Cancellable>, move |result| {
             match result {
@@ -102,7 +117,7 @@ pub fn setup_import_action(
                     let path = file.path().unwrap();
                     eprintln!("📥 Importing from: {:?}", path);
 
-                    match controller_clone.import_from(&path) {
+                    match controller_clone.import_from(&path, chosen_mode) {
                         Ok(()) => {
                             eprintln!("✅ Import successful!");
                             let updated_bindings = controller_clone.get_keybindings();
@@ -119,4 +134,85 @@ pub fn setup_import_action(
     });
 
     app.add_action(&import_action);
+
+    /// Shows a dialog asking user to choose import mode
+    ///
+    /// Returns the chosen ImportMode wrapped in Rc<std::cell::Cell<Option<ImportMode>>>
+    /// so it can be shared across GTK callbacks
+    fn show_import_mode_dialog(parent: &ApplicationWindow) -> Rc<std::cell::Cell<Option<ImportMode>>> {
+        use gtk4::{Box as GtkBox, Button, CheckButton, Label, Orientation, Window};
+        use std::cell::Cell;
+
+        let response = Rc::new(Cell::new(None));
+
+        // Create dialog window
+        let dialog = Window::builder()
+            .title("Import keybindings")
+            .modal(true)
+            .transient_for(parent)
+            .default_width(400)
+            .default_height(200)
+            .build();
+
+        // Main container
+        let vbox = GtkBox::new(Orientation::Vertical, 12);
+        vbox.set_margin_top(20);
+        vbox.set_margin_bottom(20);
+        vbox.set_margin_start(20);
+        vbox.set_margin_end(20);
+
+        // Instruction label
+        let label = Label::new(Some("How would you like to import keybindings?"));
+        vbox.append(&label);
+
+        // Radio button: Replace
+        let replace_radio = CheckButton::with_label("Replace - Delete all existing bindings");
+        vbox.append(&replace_radio);
+
+        // Radio button: Merge
+        let merge_radio = CheckButton::with_label("Merge - Keep existing, add imported (skip duplicates)");
+        merge_radio.set_group(Some(&replace_radio));
+        vbox.append(&merge_radio);
+
+        // Button container
+        let button_box = GtkBox::new(Orientation::Horizontal, 12);
+        button_box.set_halign(gtk4::Align::End);
+        button_box.set_margin_top(20);
+
+        // Cancel button
+        let cancel_button = Button::with_label("Cancel");
+        let dialog_for_cancel = dialog.clone();
+        cancel_button.connect_clicked(move |_| {
+            dialog_for_cancel.close();
+        });
+        button_box.append(&cancel_button);
+
+        // Import button
+        let import_button = Button::with_label("Continue");
+        import_button.add_css_class("suggested.action");
+        let dialog_for_import = dialog.clone();
+        let response_clone = response.clone();
+        let replace_clone = replace_radio.clone();
+        import_button.connect_clicked(move |_| {
+            let mode = if replace_clone.is_active() {
+                ImportMode::Replace
+            } else {
+                ImportMode::Merge
+            };
+            response_clone.set(Some(mode));
+            dialog_for_import.close();
+        });
+        button_box.append(&import_button);
+        vbox.append(&button_box);
+        dialog.set_child(Some(&vbox));
+        dialog.present();
+
+        // Run modal loop
+        let main_context = glib::MainContext::default();
+        while response.get().is_none() && dialog.is_visible() {
+            main_context.iteration(true);
+        }
+
+        response
+    }
 }

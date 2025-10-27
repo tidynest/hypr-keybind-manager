@@ -35,6 +35,14 @@ use std::rc::Rc;
 use crate::config::{ConfigError, ConfigManager};
 use crate::core::{Conflict, ConflictDetector, Keybinding};
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ImportMode {
+    /// Replace all existing bindings with imported ones
+    Replace,
+    /// Merge imported bindings with existing (skip duplicates)
+    Merge,
+}
+
 /// MVC Controller coordinating Model and View
 ///
 /// Holds shared references to Model components and provides
@@ -84,6 +92,11 @@ impl Controller {
         })
     }
 
+    /// Gets the config file path
+    pub fn config_path(&self) -> PathBuf {
+        self.config_manager.borrow().config_path().to_path_buf()
+    }
+    
     /// Loads keybindings from config file
     ///
     /// This reads the config file, parses all keybindings, and rebuilds
@@ -448,7 +461,7 @@ impl Controller {
         Ok(())
     }
 
-    pub fn import_from(&self, import_path: &Path) -> Result<(), String> {
+    pub fn import_from(&self, import_path: &Path, mode: ImportMode) -> Result<(), String> {
         // Read the import file
         let content = read_to_string(import_path)
             .map_err(|e| format!("Failed to read import file: {}", e))?;
@@ -458,9 +471,25 @@ impl Controller {
         let imported_bindings = parse_config_file(&content, import_path)
             .map_err(|e| format!("Failed to parse import file: {}", e))?;
 
-        // Replace current bindings in memory
-        self.keybindings.borrow_mut().clear();
-        self.keybindings.borrow_mut().extend(imported_bindings.clone());
+        // Handle import mode
+        match mode {
+        ImportMode::Replace => {
+            // Replace: Clear all and add imported
+            self.keybindings.borrow_mut().clear();
+            self.keybindings.borrow_mut().extend(imported_bindings.clone());
+        }
+        ImportMode::Merge => {
+            // Merge: Add imported, skip duplicates
+            let mut existing = self.keybindings.borrow_mut();
+            for binding in imported_bindings.clone() {
+                // Check if binding already exists (same key combo)
+                let exists = existing.iter().any(|b| b.key_combo == binding.key_combo);
+                if !exists {
+                    existing.push(binding);
+                }
+            }
+        }
+    }
 
         // Write to config file
         let bindings: Vec<_> = self.keybindings.borrow().clone();

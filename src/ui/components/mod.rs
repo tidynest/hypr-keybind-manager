@@ -31,6 +31,7 @@ mod keybind_list;
 mod search_bar;
 mod details_panel;
 mod backup_dialog;
+pub mod conflict_resolution_dialog;
 
 pub use conflict_panel::ConflictPanel;
 pub use edit_dialog::EditDialog;

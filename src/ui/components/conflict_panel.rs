@@ -52,9 +52,10 @@
 //! ```
 
 use gtk4::prelude::*;
-use gtk4::{Box as GtkBox, Label, Orientation, Revealer};
+use gtk4::{Box as GtkBox, Button, Label, Orientation, Revealer};
 use std::rc::Rc;
 
+use crate::ui::components::KeybindList;
 use crate::ui::Controller;
 
 /// Warning panel that displays when keybinding conflicts are detected
@@ -67,6 +68,8 @@ pub struct ConflictPanel {
     widget: Revealer,
     /// Label displaying the conflict message and count
     message_label: Label,
+    /// Button for accessing conflict resolution dialog
+    resolve_button: Button,
     /// Controller for accessing conflict data
     controller: Rc<Controller>,
 }
@@ -128,12 +131,24 @@ impl ConflictPanel {
             .margin_bottom(5)
             .build();
 
+        let resolve_button = Button::builder()
+            .label("Resolve Conflict(s)")
+            .build();
+
+        // Add label, spacer, and button to warning box
         warning_box.append(&message_label);
+
+        let spacer = GtkBox::new(Orientation::Horizontal, 0);
+        spacer.set_hexpand(true);
+        warning_box.append(&spacer);
+        warning_box.append(&resolve_button);
+
         revealer.set_child(Some(&warning_box));
 
         Self {
             widget: revealer,
             message_label,
+            resolve_button,
             controller,
         }
     }
@@ -167,6 +182,7 @@ impl ConflictPanel {
             // No conflicts - hide the panel
             self.widget.set_reveal_child(false);
             self.message_label.set_label("No conflicts detected");
+            self.resolve_button.set_visible(false);
         } else {
             // Conflicts exist - show the panel with count
             self.widget.set_reveal_child(true);
@@ -179,6 +195,7 @@ impl ConflictPanel {
             };
 
             self.message_label.set_label(&message);
+            self.resolve_button.set_visible(true);
         }
     }
 
@@ -213,5 +230,30 @@ impl ConflictPanel {
     /// Number of conflicts currently detected, or 0 if panel is hidden
     pub fn conflict_count(&self) -> usize {
         self.controller.get_conflicts().len()
+    }
+
+    /// Connects the "Resolve Conflicts" button to open the resolution dialog
+    ///
+    /// # Arguments
+    ///
+    /// * `parent` - Parent window for the modal dialog
+    pub fn connect_resolve_button(
+        &self,
+        parent: &gtk4::Window,
+        conflict_panel: Rc<ConflictPanel>,
+        keybind_list: Rc<KeybindList>
+    ) {
+       let parent_clone = parent.clone();
+        let controller_clone = self.controller.clone();
+
+        self.resolve_button.connect_clicked(move |_| {
+            let dialog = crate::ui::components::conflict_resolution_dialog::ConflictResolutionDialog::new(
+                &parent_clone,
+                controller_clone.clone(),
+                conflict_panel.clone(),
+                keybind_list.clone(),
+            );
+            dialog.show();
+        });
     }
 }

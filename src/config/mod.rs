@@ -149,6 +149,11 @@ impl ConfigManager {
         Ok(fs::read_to_string(&self.config_path)?)
     }
 
+    /// Returns a reference to the configuration file path
+    pub fn config_path(&self) -> &Path {
+        &self.config_path
+    }
+
     #[allow(dead_code)]
     fn create_timestamped_backup(&self) -> Result<PathBuf, ConfigError> {
         // Read the current config content
