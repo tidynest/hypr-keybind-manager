@@ -481,4 +481,4 @@ The author thanks:
 ---
 
 **Last Updated**: 2025-10-27
-**Version**: 1.0.7
+**Version**: 1.1.0
