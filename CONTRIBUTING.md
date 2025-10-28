@@ -303,5 +303,5 @@ Even though direct contributions aren't being accepted yet, your **feedback, bug
 
 ---
 
-**Last Updated**: 2025-10-19
-**Version**: 1.0.4
+**Last Updated**: 2025-10-27
+**Version**: 1.0.7

@@ -574,7 +574,7 @@ impl Controller {
     /// ```no_run
     /// # use hypr_keybind_manager::ui::Controller;
     /// # use std::path::PathBuf;
-    /// # let controller = Controller::new(PathBuf::from("hyprland.conf"))?;
+    /// # let controller = Controller::new(PathBuf::from("hyprland.conf")).unwrap();
     /// // User made changes via add/update/delete...
     /// controller.apply_to_hyprland()?;  // Apply to running Hyprland
     /// # Ok::<(), String>(())

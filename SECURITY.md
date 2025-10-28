@@ -469,7 +469,7 @@ cargo build --release
 The author thanks:
 - **[Rust](https://www.rust-lang.org/) Security Team** for language-level memory safety
 - **[OWASP](https://owasp.org/)** for security testing methodology
-- **[Hyprland](https://hyprland.org/) Community** for security discussions
+- **[Hyprland](https://hypr.land/) Community** for security discussions
 
 ---
 
@@ -480,5 +480,5 @@ The author thanks:
 
 ---
 
-**Last Updated**: 2025-10-19
+**Last Updated**: 2025-10-27
 **Version**: 1.0.7

@@ -12,6 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Dangerous command detection tests (Layer 2 security)
+//!
+//! Contains test suites for pattern-based danger detection:
+//! - Pattern tests (critical patterns, dangerous commands, safe whitelist)
+//! - Entropy tests (Shannon entropy, base64/hex encoding detection)
+//! - Integration tests (end-to-end danger assessment)
+
 #[cfg(test)]
 mod patterns_tests;
 

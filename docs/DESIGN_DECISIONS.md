@@ -568,25 +568,32 @@ Correct order: Hex check matches → correctly classified as hex
 
 ### Atomic Write Pattern
 
-**File**: `src/config/mod.rs:150-200`
+**File**: `src/config/transaction.rs:258-284`
 
 **Decision**: Use `atomic-write-file` crate (temp file + atomic rename).
 
 ```rust
-pub fn write_bindings(&self, bindings: &[Keybinding]) -> Result<(), ConfigError> {
-    // 1. Create backup
-    self.create_backup()?;
+pub fn commit(self, new_content: &str) -> Result<(), ConfigError> {
+    use atomic_write_file::AtomicWriteFile;
 
-    // 2. Write to temporary file
-    let tmp_path = self.config_path.with_extension("tmp");
-    atomic_write_file::write_file(&tmp_path, content)?;
+    // 1. Open file for atomic writing (internally creates temp file)
+    let mut file = AtomicWriteFile::options()
+        .open(&self.manager.config_path)
+        .map_err(|e| ConfigError::WriteFailed(e.to_string()))?;
 
-    // 3. Atomic rename (OS guarantee)
-    fs::rename(&tmp_path, &self.config_path)?;
+    // 2. Write content to temp file
+    file.write_all(new_content.as_bytes())
+        .map_err(|e| ConfigError::WriteFailed(e.to_string()))?;
+
+    // 3. Commit atomically (internally calls fsync + rename)
+    file.commit()
+        .map_err(|e| ConfigError::WriteFailed(e.to_string()))?;
 
     Ok(())
 }
 ```
+
+**Note**: The `atomic-write-file` crate handles the temp-file-then-rename pattern internally. The `commit()` method triggers fsync() followed by atomic rename(), ensuring either the complete new file exists or the original file remains untouched.
 
 **Rationale**:
 - **Atomicity**: OS guarantees rename is atomic (POSIX standard)
@@ -871,6 +878,56 @@ match response.get() {
    - Unsafe, not thread-safe, violates Rust safety
 
 **Key Insight**: `Cell` is perfect for **simple shared state** where you need interior mutability but don't need borrowing.
+
+---
+
+### Choosing Between Cell and RefCell
+
+**Decision Rule**: Use `Cell<T>` when possible, `RefCell<T>` when necessary.
+
+**When to Use Cell<T>**:
+- `T` is `Copy` type (e.g., integers, bools, enums)
+- You only need to replace the entire value (not modify parts)
+- You want zero runtime overhead
+
+**Example**: `Rc<Cell<Option<DialogResponse>>>`
+```rust
+response.set(Some(DialogResponse::Save));  // Replace entire value
+let value = response.get();                 // Copy out the value
+```
+
+**When to Use RefCell<T>**:
+- `T` is a complex type that needs borrowing
+- You need to access or modify parts of the value
+- You need to call methods on the borrowed value
+
+**Example**: `Rc<RefCell<Option<Keybinding>>>`
+```rust
+// Borrow to check if value exists
+if current_binding.borrow().is_some() { ... }
+
+// Borrow to clone the entire value
+let binding = current_binding.borrow().as_ref().cloned();
+
+// Borrow mutably to update fields
+current_binding.borrow_mut().as_mut().unwrap().dispatcher = "exec".to_string();
+```
+
+**Trade-offs**:
+
+| Aspect | Cell<T> | RefCell<T> |
+|--------|---------|------------|
+| **Performance** | Zero overhead | Runtime borrow checking |
+| **Type constraint** | T must be Copy | Any T |
+| **Access pattern** | Replace entire value | Borrow and modify |
+| **Safety** | Cannot panic | Can panic if misused |
+| **Use case** | Simple shared state | Complex shared state |
+
+**Implementation in This Project**:
+- `Cell`: Used for dialog responses (`src/ui/components/edit_dialog.rs:182`)
+- `RefCell`: Used for current keybinding (`src/ui/components/details_panel.rs:59`)
+
+**Key Insight**: Choose `Cell` by default for simplicity and performance. Only upgrade to `RefCell` when you need borrowing semantics.
 
 ---
 

@@ -263,6 +263,7 @@ flowchart TD
     AddToMap --> LoopBindings
 
     LoopBindings -->|Done| Filter[Filter: len&#40;&#41; &gt; 1]
+    Filter --> Conflicts{Has conflicts?}
 
     Conflicts -->|Yes| ShowBanner[Show conflict panel<br/>with details]
     Conflicts -->|No| HideBanner[Hide conflict panel]
@@ -538,7 +539,7 @@ pub struct ConfigValidator {
 pub struct ValidationReport {
     pub issues:             Vec<ValidationIssue>,
     pub highest_danger:     Vec<DangerLevel>,
-    pub dangerour_command:  Vec<(usize, DangerAssessment)>,
+    pub dangerous_commands: Vec<(usize, DangerAssessment)>,
 }
 ```
 
@@ -757,5 +758,5 @@ For implementation details, see [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md).
 
 ---
 
-**Last Updated**: 2025-10-19
+**Last Updated**: 2025-10-27
 **Version**: 1.0.7

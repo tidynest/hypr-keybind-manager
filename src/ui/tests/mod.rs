@@ -12,5 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! UI module tests
+//!
+//! Contains test suites for GTK4 user interface components:
+//! - Controller tests (MVC controller behaviour, state management)
+
 #[cfg(test)]
 mod controller_tests;
