@@ -13,12 +13,25 @@ Thumbs.db
 *.swp
 *.swo
 
-# Claude
-/.claude
-/CLAUDE.md
-
 # Random files (debug, notes, etc.)
 /output.log
 
 # GTK Inspector
 /docs/GTK_INSPECTOR_GUIDE.md
+
+# Test backup files (auto-generated during testing)
+/test-data/backups/*.conf.*
+
+# Additional editors
+.vscode/
+*.code-workspace
+
+# Git/patch artifacts
+*.patch
+*.diff
+*.orig
+*.rej
+
+# Additional temporary files
+*.bak
+*.tmp

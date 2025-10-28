@@ -413,91 +413,99 @@ The application uses a **[HashMap](https://doc.rust-lang.org/std/collections/str
 
 ```
 hypr-keybind-manager/
-├── README.md                      # Project overview and documentation hub (759 lines)
-├── LICENSE                        # Apache 2.0 license (201 lines)
-├── CONTRIBUTING.md                # Contribution guidelines (307 lines)
-├── SECURITY.md                    # Security policy and threat model (484 lines)
-├── Cargo.toml                     # Rust dependencies and metadata (58 lines)
-├── build.rs                       # Build-time code generation (50 lines)
-├── .cargo/                        # Project-specific cargo configuration
-│   ├── config.toml                # Custom runner for filtered output (7 lines)
-│   └── runner.sh                  # Output filter script (5 lines)
-├── scripts/                       # Development and release scripts
-│   ├── sync-version.sh            # Sync version numbers across docs (33 lines)
-│   └── tag-release.sh             # Automated release tagging (79 lines)
-├── docs/                          # Technical documentation
-│   ├── ARCHITECTURE.md            # System design and data flow (762 lines)
-│   ├── DESIGN_DECISIONS.md        # Rationale for architectural choices (1082 lines)
-│   ├── ENTROPY_DETECTION.md       # Shannon entropy deep-dive (944 lines)
-│   └── GTK_INSPECTOR_GUIDE.md     # GTK debugging guide (215 lines)
-├── test-data/                     # Test configuration files
-│   ├── hyprland-test.conf         # Safe test config (22 lines)
-│   └── backups/                   # Test backup files
-├── test-file-watcher.sh           # File watcher test script (315 lines)
-└── src/                           # Source code (~5,500 lines total)
-    ├── bin/                       # Binary utilities
-    │   ├── measure_entropy.rs     # Entropy measurement tool (47 lines)
-    │   └── test_manual.rs         # Manual testing utility (85 lines)
-    ├── main.rs                    # CLI entry point (270 lines)
-    ├── lib.rs                     # Library root (99 lines)
-    ├── config/                    # Config file I/O (~1,970 lines)
-    │   ├── mod.rs                 # ConfigManager (reads/writes with backups) (576 lines)
-    │   ├── validator.rs           # Config validation (Layer 3) (293 lines)
-    │   ├── danger/                # Dangerous command detection (Layer 2) (~935 lines)
-    │   │   ├── mod.rs             # DangerDetector core (409 lines)
-    │   │   ├── types.rs           # DangerLevel, DangerAssessment (41 lines)
-    │   │   ├── patterns.rs        # Pattern builders (186 lines)
-    │   │   ├── entropy.rs         # Shannon entropy detection (299 lines)
-    │   │   └── tests/             # Modular test suite
-    │   └── tests/                 # Config validation tests (164 lines)
-    │       ├── mod.rs             # Test module organization (28 lines)
-    │       └── validator_tests.rs # Validator unit tests (136 lines)
-    ├── core/                      # Business logic (~1,295 lines)
-    │   ├── types.rs               # Keybinding, KeyCombo, Modifier, BindType (209 lines)
-    │   ├── parser.rs              # Parse Hyprland config syntax (nom) (371 lines)
-    │   ├── conflict.rs            # ConflictDetector engine (HashMap) (105 lines)
-    │   ├── validator.rs           # Injection prevention (Layer 1) (172 lines)
-    │   ├── mod.rs                 # Core module exports (39 lines)
-    │   └── tests/                 # Core tests (extracted) (399 lines)
-    │       ├── mod.rs             # Test module organization (27 lines)
-    │       ├── conflict_tests.rs  # Conflict detection tests (141 lines)
-    │       ├── validator_tests.rs # Validation tests (152 lines)
-    │       └── types_tests.rs     # Type system tests (79 lines)
-    ├── ui/                        # GTK4 GUI (MVC pattern) (~3,270 lines)
-    │   ├── app.rs                 # Main window coordination (208 lines)
-    │   ├── actions.rs             # GTK action setup (121 lines)
-    │   ├── builders/              # UI builder modules (483 lines total)
-    │   │   ├── mod.rs             # Module exports (7 lines)
-    │   │   ├── header.rs          # Header bar with menu (32 lines)
-    │   │   ├── layout.rs          # Main layout construction (104 lines)
-    │   │   └── handlers.rs        # Event handler wiring (340 lines)
-    │   ├── controller.rs          # MVC Controller (mediates Model ↔ View) (590 lines)
-    │   ├── file_watcher.rs        # Live config file monitoring (57 lines)
-    │   ├── style.css              # GTK CSS styling (95 lines)
-    │   ├── mod.rs                 # UI module exports (45 lines)
-    │   ├── components/            # Reusable UI widgets (1,821 lines)
-    │   │   ├── keybind_list.rs    # Scrollable list (216 lines)
-    │   │   ├── search_bar.rs      # Real-time search (69 lines)
-    │   │   ├── conflict_panel.rs  # Warning banner (257 lines)
-    │   │   ├── details_panel.rs   # Shows selected binding (450 lines)
-    │   │   ├── edit_dialog.rs     # Edit/Add dialog (411 lines)
-    │   │   ├── backup_dialog.rs   # Backup management (378 lines)
-    │   │   └── mod.rs             # Component exports (40 lines)
-    │   └── tests/                 # UI component tests (extracted) (150 lines)
-    │       ├── mod.rs             # Test module organization (21 lines)
-    │       └── controller_tests.rs # Controller unit tests (129 lines)
-    └── ipc/                       # Hyprland IPC integration (~590 lines)
-        ├── mod.rs                 # HyprlandClient (add/remove/reload bindings) (389 lines)
-        └── tests/                 # IPC tests (extracted) (201 lines)
-            └── mod.rs             # IPC integration tests (201 lines)
+├── README.md                                   # Project overview and documentation hub (833 lines)
+├── LICENSE                                     # Apache 2.0 license (201 lines)
+├── CONTRIBUTING.md                             # Contribution guidelines (307 lines)
+├── SECURITY.md                                 # Security policy and threat model (484 lines)
+├── Cargo.toml                                  # Rust dependencies and metadata (58 lines)
+├── build.rs                                    # Build-time code generation (50 lines)
+├── .cargo/                                     # Project-specific cargo configuration
+│   ├── config.toml                             # Custom runner for filtered output (7 lines)
+│   └── runner.sh                               # Output filter script (5 lines)
+├── scripts/                                    # Development and release scripts
+│   ├── sync-version.sh                         # Sync version numbers across docs (33 lines)
+│   └── tag-release.sh                          # Automated release tagging (79 lines)
+├── docs/                                       # Technical documentation
+│   ├── ARCHITECTURE.md                         # System design and data flow (762 lines)
+│   ├── DESIGN_DECISIONS.md                     # Rationale for architectural choices (1082 lines)
+│   ├── ENTROPY_DETECTION.md                    # Shannon entropy deep-dive (944 lines)
+│   └── GTK_INSPECTOR_GUIDE.md                  # GTK debugging guide (215 lines)
+├── test-data/                                  # Test configuration files
+│   ├── hyprland-test.conf                      # Safe test config (22 lines)
+│   └── backups/                                # Test backup files
+├── test-file-watcher.sh                        # File watcher test script (315 lines)
+├── test-sync-version.sh                        # Version sync test script (308 lines)
+├── test-tag-release.sh                         # Release automation test script (394 lines)
+└── src/                                        # Source code (~5,500 lines total)
+    ├── bin/                                    # Binary utilities
+    │   ├── measure_entropy.rs                  # Entropy measurement tool (47 lines)
+    │   └── test_manual.rs                      # Manual testing utility (85 lines)
+    ├── main.rs                                 # CLI entry point (270 lines)
+    ├── lib.rs                                  # Library root (99 lines)
+    ├── config/                                 # Config file I/O (~4,240 lines)
+    │   ├── mod.rs                              # ConfigManager (reads/writes with backups) (576 lines)
+    │   ├── error.rs                            # ConfigError types (60 lines)
+    │   ├── transaction.rs                      # Atomic write transactions (357 lines)
+    │   ├── validator.rs                        # Config validation (Layer 3) (293 lines)
+    │   ├── danger/                             # Dangerous command detection (Layer 2) (~935 lines)
+    │   │   ├── mod.rs                          # DangerDetector core (409 lines)
+    │   │   ├── types.rs                        # DangerLevel, DangerAssessment (41 lines)
+    │   │   ├── patterns.rs                     # Pattern builders (186 lines)
+    │   │   ├── entropy.rs                      # Shannon entropy detection (299 lines)
+    │   │   └── tests/                          # Modular test suite (758 lines)
+    │   └── tests/                              # Config tests (1,261 lines)
+    │       ├── mod.rs                          # Test module organization (28 lines)
+    │       ├── config_manager_tests.rs         # ConfigManager tests (539 lines)
+    │       ├── transaction_tests.rs            # Transaction tests (558 lines)
+    │       └── validator_tests.rs              # Validator unit tests (136 lines)
+    ├── core/                                   # Business logic (~1,295 lines)
+    │   ├── types.rs                            # Keybinding, KeyCombo, Modifier, BindType (209 lines)
+    │   ├── parser.rs                           # Parse Hyprland config syntax (nom) (371 lines)
+    │   ├── conflict.rs                         # ConflictDetector engine (HashMap) (105 lines)
+    │   ├── validator.rs                        # Injection prevention (Layer 1) (172 lines)
+    │   ├── mod.rs                              # Core module exports (39 lines)
+    │   └── tests/                              # Core tests (extracted) (399 lines)
+    │       ├── mod.rs                          # Test module organization (27 lines)
+    │       ├── conflict_tests.rs               # Conflict detection tests (141 lines)
+    │       ├── validator_tests.rs              # Validation tests (152 lines)
+    │       └── types_tests.rs                  # Type system tests (79 lines)
+    ├── ui/                                     # GTK4 GUI (MVC pattern) (~3,983 lines)
+    │   ├── app.rs                              # Main window coordination (262 lines)
+    │   ├── actions.rs                          # GTK action setup (261 lines)
+    │   ├── builders/                           # UI builder modules (556 lines total)
+    │   │   ├── mod.rs                          # Module exports (28 lines)
+    │   │   ├── header.rs                       # Header bar with menu (57 lines)
+    │   │   ├── layout.rs                       # Main layout construction (118 lines)
+    │   │   └── handlers.rs                     # Event handler wiring (353 lines)
+    │   ├── controller.rs                       # MVC Controller (mediates Model ↔ View) (590 lines)
+    │   ├── file_watcher.rs                     # Live config file monitoring (57 lines)
+    │   ├── style.css                           # GTK CSS styling (95 lines)
+    │   ├── mod.rs                              # UI module exports (45 lines)
+    │   ├── components/                         # Reusable UI widgets (1,967 lines)
+    │   │   ├── keybind_list.rs                 # Scrollable list (216 lines)
+    │   │   ├── search_bar.rs                   # Real-time search (69 lines)
+    │   │   ├── conflict_panel.rs               # Warning banner (257 lines)
+    │   │   ├── conflict_resolution_dialog.rs   # Merge/replace conflict resolver (146 lines)
+    │   │   ├── details_panel.rs                # Shows selected binding (450 lines)
+    │   │   ├── edit_dialog.rs                  # Edit/Add dialog (411 lines)
+    │   │   ├── backup_dialog.rs                # Backup management (378 lines)
+    │   │   └── mod.rs                          # Component exports (40 lines)
+    │   └── tests/                              # UI component tests (extracted) (150 lines)
+    │       ├── mod.rs                          # Test module organization (21 lines)
+    │       └── controller_tests.rs             # Controller unit tests (129 lines)
+    └── ipc/                                    # Hyprland IPC integration (~590 lines)
+        ├── mod.rs                              # HyprlandClient (add/remove/reload bindings) (389 lines)
+        └── tests/                              # IPC tests (extracted) (201 lines)
+            └── mod.rs                          # IPC integration tests (201 lines)
 ```
 
 For detailed architecture documentation, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ### Testing
 
+**Rust Tests (166 passing, 7 ignored):**
 ```bash
-# Run all tests (166 passing, 7 ignored)
+# Run all Rust tests
 cargo test
 
 # Run with output
@@ -511,9 +519,18 @@ cargo clippy
 
 # Format code
 cargo fmt
+```
 
-# Sync version numbers across documentation
-./scripts/sync-version.sh
+**Shell Script Tests (68 passing, 100% pass rate):**
+```bash
+# Test file watcher functionality (13 test cases)
+./test-file-watcher.sh
+
+# Test version synchronization (20 test cases)
+./test-sync-version.sh
+
+# Test release automation (35 test cases)
+./test-tag-release.sh
 ```
 
 ### Version Management
@@ -602,15 +619,23 @@ git push origin main && git push origin v1.1.0
 
 ## Roadmap
 
-### Current Status: Phase 7.2 Complete ✅ (v1.0.7)
+### Current Status: Phase 7.5 Complete ✅ (v1.0.7) - Ready for v1.1.0 Release
 
-All planned features are implemented and production-ready. Documentation is now 100% verified and accurate:
+All planned features are implemented and production-ready. Quality audit (Phases 7.1-7.5) is 100% complete:
 
+**Features:**
 - ✅ **Export/Import**: Replace and Merge modes for sharing configs
 - ✅ **Conflict Resolution UI**: Advanced visual conflict resolution
 - ✅ **Live Hyprland IPC**: `hyprctl reload` integration (no restart needed)
 - ✅ **Live File Monitoring**: Automatic UI refresh on external config changes
 - ✅ **Three-Layer Security**: Complete validation system
+
+**Quality Audit (Phases 7.1-7.5):**
+- ✅ **Phase 7.1**: Code comments quality audit (100% documentation coverage)
+- ✅ **Phase 7.2**: Documentation files audit (98 issues fixed, 100% accurate)
+- ✅ **Phase 7.3**: Project organisation cleanup (5 files deleted, 11 .gitignore patterns added)
+- ✅ **Phase 7.4**: Test coverage audit (2 scripts identified requiring tests)
+- ✅ **Phase 7.5**: Modular test creation (68 shell tests, 100% pass rate)
 
 ### Future Enhancements (Post v1.1.0)
 
@@ -771,20 +796,24 @@ This project stands on the shoulders of giants. Special thanks to:
 
 ### Codebase
 - **Primary Language**: Rust 1.83+
-- **Total Project Files**: 51 Rust files + 8 Markdown files + 4 shell scripts + 5 config files
-- **Total Lines of Code**: 16,222 lines across entire project
+- **Total Project Files**: 51 Rust files + 6 Markdown files + 6 shell scripts + 4 config files
+- **Total Lines of Code**: 16,493 lines across entire project
   - Rust source code: 10,564 lines (51 .rs files: 36 production + 15 test modules)
-  - Documentation: 5,044 lines (8 .md files)
-  - Shell scripts: 432 lines (4 .sh files)
+  - Documentation: 4,613 lines (6 .md files: README, CONTRIBUTING, SECURITY, ARCHITECTURE, DESIGN_DECISIONS, ENTROPY_DETECTION)
+  - Shell scripts: 1,134 lines (6 .sh files: 3 test scripts + 2 automation scripts + 1 utility script)
   - Configuration: 182 lines (.toml, .css, .conf files)
 - **Production Code**: 7,795 lines (Rust code excluding tests)
 - **Test Code**: 2,769 lines (26% of Rust code, 15 test modules)
 - **Documentation Coverage**: 100% of public APIs with examples
 
 ### Quality Metrics
-- **Test Coverage**: 166 passing tests (124 unit + 42 doc tests)
-  - 7 edge cases marked as ignored
-  - 0 failures
+- **Test Coverage**:
+  - Rust tests: 166 passing (124 unit + 42 doc tests)
+    - 7 edge cases marked as ignored
+    - 0 failures
+  - Shell script tests: 68 passing (3 test scripts covering automation and file monitoring)
+    - 100% pass rate
+    - 0 failures
 - **Security**: 3-layer validation system (injection prevention, danger detection, entropy analysis)
 - **Performance**: O(1) conflict detection, <5μs for 500 bindings
 - **Dependencies**: 29 direct dependencies, all security-audited
