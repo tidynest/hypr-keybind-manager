@@ -15,7 +15,15 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install GTK4 dependencies
-        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libgtk4-layer-shell-dev
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev meson ninja-build libwayland-dev wayland-protocols
+
+      - name: Build gtk4-layer-shell from source
+        run: |
+          git clone https://github.com/wmww/gtk4-layer-shell.git
+          cd gtk4-layer-shell
+          meson setup build -Dprefix=/usr
+          meson compile -C build
+          sudo meson install -C build
 
       - name: Build release binary
         run: cargo build --release
