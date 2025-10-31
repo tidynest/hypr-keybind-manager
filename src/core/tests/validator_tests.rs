@@ -12,7 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::core::{types::{BindType, KeyCombo, Keybinding, Modifier}, validator::{check_shell_metacharacters, validate_dispatcher, validate_key, validate_keybinding, ValidationError}};
+use crate::core::{
+    types::{BindType, KeyCombo, Keybinding, Modifier},
+    validator::{
+        check_shell_metacharacters, validate_dispatcher, validate_key, validate_keybinding,
+        ValidationError,
+    },
+};
 
 #[test]
 fn test_valid_dispatchers() {
@@ -32,7 +38,9 @@ fn test_dispatcher_case_insensitive() {
 fn test_invalid_dispatcher() {
     assert_eq!(
         validate_dispatcher("evil_command"),
-        Err(ValidationError::InvalidDispatcher("evil_command".to_string()))
+        Err(ValidationError::InvalidDispatcher(
+            "evil_command".to_string()
+        ))
     );
     assert_eq!(
         validate_dispatcher("rm"),
@@ -149,4 +157,3 @@ fn test_validates_complete_binding_shell_injection() {
         Err(ValidationError::ShellMetacharacters(_))
     ));
 }
-

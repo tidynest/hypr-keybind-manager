@@ -26,13 +26,10 @@
 //!   └─ Connects components to Controller
 //! ```
 
-use gtk4::{prelude::*, gdk, Application, ApplicationWindow, CssProvider, Paned};
+use gtk4::{gdk, prelude::*, Application, ApplicationWindow, CssProvider, Paned};
 use std::{path::PathBuf, rc::Rc};
 
-use crate::ui::actions;
-use crate::ui::builders;
-use crate::ui::Controller;
-use crate::ui::file_watcher::FileWatcher;
+use crate::ui::{actions, builders, file_watcher::FileWatcher, Controller};
 
 /// GTK4 Application for keybinding management
 pub struct App {
@@ -86,7 +83,11 @@ impl App {
                 .ok()
         };
 
-        Ok(Self { app, controller, file_watcher })
+        Ok(Self {
+            app,
+            controller,
+            file_watcher,
+        })
     }
 
     /// Runs the GTK4 application
@@ -109,11 +110,7 @@ impl App {
 
         // Connect activate signal (called when app starts)
         self.app.connect_activate(move |app| {
-            Self::build_ui(
-                app,
-                controller.clone(),
-                file_watcher.clone()
-            );
+            Self::build_ui(app, controller.clone(), file_watcher.clone());
         });
 
         // Run the application (blocks until exit)
@@ -208,7 +205,7 @@ impl App {
             details_panel.clone(),
             conflict_panel.clone(),
         );
-        
+
         // Setup apply to Hyprland action
         actions::setup_apply_action(app, controller.clone());
 
@@ -241,8 +238,7 @@ impl App {
                 if file_watcher.check_for_changes() {
                     eprintln!("📝 Config file changed - reloading...");
 
-                    if let Err(e) =
-                        controller_clone.load_keybindings() {
+                    if let Err(e) = controller_clone.load_keybindings() {
                         eprintln!("❌ Failed to reload: {}", e);
                     } else {
                         let all_bindings = controller_clone.get_keybindings();

@@ -39,7 +39,7 @@ pub fn build_critical_patterns() -> Vec<Regex> {
         Regex::new(r"dd\s+.*of=/dev/(sd[a-z]|nvme\d+n\d+)")
             .expect("dd to disk pattern should be valid regex"),
         // Pattern 2: Fork bomb
-        Regex::new(r":\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:")
+        Regex::new(r":\(\)\s*\{\s*:\s*\|\s*:\s*&\s*}\s*;\s*:")
             .expect("fork bomb pattern should be valid regex"),
     ]
 }
@@ -63,21 +63,32 @@ pub fn build_critical_patterns() -> Vec<Regex> {
 pub fn build_dangerous_commands() -> HashSet<String> {
     vec![
         // File destruction (not root, but still bad)
-        "shred", "srm", "wipe",
+        "shred",
+        "srm",
+        "wipe",
         // Permission and ownership changes
-        "chmod", "chown",
+        "chmod",
+        "chown",
         // Privilege escalation
-        "sudo", "doas", "su", "pkexec",
+        "sudo",
+        "doas",
+        "su",
+        "pkexec",
         // Disk operations
-        "mkfs", "fdisk", "parted", "wipefs",
+        "mkfs",
+        "fdisk",
+        "parted",
+        "wipefs",
         // Firewall manipulation
-        "iptables", "ufw", "firewalld",
+        "iptables",
+        "ufw",
+        "firewalld",
         // System service control (can disable security services)
         "systemctl",
     ]
-        .into_iter()
-        .map(String::from)
-        .collect()
+    .into_iter()
+    .map(String::from)
+    .collect()
 }
 
 /// Builds HashSet of suspicious commands (Round 2)
@@ -98,31 +109,16 @@ pub fn build_dangerous_commands() -> HashSet<String> {
 pub fn build_suspicious_commands() -> HashSet<String> {
     vec![
         // Encoding tools (used to obfuscate payloads)
-        "base64",
-        "xxd",
-        "uuencode",
-        // Download tools (often download malware)
-        "wget",
-        "curl",
-        "fetch",
-        "aria2c",
+        "base64", "xxd", "uuencode", // Download tools (often download malware)
+        "wget", "curl", "fetch", "aria2c",
         // Background execution (malware persistence)
-        "nohup",
-        "disown",
-        "screen",
-        "tmux",
-        // Obfuscation and dynamic execution
-        "eval",
-        "exec",
-        "source",
-        // Network tools (used in reverse shells)
-        "nc",
-        "netcat",
-        "ncat",
+        "nohup", "disown", "screen", "tmux", // Obfuscation and dynamic execution
+        "eval", "exec", "source", // Network tools (used in reverse shells)
+        "nc", "netcat", "ncat",
     ]
-        .into_iter()
-        .map(String::from)
-        .collect()
+    .into_iter()
+    .map(String::from)
+    .collect()
 }
 
 /// Builds HashSet of safe commands (Round 2)
@@ -181,7 +177,7 @@ pub fn build_safe_commands() -> HashSet<String> {
         "spotify",
         "obs",
     ]
-        .into_iter()
-        .map(String::from)
-        .collect()
+    .into_iter()
+    .map(String::from)
+    .collect()
 }

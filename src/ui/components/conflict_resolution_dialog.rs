@@ -22,8 +22,10 @@
 use gtk4::{prelude::*, Align, Box as GtkBox, Button, Label, Orientation, ScrolledWindow, Window};
 use std::rc::Rc;
 
-use crate::ui::Controller;
-use crate::ui::components::{ConflictPanel, KeybindList};
+use crate::ui::{
+    components::{ConflictPanel, KeybindList},
+    Controller,
+};
 
 pub struct ConflictResolutionDialog {
     window: Window,
@@ -34,7 +36,7 @@ impl ConflictResolutionDialog {
         parent: &Window,
         controller: Rc<Controller>,
         conflict_panel: Rc<ConflictPanel>,
-        keybind_list: Rc<KeybindList>
+        keybind_list: Rc<KeybindList>,
     ) -> Self {
         let window = Window::builder()
             .title("Resolve Conflicts")
@@ -115,8 +117,8 @@ impl ConflictResolutionDialog {
                         keybind_list_clone.update_with_bindings(all_bindings);
                         conflict_panel_clone.refresh();
                         window_clone.close();
-                        }
-                    });
+                    }
+                });
 
                 group_box.append(&binding_row);
             }

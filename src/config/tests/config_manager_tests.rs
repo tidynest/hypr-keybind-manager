@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::super::*;
-use std::{fs, path::PathBuf, thread, time::Duration};
+use std::{fs, os::unix::fs::symlink, path::PathBuf, thread, time::Duration};
 use tempfile::TempDir;
 
 /// Helper: Creates a temporary config file for testing.
@@ -22,8 +22,9 @@ fn create_test_config() -> (TempDir, PathBuf) {
     let config_path = temp_dir.path().join("hyprland.conf");
     fs::write(
         &config_path,
-        "# Test config\nbind = SUPER, Q, exec, firefox\n")
-        .unwrap();
+        "# Test config\nbind = SUPER, Q, exec, firefox\n",
+    )
+    .unwrap();
     (temp_dir, config_path)
 }
 
@@ -65,8 +66,14 @@ fn test_read_config() {
     assert!(content.is_ok(), "Should read config successfully");
 
     let content = content.unwrap();
-    assert!(content.contains("Test config"), "Should contain test content");
-    assert!(content.contains("bind = SUPER"), "Should contain keybinding");
+    assert!(
+        content.contains("Test config"),
+        "Should contain test content"
+    );
+    assert!(
+        content.contains("bind = SUPER"),
+        "Should contain keybinding"
+    );
 }
 
 #[test]
@@ -100,7 +107,6 @@ fn test_symlink_warning() {
 
     #[cfg(unix)]
     {
-        use std::os::unix::fs::symlink;
         symlink(&real_config, &link_config).unwrap();
 
         // Should succeed despite being a symlink
@@ -153,10 +159,7 @@ fn test_create_timestamped_backup() {
     let timestamp = parts[2];
 
     // Validate timestamp by parsing with chrono
-    let parsed = chrono::NaiveDateTime::parse_from_str(
-        timestamp,
-        "%Y-%m-%d_%H%M%S",
-    );
+    let parsed = chrono::NaiveDateTime::parse_from_str(timestamp, "%Y-%m-%d_%H%M%S");
     assert!(
         parsed.is_ok(),
         "Timestamp should be valid chrono format: {}",
@@ -192,14 +195,8 @@ fn test_multiple_backups_dont_overwrite() {
     assert!(backup2.exists(), "Second backup should exist");
 
     // Verify: They're different files
-    assert_eq!(
-        fs::read_to_string(&backup1).unwrap(),
-        "original content"
-    );
-    assert_eq!(
-        fs::read_to_string(&backup2).unwrap(),
-        "modified content"
-    );
+    assert_eq!(fs::read_to_string(&backup1).unwrap(), "original content");
+    assert_eq!(fs::read_to_string(&backup2).unwrap(), "modified content");
 }
 
 #[test]
@@ -272,7 +269,11 @@ fn test_list_backups_ignores_invalid_files() {
     // Create some invalid files in backup directory
     fs::write(backup_dir.join("random.txt"), "not a backup").unwrap();
     fs::write(backup_dir.join("hyprland.conf.notimestamp"), "wrong format").unwrap();
-    fs::write(backup_dir.join("hyprland.conf.2025-99-99_invalid"), "bad date").unwrap();
+    fs::write(
+        backup_dir.join("hyprland.conf.2025-99-99_invalid"),
+        "bad date",
+    )
+    .unwrap();
 
     // List backups
     let backups = manager.list_backups().unwrap();
@@ -375,7 +376,10 @@ fn test_restore_backup_basic() {
 
     // Verify backup contains original content
     let backup_content = fs::read_to_string(&backup_path).unwrap();
-    assert_eq!(backup_content, original_content, "Backup should contain original content");
+    assert_eq!(
+        backup_content, original_content,
+        "Backup should contain original content"
+    );
 
     // Modify config to something different
     let modified_content = "# Modified configuration\nbind = SUPER, W, exec, firefox\n";
@@ -390,7 +394,10 @@ fn test_restore_backup_basic() {
 
     // Verify config is restored to original content
     let restored = manager.read_config().unwrap();
-    assert_eq!(restored, original_content, "Config should be restored to original content");
+    assert_eq!(
+        restored, original_content,
+        "Config should be restored to original content"
+    );
 }
 
 #[test]
@@ -415,20 +422,30 @@ fn test_restore_creates_safety_backup() {
 
     // Count backups BEFORE restore (should be 1 - just first_backup)
     let backups_before = manager.list_backups().unwrap();
-    assert_eq!(backups_before.len(), 1, "Should have 1 backup after restore");
+    assert_eq!(
+        backups_before.len(),
+        1,
+        "Should have 1 backup after restore"
+    );
 
     // Restore from first backup / Create safety backup
     manager.restore_backup(&first_backup).unwrap();
 
     // Count backups AFTER restore (should be 2 - first_backup + safety)
     let backups_after = manager.list_backups().unwrap();
-    assert_eq!(backups_after.len(), 2, "Should have 2 backups after restore (original + safety)");
+    assert_eq!(
+        backups_after.len(),
+        2,
+        "Should have 2 backups after restore (original + safety)"
+    );
 
     // Verify the safety backup contains the "current content" we had before restore
-    let safety_backup = &backups_after[0];  // Most recent backup
+    let safety_backup = &backups_after[0]; // Most recent backup
     let safety_content = fs::read_to_string(safety_backup).unwrap();
-    assert_eq!(safety_content, current_content,
-               "Safety backup should contain content from before restore");
+    assert_eq!(
+        safety_content, current_content,
+        "Safety backup should contain content from before restore"
+    );
 }
 
 #[test]
@@ -447,24 +464,36 @@ fn test_restore_nonexistent_backup_fails() {
     let result = manager.restore_backup(&fake_backup);
 
     // Should return error
-    assert!(result.is_err(), "Restore should fail for non-existent backup");
+    assert!(
+        result.is_err(),
+        "Restore should fail for non-existent backup"
+    );
 
     // Error should be BackupFailed variant
     match result {
         Err(ConfigError::BackupFailed(msg)) => {
-            assert!(msg.contains("does not exist"),
-                    "Error message should mention file doesn't exist");
+            assert!(
+                msg.contains("does not exist"),
+                "Error message should mention file doesn't exist"
+            );
         }
         _ => panic!("Expected BackupFailed error"),
     }
 
     // Original config should be unchanged
     let current = manager.read_config().unwrap();
-    assert_eq!(current, original_content, "Config should be unchanged after failed restore");
+    assert_eq!(
+        current, original_content,
+        "Config should be unchanged after failed restore"
+    );
 
     // No backups should have been created
     let backups = manager.list_backups().unwrap();
-    assert_eq!(backups.len(), 0, "No backups should be created on failed restore");
+    assert_eq!(
+        backups.len(),
+        0,
+        "No backups should be created on failed restore"
+    );
 }
 
 #[test]
@@ -489,8 +518,10 @@ fn test_restore_directory_path_fails() {
     // Error should mention it's not a file
     match result {
         Err(ConfigError::BackupFailed(msg)) => {
-            assert!(msg.contains("not a file"),
-                    "Error message should mention path is not a file");
+            assert!(
+                msg.contains("not a file"),
+                "Error message should mention path is not a file"
+            );
         }
         _ => panic!("Expected BackupFailed error mentioning 'not a file'"),
     }
@@ -528,12 +559,23 @@ fn test_restore_preserves_exact_content() {
     let restored = manager.read_config().unwrap();
 
     // Verify byte-for-byte match
-    assert_eq!(restored, tricky_content,
-               "Restored content should exactly match original, including special chars and formatting");
+    assert_eq!(
+        restored, tricky_content,
+        "Restored content should exactly match original, including special chars and formatting"
+    );
 
     // Verify specific edge cases
-    assert!(restored.contains("\"hello $USER\""), "Should preserve quotes and variables");
-    assert!(restored.contains("'Test @ 100%'"), "Should preserve single quotes and special chars");
-    assert!(!restored.ends_with('\n'), "Should preserve lack of trailing newline");
+    assert!(
+        restored.contains("\"hello $USER\""),
+        "Should preserve quotes and variables"
+    );
+    assert!(
+        restored.contains("'Test @ 100%'"),
+        "Should preserve single quotes and special chars"
+    );
+    assert!(
+        !restored.ends_with('\n'),
+        "Should preserve lack of trailing newline"
+    );
     assert!(restored.contains("\n\n"), "Should preserve empty lines");
 }

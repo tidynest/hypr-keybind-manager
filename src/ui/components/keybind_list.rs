@@ -20,8 +20,7 @@
 use gtk4::{prelude::*, Box as GtkBox, Label, ListBox, Orientation, ScrolledWindow};
 use std::{cell::RefCell, rc::Rc};
 
-use crate::core::types::Keybinding;
-use crate::ui::Controller;
+use crate::{core::types::Keybinding, ui::Controller};
 
 /// Displays a scrollable list of keybindings
 pub struct KeybindList {
@@ -43,10 +42,8 @@ impl KeybindList {
     ///
     /// # Example
     /// ```no_run
-    /// use hypr_keybind_manager::ui::components::KeybindList;
-    /// use hypr_keybind_manager::ui::Controller;
-    /// use std::rc::Rc;
-    /// use std::path::PathBuf;
+    /// use hypr_keybind_manager::ui::{components::KeybindList, Controller};
+    /// use std::{path::PathBuf, rc::Rc};
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let config_path = PathBuf::from("~/.config/hypr/hyprland.conf");
@@ -65,7 +62,7 @@ impl KeybindList {
 
         // Create list box
         let list_box = ListBox::builder()
-            .selection_mode(gtk4::SelectionMode::Single)  // Allow clicking rows
+            .selection_mode(gtk4::SelectionMode::Single) // Allow clicking rows
             .build();
 
         // Add list to scrolled window
@@ -129,7 +126,7 @@ impl KeybindList {
         // Key combination (e.g., "SUPER+K")
         let key_label = Label::builder()
             .label(format!("{}", binding.key_combo))
-            .width_chars(15)  // Fixed width for alignment
+            .width_chars(15) // Fixed width for alignment
             .xalign(0.0)
             .build();
 
@@ -141,14 +138,11 @@ impl KeybindList {
             .build();
 
         // Arguments (e.g., "firefox") - optional
-        let args_text = binding
-            .args
-            .as_deref()
-            .unwrap_or("");
+        let args_text = binding.args.as_deref().unwrap_or("");
         let args_label = Label::builder()
             .label(args_text)
             .xalign(0.0)
-            .hexpand(true)  // Take remaining space
+            .hexpand(true) // Take remaining space
             .build();
 
         // Add tooltip to show full arguments on hover

@@ -17,7 +17,11 @@
 //! Contains test suites for Hyprland IPC functionality.
 //! Note: Some tests require a running Hyprland instance and are marked #[ignore].
 
-use crate::{config::ConfigError, core::{BindType, KeyCombo, Keybinding, Modifier}, ipc::{ClientMode, HyprlandClient}};
+use crate::{
+    config::ConfigError,
+    core::{BindType, KeyCombo, Keybinding, Modifier},
+    ipc::{ClientMode, HyprlandClient},
+};
 
 /// Helper: Creates a safe test binding
 fn create_safe_binding(key: &str, app: &str) -> Keybinding {
@@ -35,7 +39,10 @@ fn test_dryrun_mode_validates_safe_binding() {
     let binding = create_safe_binding("K", "firefox");
 
     let result = client.add_bind(&binding);
-    assert!(result.is_ok(), "Safe binding should validate in DryRun mode");
+    assert!(
+        result.is_ok(),
+        "Safe binding should validate in DryRun mode"
+    );
 }
 
 #[test]
@@ -51,12 +58,18 @@ fn test_dryrun_mode_blocks_injection() {
     };
 
     let result = client.add_bind(&malicious);
-    assert!(result.is_err(), "Injection should be blocked even in DryRun");
+    assert!(
+        result.is_err(),
+        "Injection should be blocked even in DryRun"
+    );
 
     match result.unwrap_err() {
         ConfigError::ValidationFailed(msg) => {
-            assert!(msg.contains("metacharacter") || msg.contains("';'"),
-                    "Error should mention metacharacters: {}", msg);
+            assert!(
+                msg.contains("metacharacter") || msg.contains("';'"),
+                "Error should mention metacharacters: {}",
+                msg
+            );
         }
         other => panic!("Expected ValidationFailed, got {:?}", other),
     }
@@ -72,8 +85,11 @@ fn test_readonly_mode_blocks_modifications() {
 
     match result.unwrap_err() {
         ConfigError::IpcCommandFailed(msg) => {
-            assert!(msg.contains("read-only"),
-                "Error should mention read-only mode: {}", msg);
+            assert!(
+                msg.contains("read-only"),
+                "Error should mention read-only mode: {}",
+                msg
+            );
         }
         other => panic!("Expected IpcCommandFailed, got {:?}", other),
     }
@@ -106,8 +122,11 @@ fn test_command_building_multiple_modifiers() {
     let cmd = client.build_keyword_command("bind", &binding);
 
     // Should contain both modifiers joined with underscore
-    assert!(cmd.contains("SUPER") && cmd.contains("SHIFT"),
-        "Should contain both modifiers: {}", cmd);
+    assert!(
+        cmd.contains("SUPER") && cmd.contains("SHIFT"),
+        "Should contain both modifiers: {}",
+        cmd
+    );
 }
 
 #[test]
@@ -167,8 +186,11 @@ fn test_multiple_safe_bindings() {
 
     for binding in bindings {
         let result = client.add_bind(&binding);
-        assert!(result.is_ok(),
-                "Safe binding {} should validate", binding.key_combo.key);
+        assert!(
+            result.is_ok(),
+            "Safe binding {} should validate",
+            binding.key_combo.key
+        );
     }
 }
 
@@ -198,4 +220,3 @@ fn test_live_mode_integration() {
         Err(e) => panic!("Unexpected error: {:?}", e),
     }
 }
-

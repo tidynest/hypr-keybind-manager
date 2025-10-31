@@ -27,10 +27,20 @@
 //! The Controller holds references to Model components but doesn't know
 //! about GTK4 widgets. This keeps business logic separate from presentation.
 
-use std::{cell::RefCell, fs::read_to_string, path::{Path, PathBuf}, process::Command, rc::Rc};
+use std::{
+    cell::RefCell,
+    fs,
+    fs::read_to_string,
+    path::{Path, PathBuf},
+    process::Command,
+    rc::Rc,
+};
 
-use crate::config::{ConfigError, ConfigManager};
-use crate::core::{Conflict, ConflictDetector, Keybinding};
+use crate::config::{validator::ConfigValidator, ConfigError, ConfigManager};
+use crate::core::{
+    parser::parse_config_file, validator as injection_validator, Conflict, ConflictDetector,
+    Keybinding,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ImportMode {
@@ -93,7 +103,7 @@ impl Controller {
     pub fn config_path(&self) -> PathBuf {
         self.config_manager.borrow().config_path().to_path_buf()
     }
-    
+
     /// Loads keybindings from config file
     ///
     /// This reads the config file, parses all keybindings, and rebuilds
@@ -115,9 +125,6 @@ impl Controller {
     /// # Ok::<(), hypr_keybind_manager::config::ConfigError>(())
     /// ```
     pub fn load_keybindings(&self) -> Result<usize, ConfigError> {
-        use crate::core::parser::parse_config_file;
-        use std::path::Path;
-
         // Read config content from ConfigManager
         let config_manager = self.config_manager.borrow();
         let content = config_manager.read_config()?;
@@ -254,9 +261,6 @@ impl Controller {
     /// * `Ok(())` - Binding is safe
     /// * `Err(String)` - Validation failed with reason
     pub fn validate_keybinding(&self, binding: &Keybinding) -> Result<(), String> {
-        use crate::config::validator::ConfigValidator;
-        use crate::core::validator as injection_validator;
-
         // Layer 1: Injection check
         injection_validator::validate_keybinding(binding)
             .map_err(|e| format!("Security violation: {}", e))?;
@@ -301,9 +305,13 @@ impl Controller {
     ///
     /// # Example
     /// ```no_run
-    /// # use hypr_keybind_manager::ui::Controller;
-    /// # use hypr_keybind_manager::core::{Keybinding, KeyCombo, Modifier, BindType};
+    /// # use hypr_keybind_manager::{
+    ///       core::{Keybinding, KeyCombo, Modifier, BindType},
+    ///       ui::Controller
+    ///   };
+    ///
     /// # use std::path::PathBuf;
+    ///
     /// # fn main() -> Result<(), String> {
     /// let controller = Controller::new(PathBuf::from("test.conf"))
     ///     .map_err(|e| e.to_string())?;
@@ -328,7 +336,8 @@ impl Controller {
 
         // Write updated list to disk
         let mut config_manager = self.config_manager.borrow_mut();
-        config_manager.write_bindings(&bindings)
+        config_manager
+            .write_bindings(&bindings)
             .map_err(|e| format!("Failed to write changes: {}", e))?;
 
         // Rebuild conflict detector with new list
@@ -369,7 +378,8 @@ impl Controller {
 
         // 2. Write changes to disk (creates automatic backup via Transaction)
         let mut config_manager = self.config_manager.borrow_mut();
-        config_manager.write_bindings(&bindings)
+        config_manager
+            .write_bindings(&bindings)
             .map_err(|e| format!("Failed to write changes to config: {}", e))?;
 
         // 3. Rebuild conflict detector with updated bindings
@@ -427,11 +437,8 @@ impl Controller {
     /// * `Ok(())` - Successfully deleted
     /// * `Err(String)` - Delete failed (file not found, permission error, etc.)
     pub fn delete_backup(&self, backup_path: &Path) -> Result<(), String> {
-        use std::fs;
-
         // Delete the backup file
-        fs::remove_file(backup_path)
-            .map_err(|e| format!("Failed to delete backup: {}", e))?;
+        fs::remove_file(backup_path).map_err(|e| format!("Failed to delete backup: {}", e))?;
 
         Ok(())
     }
@@ -464,29 +471,30 @@ impl Controller {
             .map_err(|e| format!("Failed to read import file: {}", e))?;
 
         // Parse bindings from import file
-        use crate::core::parser::parse_config_file;
         let imported_bindings = parse_config_file(&content, import_path)
             .map_err(|e| format!("Failed to parse import file: {}", e))?;
 
         // Handle import mode
         match mode {
-        ImportMode::Replace => {
-            // Replace: Clear all and add imported
-            self.keybindings.borrow_mut().clear();
-            self.keybindings.borrow_mut().extend(imported_bindings.clone());
-        }
-        ImportMode::Merge => {
-            // Merge: Add imported, skip duplicates
-            let mut existing = self.keybindings.borrow_mut();
-            for binding in imported_bindings.clone() {
-                // Check if binding already exists (same key combo)
-                let exists = existing.iter().any(|b| b.key_combo == binding.key_combo);
-                if !exists {
-                    existing.push(binding);
+            ImportMode::Replace => {
+                // Replace: Clear all and add imported
+                self.keybindings.borrow_mut().clear();
+                self.keybindings
+                    .borrow_mut()
+                    .extend(imported_bindings.clone());
+            }
+            ImportMode::Merge => {
+                // Merge: Add imported, skip duplicates
+                let mut existing = self.keybindings.borrow_mut();
+                for binding in imported_bindings.clone() {
+                    // Check if binding already exists (same key combo)
+                    let exists = existing.iter().any(|b| b.key_combo == binding.key_combo);
+                    if !exists {
+                        existing.push(binding);
+                    }
                 }
             }
         }
-    }
 
         // Write to config file
         let bindings: Vec<_> = self.keybindings.borrow().clone();
@@ -546,7 +554,8 @@ impl Controller {
 
         // 2. Write changes to disk (creates automatic backup via Transaction)
         let mut config_manager = self.config_manager.borrow_mut();
-        config_manager.write_bindings(&bindings)
+        config_manager
+            .write_bindings(&bindings)
             .map_err(|e| format!("Failed to write changes to config: {}", e))?;
 
         // 3. Rebuild conflict detector with updated bindings

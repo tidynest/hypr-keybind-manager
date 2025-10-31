@@ -24,8 +24,8 @@
 //! (block known-bad) because blacklists can be bypassed. Only explicitly
 //! allowed dispatchers, keys, and argument formats are accepted.
 
-use thiserror::Error;
 use crate::core::types::Keybinding;
+use thiserror::Error;
 
 /// Validation errors
 #[derive(Debug, Error, PartialEq)]
@@ -109,8 +109,8 @@ pub fn validate_dispatcher(name: &str) -> Result<(), ValidationError> {
 /// Detects: ; | & $ ` ( ) { } [ ] < > \ " ' and newlines
 pub fn check_shell_metacharacters(input: &str) -> Result<(), ValidationError> {
     const DANGEROUS_CHARS: &[char] = &[
-        ';', '|', '&', '$', '`', '(', ')', '{', '}',
-        '[', ']', '<', '>', '\\', '"', '\'', '\n', '\r',
+        ';', '|', '&', '$', '`', '(', ')', '{', '}', '[', ']', '<', '>', '\\', '"', '\'', '\n',
+        '\r',
     ];
 
     for ch in DANGEROUS_CHARS {
@@ -127,12 +127,26 @@ pub fn check_shell_metacharacters(input: &str) -> Result<(), ValidationError> {
 /// Accepts alphanumeric, underscores, colons, hyphens (for mouse buttons),
 /// and common special keys (Return, Escape, Space, Tab, arrow keys, etc.)
 pub fn validate_key(key: &str) -> Result<(), ValidationError> {
-    let valid = key.chars().all(|c| c.is_alphanumeric() || c == '_' || c == ':' || c == '-')
+    let valid = key
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '_' || c == ':' || c == '-')
         || matches!(
             key,
-            "Return" | "Escape" | "Space" | "Tab" | "BackSpace"
-            | "Delete" | "Insert" | "Home" | "End" | "Prior" | "Next"
-            | "Left" | "Right" | "Up" | "Down"
+            "Return"
+                | "Escape"
+                | "Space"
+                | "Tab"
+                | "BackSpace"
+                | "Delete"
+                | "Insert"
+                | "Home"
+                | "End"
+                | "Prior"
+                | "Next"
+                | "Left"
+                | "Right"
+                | "Up"
+                | "Down"
         );
 
     if valid {
@@ -169,4 +183,3 @@ pub fn validate_keybinding(binding: &Keybinding) -> Result<(), ValidationError> 
 
     Ok(())
 }
-

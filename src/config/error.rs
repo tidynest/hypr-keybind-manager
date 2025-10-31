@@ -56,6 +56,7 @@ pub enum ConfigError {
     /// IPC command was sent but Hyprland returned an error
     #[error("Hyprland command failed: {0}")]
     IpcCommandFailed(String),
+    /// Failed to write file to path
     #[error("Failed to write to path: {0}")]
     WriteError(PathBuf),
 }

@@ -16,11 +16,17 @@
 //!
 //! Provides atomic write operations with ACID guarantees.
 
-use std::{fs, path::PathBuf};
+use atomic_write_file::AtomicWriteFile;
+use std::{fs, io::Write, path::PathBuf};
 
-use crate::config::{ConfigError, ConfigManager};
-use crate::config::danger;
-use crate::config::validator;
+use crate::config::{
+    danger,
+    validator::{
+        ConfigValidator,
+        ValidationLevel::{Error, Warning},
+    },
+    ConfigError, ConfigManager,
+};
 
 /// Atomic configuration transaction with automatic backup.
 ///
@@ -90,8 +96,7 @@ impl<'a> ConfigTransaction<'a> {
     /// # Example
     ///
     /// ```no_run
-    /// use hypr_keybind_manager::config::ConfigManager;
-    /// use hypr_keybind_manager::config::ConfigTransaction;
+    /// use hypr_keybind_manager::config::{ConfigManager, ConfigTransaction};
     /// use std::path::PathBuf;
     ///
     /// let manager = ConfigManager::new(PathBuf::from("hyprland.conf"))?;
@@ -144,34 +149,35 @@ impl<'a> ConfigTransaction<'a> {
     /// }
     /// # Ok::<(), hypr_keybind_manager::config::ConfigError>(())
     /// ```
-    pub fn commit_with_validation(
-        self,
-        new_content: &str,
-    ) -> Result<(), ConfigError> {
-        use crate::config::validator::ConfigValidator;
-
+    pub fn commit_with_validation(self, new_content: &str) -> Result<(), ConfigError> {
         // Step 1: Run comprehensive validation
         let validator = ConfigValidator::new();
         let report = validator.validate_config(new_content);
 
         // Step 2: Block on errors (Layer 1: Injection)
         if report.has_errors() {
-            let error_count = report.issues.iter()
-                .filter(|i| i.validation_level == validator::ValidationLevel::Error)
+            let error_count = report
+                .issues
+                .iter()
+                .filter(|i| i.validation_level == Error)
                 .count();
 
             eprintln!("\n❌ VALIDATION FAILED:\n");
             for issue in &report.issues {
-                if issue.validation_level == validator::ValidationLevel::Error {
+                if issue.validation_level == Error {
                     eprintln!("  Binding {}: {}", issue.binding_index, issue.message);
                 }
             }
             eprintln!("\nThis configuration will NOT be committed.");
-            eprintln!("Fix the {} error(s) above before proceeding.\n", error_count);
+            eprintln!(
+                "Fix the {} error(s) above before proceeding.\n",
+                error_count
+            );
 
-            return Err(ConfigError::ValidationFailed(
-                format!("{} validation error(s) detected", error_count)
-            ));
+            return Err(ConfigError::ValidationFailed(format!(
+                "{} validation error(s) detected",
+                error_count
+            )));
         }
 
         // Step 3: Block on critical dangers (Layer 2: System destruction)
@@ -187,13 +193,15 @@ impl<'a> ConfigTransaction<'a> {
             eprintln!("Remove dangerous commands before proceeding.\n");
 
             return Err(ConfigError::DangerousCommand(
-                "Critical danger detected - commit blocked.".to_string()
+                "Critical danger detected - commit blocked.".to_string(),
             ));
         }
 
         // Step 4: Show warnings, but allow commit (Layer 2: Suspicious/Dangerous but not Critical
-        let warnings = report.issues.iter()
-            .filter(|i| i.validation_level == validator::ValidationLevel::Warning)
+        let warnings = report
+            .issues
+            .iter()
+            .filter(|i| i.validation_level == Warning)
             .collect::<Vec<_>>();
 
         if !warnings.is_empty() {
@@ -256,27 +264,21 @@ impl<'a> ConfigTransaction<'a> {
     /// # Ok::<(), hypr_keybind_manager::config::ConfigError>(())
     /// ```
     pub fn commit(self, new_content: &str) -> Result<(), ConfigError> {
-        use std::io::Write;
-        use atomic_write_file::AtomicWriteFile;
-
         // Open file for atomic writing
         let mut file = AtomicWriteFile::options()
             .open(&self.manager.config_path)
-            .map_err(|e| ConfigError::WriteFailed(
-                format!("Failed to open for atomic write: {}", e)
-            ))?;
+            .map_err(|e| {
+                ConfigError::WriteFailed(format!("Failed to open for atomic write: {}", e))
+            })?;
 
         // Write content
         file.write_all(new_content.as_bytes())
-            .map_err(|e| ConfigError::WriteFailed(
-                format!("Failed to write content: {}", e)
-            ))?;
+            .map_err(|e| ConfigError::WriteFailed(format!("Failed to write content: {}", e)))?;
 
         // Commit atomically
-        file.commit()
-            .map_err(|e| ConfigError::WriteFailed(
-                format!("Failed to commit atomic write: {}", e)
-            ))?;
+        file.commit().map_err(|e| {
+            ConfigError::WriteFailed(format!("Failed to commit atomic write: {}", e))
+        })?;
 
         // Backup remains in backup directory for future rollback if needed
         // Cleanup is handled separately by cleanup_old_backups()
@@ -320,9 +322,6 @@ impl<'a> ConfigTransaction<'a> {
     /// # Ok::<(), hypr_keybind_manager::config::ConfigError>(())
     /// ```
     pub fn rollback(&self) -> Result<(), ConfigError> {
-        use std::io::Write;
-        use atomic_write_file::AtomicWriteFile;
-
         // Check if backup path is available
         if let Some(backup_path) = &self.backup_path {
             // Read backup content
@@ -331,27 +330,23 @@ impl<'a> ConfigTransaction<'a> {
             // Open file for atomic writing
             let mut file = AtomicWriteFile::options()
                 .open(&self.manager.config_path)
-                .map_err(|e| ConfigError::WriteFailed(
-                    format!("Failed to open for atomic write: {}", e)
-                ))?;
+                .map_err(|e| {
+                    ConfigError::WriteFailed(format!("Failed to open for atomic write: {}", e))
+                })?;
 
             // Write backup content
             file.write_all(backup_content.as_bytes())
-                .map_err(|e| ConfigError::WriteFailed(
-                    format!("Failed to write content: {}", e)
-                ))?;
+                .map_err(|e| ConfigError::WriteFailed(format!("Failed to write content: {}", e)))?;
 
             // Commit atomically
             file.commit()
-                .map_err(|e| ConfigError::WriteFailed(
-                    format!("Failed to commit: {}", e)
-                ))?;
+                .map_err(|e| ConfigError::WriteFailed(format!("Failed to commit: {}", e)))?;
 
             Ok(())
         } else {
             // This should not happen in normal usage (begin() always creates backup)
             Err(ConfigError::BackupFailed(
-                "No backup available for rollback".to_string()
+                "No backup available for rollback".to_string(),
             ))
         }
     }

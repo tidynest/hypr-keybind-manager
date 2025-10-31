@@ -33,9 +33,14 @@
 
 use clap::{Parser, Subcommand};
 use colored::*;
-use std::{fs, path::{Path, PathBuf}};
-
-use hypr_keybind_manager::core::{parser::parse_config_file, conflict::ConflictDetector};
+use hypr_keybind_manager::{
+    core::{conflict::ConflictDetector, parser::parse_config_file},
+    ui::App,
+};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 /// Command-line interface for Hyprland Keybinding Manager.
 ///
@@ -124,11 +129,11 @@ fn check_conflicts(config_path: &Path) -> anyhow::Result<()> {
             .to_str()
             .ok_or_else(|| anyhow::anyhow!("Invalid path encoding"))?,
     );
-    let path = std::path::Path::new(expanded_path.as_ref());
+    let path = Path::new(expanded_path.as_ref());
 
     // Read config file
-    let content = fs::read_to_string(path)
-        .map_err(|e| anyhow::anyhow!("Failed to read file: {}", e))?;
+    let content =
+        fs::read_to_string(path).map_err(|e| anyhow::anyhow!("Failed to read file: {}", e))?;
 
     println!("{} Parsing config: {}", "→".cyan(), path.display());
 
@@ -158,25 +163,30 @@ fn check_conflicts(config_path: &Path) -> anyhow::Result<()> {
         );
 
         for (i, conflict) in conflicts.iter().enumerate() {
-            println!("{} {}",
-                 format!("Conflict {}", i + 1).yellow().bold(),
-                 format!("{}", conflict.key_combo).cyan()
+            println!(
+                "{} {}",
+                format!("Conflict {}", i + 1).yellow().bold(),
+                format!("{}", conflict.key_combo).cyan()
             );
 
             for (idx, binding) in conflict.conflicting_bindings.iter().enumerate() {
                 let args = binding.args.as_deref().unwrap_or("");
 
-                println!("  {} {} → {} {}",
-                     format!("{}.", idx + 1).dimmed(),
-                     format!("{}", binding.bind_type).magenta(),
-                     binding.dispatcher,
-                     args,
+                println!(
+                    "  {} {} → {} {}",
+                    format!("{}.", idx + 1).dimmed(),
+                    format!("{}", binding.bind_type).magenta(),
+                    binding.dispatcher,
+                    args,
                 );
             }
             println!();
         }
 
-        println!("{}", "⚠ These keybindings will conflict at runtime!".yellow());
+        println!(
+            "{}",
+            "⚠ These keybindings will conflict at runtime!".yellow()
+        );
         std::process::exit(1);
     }
 
@@ -202,17 +212,20 @@ fn list_keybindings(config_path: &Path) -> anyhow::Result<()> {
     let expanded_path = shellexpand::tilde(
         config_path
             .to_str()
-            .ok_or_else(|| anyhow::anyhow!("Invalid path encoding"))?
+            .ok_or_else(|| anyhow::anyhow!("Invalid path encoding"))?,
     );
     let path = Path::new(expanded_path.as_ref());
 
     // Read and parse
-    let content = fs::read_to_string(path)
-        .map_err(|e| anyhow::anyhow!("Failed to read file: {}", e))?;
+    let content =
+        fs::read_to_string(path).map_err(|e| anyhow::anyhow!("Failed to read file: {}", e))?;
 
     let bindings = parse_config_file(&content, path)?;
 
-    println!("{}", format!("Keybindings from: {}\n", path.display()).bold());
+    println!(
+        "{}",
+        format!("Keybindings from: {}\n", path.display()).bold()
+    );
 
     let total = bindings.len();
 
@@ -248,8 +261,6 @@ fn list_keybindings(config_path: &Path) -> anyhow::Result<()> {
 ///
 /// This function blocks until the GUI window is closed by the user.
 fn launch_gui(config_path: &Path) -> anyhow::Result<()> {
-    use hypr_keybind_manager::ui::App;
-
     // Expand tilde in path
     let expanded_path = shellexpand::tilde(
         config_path
@@ -261,8 +272,8 @@ fn launch_gui(config_path: &Path) -> anyhow::Result<()> {
     eprintln!("{} Launching GUI...", "→".cyan());
 
     // Create and run app
-    let app = App::new(expanded_path)
-        .map_err(|e| anyhow::anyhow!("Failed to create app: {}", e))?;
+    let app =
+        App::new(expanded_path).map_err(|e| anyhow::anyhow!("Failed to create app: {}", e))?;
 
     app.run();
 

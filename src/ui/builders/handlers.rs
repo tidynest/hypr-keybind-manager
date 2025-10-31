@@ -20,11 +20,15 @@
 //! - Delete/Edit/Add buttons
 //! - Backup manager
 
-use gtk4::{prelude::*, gio, gdk, ApplicationWindow, Button, EventControllerKey};
+use crate::{
+    core::types::{BindType, KeyCombo, Keybinding},
+    ui::{
+        components::{BackupDialog, ConflictPanel, DetailsPanel, EditDialog, KeybindList},
+        Controller,
+    },
+};
+use gtk4::{gdk, gio, prelude::*, ApplicationWindow, Button, EventControllerKey};
 use std::rc::Rc;
-use crate::core::types::{BindType, KeyCombo, Keybinding};
-use crate::ui::components::{BackupDialog, ConflictPanel, DetailsPanel, EditDialog, KeybindList};
-use crate::ui::Controller;
 
 /// Wires up all event handlers for the main UI
 ///
@@ -36,13 +40,13 @@ use crate::ui::Controller;
 /// - Add button click handler
 /// - Backup button click handler
 pub fn wire_up_handlers(
-    window:         &ApplicationWindow,
-    controller:     Rc<Controller>,
-    keybind_list:   Rc<KeybindList>,
-    details_panel:  Rc<DetailsPanel>,
+    window: &ApplicationWindow,
+    controller: Rc<Controller>,
+    keybind_list: Rc<KeybindList>,
+    details_panel: Rc<DetailsPanel>,
     conflict_panel: Rc<ConflictPanel>,
-    add_button:     &Button,
-    backup_button:  &Button,
+    add_button: &Button,
+    backup_button: &Button,
 ) {
     // ============================================================================
     // Row selection handler
@@ -50,13 +54,12 @@ pub fn wire_up_handlers(
     let details_panel_clone = details_panel.clone();
     let keybind_list_clone = keybind_list.clone();
 
-    keybind_list.list_box().connect_row_selected(move |_list_box,
-                                                       row| {
-        match row {
+    keybind_list
+        .list_box()
+        .connect_row_selected(move |_list_box, row| match row {
             Some(r) => {
                 let index = r.index() as usize;
-                if let Some(binding) =
-                    keybind_list_clone.get_binding_at_index(index) {
+                if let Some(binding) = keybind_list_clone.get_binding_at_index(index) {
                     eprintln!("👆 Selected: {}", binding.key_combo);
 
                     details_panel_clone.update_binding(Some(&binding));
@@ -66,8 +69,7 @@ pub fn wire_up_handlers(
                 eprintln!("👆 Selection cleared");
                 details_panel_clone.update_binding(None);
             }
-        }
-    });
+        });
 
     // ============================================================================
     // Keyboard navigation
@@ -75,44 +77,36 @@ pub fn wire_up_handlers(
     let key_controller = EventControllerKey::new();
     let list_box_for_keys = keybind_list.list_box().clone();
 
-    key_controller.connect_key_pressed(move |_controller, key, _code, _modifier| {
-        match key {
-            gdk::Key::Up => {
-                if let Some(selected_row) =
-                    list_box_for_keys.selected_row() {
-                    let current_index = selected_row.index();
-                    if current_index > 0 {
-                        if let Some(previous_row) =
-                            list_box_for_keys.row_at_index(current_index - 1) {
-                            list_box_for_keys.select_row(Some(&previous_row));
-                        }
+    key_controller.connect_key_pressed(move |_controller, key, _code, _modifier| match key {
+        gdk::Key::Up => {
+            if let Some(selected_row) = list_box_for_keys.selected_row() {
+                let current_index = selected_row.index();
+                if current_index > 0 {
+                    if let Some(previous_row) = list_box_for_keys.row_at_index(current_index - 1) {
+                        list_box_for_keys.select_row(Some(&previous_row));
                     }
                 }
-                glib::Propagation::Stop
             }
-            gdk::Key::Down => {
-                if let Some(selected_row) =
-                    list_box_for_keys.selected_row() {
-                    let current_index = selected_row.index();
-                    if let Some(next_row) =
-                        list_box_for_keys.row_at_index(current_index + 1) {
-                        list_box_for_keys.select_row(Some(&next_row));
-                    }
-                } else if let Some(first_row) =
-                        list_box_for_keys.row_at_index(0) {
-                        list_box_for_keys.select_row(Some(&first_row));
-                }
-                glib::Propagation::Stop
-            }
-            gdk::Key::Return | gdk::Key::KP_Enter => {
-                if let Some(selected_row) =
-                    list_box_for_keys.selected_row() {
-                    list_box_for_keys.select_row(Some(&selected_row));
-                }
-                glib::Propagation::Stop
-            }
-            _ => glib::Propagation::Proceed
+            glib::Propagation::Stop
         }
+        gdk::Key::Down => {
+            if let Some(selected_row) = list_box_for_keys.selected_row() {
+                let current_index = selected_row.index();
+                if let Some(next_row) = list_box_for_keys.row_at_index(current_index + 1) {
+                    list_box_for_keys.select_row(Some(&next_row));
+                }
+            } else if let Some(first_row) = list_box_for_keys.row_at_index(0) {
+                list_box_for_keys.select_row(Some(&first_row));
+            }
+            glib::Propagation::Stop
+        }
+        gdk::Key::Return | gdk::Key::KP_Enter => {
+            if let Some(selected_row) = list_box_for_keys.selected_row() {
+                list_box_for_keys.select_row(Some(&selected_row));
+            }
+            glib::Propagation::Stop
+        }
+        _ => glib::Propagation::Proceed,
     });
 
     keybind_list.list_box().add_controller(key_controller);
@@ -157,43 +151,37 @@ pub fn wire_up_handlers(
         dialog.choose(
             Some(&window_clone),
             None::<&gio::Cancellable>,
-            move |response| {
-                match response {
-                    Ok(1) => {
-                        match
-                        controller_clone.delete_keybinding(&binding_clone) {
-                            Ok(()) => {
-                                let updated = controller_clone.get_keybindings();
-                                keybind_list_clone.update_with_bindings(updated);
-                                details_panel_clone.update_binding(None);
-                                conflict_panel_clone.refresh();
-                                eprintln!("✅ Keybinding deleted successfully");
-                            }
-                            Err(e) => {
-                                eprintln!("❌ Failed to delete: {}", e);
+            move |response| match response {
+                Ok(1) => match controller_clone.delete_keybinding(&binding_clone) {
+                    Ok(()) => {
+                        let updated = controller_clone.get_keybindings();
+                        keybind_list_clone.update_with_bindings(updated);
+                        details_panel_clone.update_binding(None);
+                        conflict_panel_clone.refresh();
+                        eprintln!("✅ Keybinding deleted successfully");
+                    }
+                    Err(e) => {
+                        eprintln!("❌ Failed to delete: {}", e);
 
-                                let error_dialog =
-                                    gtk4::AlertDialog::builder()
-                                        .modal(true)
-                                        .message("Delete Failed")
-                                        .detail(format!("Failed to delete keybinding:\n{}", e))
-                                        .buttons(vec!["OK"])
-                                        .build();
-                                error_dialog.show(Some(&window_for_inner));
-                            }
-                        }
+                        let error_dialog = gtk4::AlertDialog::builder()
+                            .modal(true)
+                            .message("Delete Failed")
+                            .detail(format!("Failed to delete keybinding:\n{}", e))
+                            .buttons(vec!["OK"])
+                            .build();
+                        error_dialog.show(Some(&window_for_inner));
                     }
-                    Ok(0) => {
-                        eprintln!("🚫 Delete cancelled");
-                    }
-                    Ok(_other) => {
-                        eprintln!("? Unexpected button index");
-                    }
-                    Err(_e) => {
-                        eprintln!("❌ Delete dialog error");
-                    }
+                },
+                Ok(0) => {
+                    eprintln!("🚫 Delete cancelled");
                 }
-            }
+                Ok(_other) => {
+                    eprintln!("? Unexpected button index");
+                }
+                Err(_e) => {
+                    eprintln!("❌ Delete dialog error");
+                }
+            },
         );
     });
 
@@ -271,8 +259,7 @@ pub fn wire_up_handlers(
             args: None,
         };
 
-        let edit_dialog = EditDialog::new(&window_clone,
-                                          &empty_binding);
+        let edit_dialog = EditDialog::new(&window_clone, &empty_binding);
 
         if let Some(new_binding) = edit_dialog.show_and_wait() {
             match controller_clone.add_keybinding(new_binding) {
@@ -322,33 +309,26 @@ pub fn wire_up_handlers(
         let controller_clone = controller_for_backup.clone();
         let keybind_list_clone = keybind_list_for_backup.clone();
         let details_panel_clone = details_panel_for_backup.clone();
-        let conflict_panel_clone =
-            conflict_panel_for_backup.clone();
+        let conflict_panel_clone = conflict_panel_for_backup.clone();
 
         let controller_for_delete = controller_for_backup.clone();
 
         let dialog = BackupDialog::new(
             window_for_backup.upcast_ref::<gtk4::Window>(),
             backups,
-            move |backup_path| {
-                match controller_clone.restore_backup(backup_path) {
-                    Ok(()) => {
-                        let updated_bindings =
-                            controller_clone.get_keybindings();
+            move |backup_path| match controller_clone.restore_backup(backup_path) {
+                Ok(()) => {
+                    let updated_bindings = controller_clone.get_keybindings();
 
-                        keybind_list_clone.update_with_bindings(updated_bindings);
-                        details_panel_clone.update_binding(None);
-                        conflict_panel_clone.refresh();
-                        Ok(())
-                    }
-                    Err(e) => Err(e)
+                    keybind_list_clone.update_with_bindings(updated_bindings);
+                    details_panel_clone.update_binding(None);
+                    conflict_panel_clone.refresh();
+                    Ok(())
                 }
+                Err(e) => Err(e),
             },
-            move |backup_path| {
-                controller_for_delete.delete_backup(backup_path)
-            }
+            move |backup_path| controller_for_delete.delete_backup(backup_path),
         );
         dialog.show();
     });
-
 }

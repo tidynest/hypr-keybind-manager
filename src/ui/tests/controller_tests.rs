@@ -46,7 +46,10 @@ fn test_controller_creation() {
     let (_temp_dir, config_path) = create_test_config();
     let controller = Controller::new(config_path);
 
-    assert!(controller.is_ok(), "Controller should be created successfully");
+    assert!(
+        controller.is_ok(),
+        "Controller should be created successfully"
+    );
 }
 
 #[test]
@@ -68,7 +71,11 @@ fn test_get_keybindings() {
     controller.load_keybindings().unwrap();
 
     let bindings = controller.get_keybindings();
-    assert_eq!(bindings.len(), 5, "Should return all 5 keybindings successfully");
+    assert_eq!(
+        bindings.len(),
+        5,
+        "Should return all 5 keybindings successfully"
+    );
 }
 
 #[test]
@@ -108,7 +115,11 @@ fn test_detect_conflicts() {
     controller.load_keybindings().unwrap();
 
     let conflicts = controller.get_conflicts();
-    assert_eq!(conflicts.len(), 1, "Should detect 1 conflict (SUPER+K used twice)");
+    assert_eq!(
+        conflicts.len(),
+        1,
+        "Should detect 1 conflict (SUPER+K used twice)"
+    );
 
     let conflict = &conflicts[0];
     assert_eq!(

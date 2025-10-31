@@ -197,7 +197,11 @@ pub struct Keybinding {
 
 impl fmt::Display for Keybinding {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} = {}, {}", self.bind_type, self.key_combo, self.dispatcher)?;
+        write!(
+            f,
+            "{} = {}, {}",
+            self.bind_type, self.key_combo, self.dispatcher
+        )?;
 
         if let Some(args) = &self.args {
             write!(f, ", {}", args)?;
@@ -206,4 +210,3 @@ impl fmt::Display for Keybinding {
         Ok(())
     }
 }
-

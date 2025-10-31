@@ -98,9 +98,9 @@
 use regex::Regex;
 use std::collections::HashSet;
 
-pub mod types;
-pub mod patterns;
 pub mod entropy;
+pub mod patterns;
+pub mod types;
 
 pub use types::{DangerAssessment, DangerLevel};
 
@@ -115,10 +115,10 @@ pub struct DangerDetector {
 impl Default for DangerDetector {
     fn default() -> Self {
         Self {
-            critical_patterns:   patterns::build_critical_patterns(),
-            dangerous_commands:  patterns::build_dangerous_commands(),
+            critical_patterns: patterns::build_critical_patterns(),
+            dangerous_commands: patterns::build_dangerous_commands(),
             suspicious_commands: patterns::build_suspicious_commands(),
-            safe_commands:       patterns::build_safe_commands(),
+            safe_commands: patterns::build_safe_commands(),
         }
     }
 }
@@ -241,7 +241,8 @@ impl DangerDetector {
             // This prevents false positives on commands like "uuencode", "base64", etc.
             if self.suspicious_commands.contains(*word)
                 || self.dangerous_commands.contains(*word)
-                || self.safe_commands.contains(*word) {
+                || self.safe_commands.contains(*word)
+            {
                 continue;
             }
 
@@ -332,8 +333,8 @@ impl DangerDetector {
                         "Command '{}' is often used in malicious contexts but may be legitimate",
                         word
                     ),
-                    recommendation: "Verify this command is necessary. Ensure you trust its source."
-                        .to_string(),
+                    recommendation:
+                        "Verify this command is necessary. Ensure you trust its source.".to_string(),
                     matched_pattern: Some(word.to_string()),
                 };
             }
@@ -377,7 +378,7 @@ impl DangerDetector {
                 reason: "Downloading and executing untrusted code (Remote Code Execution pattern)"
                     .to_string(),
                 recommendation:
-                "Download first, inspect the script, then execute manually if safe.".to_string(),
+                    "Download first, inspect the script, then execute manually if safe.".to_string(),
                 matched_pattern: Some("pipe to shell".to_string()),
             });
         }
@@ -397,7 +398,8 @@ impl DangerDetector {
             return Some(DangerAssessment {
                 danger_level: DangerLevel::Dangerous,
                 reason: "Flushing firewall rules removes all network protection".to_string(),
-                recommendation: "Only do this if you understand the security implications.".to_string(),
+                recommendation: "Only do this if you understand the security implications."
+                    .to_string(),
                 matched_pattern: Some("iptables -F".to_string()),
             });
         }

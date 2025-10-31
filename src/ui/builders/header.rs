@@ -16,8 +16,7 @@
 //!
 //! Creates the application header bar with menu
 
-use gtk4::{{gio::Menu}, Button, HeaderBar, MenuButton};
-use gtk4::prelude::WidgetExt;
+use gtk4::{gio::Menu, prelude::WidgetExt, Button, HeaderBar, MenuButton};
 
 /// Builds the application header bar with File menu
 ///
@@ -50,9 +49,9 @@ pub fn build_header_bar() -> HeaderBar {
         .tooltip_text("Reload Hyprland with current changes")
         .build();
 
-    apply_button.add_css_class("suggested-action");  // <- Blue highlight!
-    header_bar.pack_start(&apply_button);  // <- Left side
-    header_bar.pack_end(&menu_button);  // <- Right side
+    apply_button.add_css_class("suggested-action"); // <- Blue highlight!
+    header_bar.pack_start(&apply_button); // <- Left side
+    header_bar.pack_end(&menu_button); // <- Right side
 
     header_bar
 }

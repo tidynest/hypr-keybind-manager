@@ -38,8 +38,7 @@
 //! ```
 
 use crate::config::danger::{DangerAssessment, DangerDetector, DangerLevel};
-use crate::core::validator as injection_validator;
-use crate::core::parser::parse_config_file;
+use crate::core::{parser::parse_config_file, validator as injection_validator};
 use std::path::Path;
 
 /// Validation severity level
@@ -118,7 +117,9 @@ impl ValidationReport {
     /// injection attempts or invalid syntax.
     #[allow(dead_code)]
     pub fn has_errors(&self) -> bool {
-        self.issues.iter().any(|issue| issue.validation_level == ValidationLevel::Error)
+        self.issues
+            .iter()
+            .any(|issue| issue.validation_level == ValidationLevel::Error)
     }
 
     /// Returns true if any Critical-level dangers were detected
@@ -147,7 +148,12 @@ impl ValidationReport {
     ///
     /// Warnings allow commits but inform the user. Use this for Layer 2
     /// suspicious or dangerous (but not critical) commands.
-    pub fn add_warning(&mut self, binding_index: usize, message: String, suggestion: Option<String>) {
+    pub fn add_warning(
+        &mut self,
+        binding_index: usize,
+        message: String,
+        suggestion: Option<String>,
+    ) {
         self.issues.push(ValidationIssue {
             binding_index,
             validation_level: ValidationLevel::Warning,
@@ -167,7 +173,8 @@ impl ValidationReport {
         }
 
         // Store the assessment for detailed reporting
-        self.dangerous_commands.push((binding_index, danger_assessment));
+        self.dangerous_commands
+            .push((binding_index, danger_assessment));
     }
 }
 
@@ -245,10 +252,7 @@ impl ConfigValidator {
         for (binding_index, binding) in bindings.iter().enumerate() {
             // Layer 1: Injection prevention check
             if let Err(e) = injection_validator::validate_keybinding(binding) {
-                report.add_error(
-                    binding_index,
-                    format!("Security violation: {}", e)
-                );
+                report.add_error(binding_index, format!("Security violation: {}", e));
                 // Don't check Layer 2 if Layer 1 failed (injection attempt)
                 continue;
             }
@@ -261,7 +265,8 @@ impl ConfigValidator {
                     match danger.danger_level {
                         DangerLevel::Critical => {
                             // Critical dangers - block commits
-                            report.record_danger(binding_index, danger.clone());  // Records danger
+                            report.record_danger(binding_index, danger.clone());
+                            // Records danger
                         }
                         DangerLevel::Dangerous => {
                             // Dangerous commands - warn but allow
@@ -269,7 +274,7 @@ impl ConfigValidator {
                             report.add_warning(
                                 binding_index,
                                 format!("Dangerous command: {}", danger.reason),
-                                Some(danger.recommendation.clone())
+                                Some(danger.recommendation.clone()),
                             );
                         }
                         DangerLevel::Suspicious => {
@@ -277,7 +282,7 @@ impl ConfigValidator {
                             report.add_warning(
                                 binding_index,
                                 format!("Suspicious command: {}", danger.reason),
-                                Some(danger.recommendation.clone())
+                                Some(danger.recommendation.clone()),
                             );
                         }
                         DangerLevel::Safe => {

@@ -15,7 +15,18 @@
 use super::super::*;
 use std::{fs, thread, time::Duration};
 use tempfile::TempDir;
-use crate::{BindType, KeyCombo, Modifier};
+
+use crate::{BindType, KeyCombo, Modifier::Super};
+
+/// Helper to create a test keybinding
+fn create_test_binding() -> Keybinding {
+    Keybinding {
+        key_combo: KeyCombo::new(vec![Super], "M"),
+        bind_type: BindType::Bind,
+        dispatcher: "exec".to_string(),
+        args: Some("kitty".to_string()),
+    }
+}
 
 // ============================================================================
 // ConfigTransaction Tests
@@ -48,11 +59,18 @@ fn test_transaction_basic_flow() {
 
     // Verify backup still exists (not deleted after commit)
     let backups_after = manager.list_backups().unwrap();
-    assert_eq!(backups_after.len(), 1, "Backup should still exist after commit");
+    assert_eq!(
+        backups_after.len(),
+        1,
+        "Backup should still exist after commit"
+    );
 
     // Verify backup contains original content
     let backup_content = fs::read_to_string(&backups_after[0]).unwrap();
-    assert_eq!(backup_content, original_content, "Backup should contain original content");
+    assert_eq!(
+        backup_content, original_content,
+        "Backup should contain original content"
+    );
 }
 
 #[test]
@@ -132,7 +150,10 @@ fn test_transaction_preserves_exact_content() {
     let tx = ConfigTransaction::begin(&manager).unwrap();
     let content_with_blanks = "line1\n\n\nline2\n";
     tx.commit(content_with_blanks).unwrap();
-    assert_eq!(fs::read_to_string(&config_path).unwrap(), content_with_blanks);
+    assert_eq!(
+        fs::read_to_string(&config_path).unwrap(),
+        content_with_blanks
+    );
 
     // Test 3: No trailing newline
     let tx = ConfigTransaction::begin(&manager).unwrap();
@@ -198,16 +219,29 @@ fn test_multiple_transactions_create_multiple_backups() {
 
     // Verify 3 backups exist (one per transaction)
     let backups = manager.list_backups().unwrap();
-    assert_eq!(backups.len(), 3, "Should have 3 backups from 3 transactions");
+    assert_eq!(
+        backups.len(),
+        3,
+        "Should have 3 backups from 3 transactions"
+    );
 
     // Verify backups are sorted newest first
     let backup1_content = fs::read_to_string(&backups[0]).unwrap(); // Newest
     let backup2_content = fs::read_to_string(&backups[1]).unwrap(); // Middle
     let backup3_content = fs::read_to_string(&backups[2]).unwrap(); // Oldest
 
-    assert_eq!(backup1_content, "version 3\n", "Newest backup should be from tx3");
-    assert_eq!(backup2_content, "version 2\n", "Middle backup should be from tx2");
-    assert_eq!(backup3_content, "version 1\n", "Oldest backup should be from tx1");
+    assert_eq!(
+        backup1_content, "version 3\n",
+        "Newest backup should be from tx3"
+    );
+    assert_eq!(
+        backup2_content, "version 2\n",
+        "Middle backup should be from tx2"
+    );
+    assert_eq!(
+        backup3_content, "version 1\n",
+        "Oldest backup should be from tx1"
+    );
 
     // Verify final config has latest content
     assert_eq!(fs::read_to_string(&config_path).unwrap(), "version 4\n");
@@ -240,16 +274,21 @@ fn test_injection_blocks_commit() {
 
     match result.unwrap_err() {
         ConfigError::ValidationFailed(msg) => {
-            assert!(msg.contains("validation error"),
-                    "Error should mention validation: {}", msg);
+            assert!(
+                msg.contains("validation error"),
+                "Error should mention validation: {}",
+                msg
+            );
         }
         other => panic!("Expected ValidationFailed, got {:?}", other),
     }
 
     // Original config should be unchanged (transaction rolled back)
     let current = manager.read_config().unwrap();
-    assert_eq!(current, "bind = SUPER, K, exec, firefox\n",
-               "Original config should be untouched after failed validation");
+    assert_eq!(
+        current, "bind = SUPER, K, exec, firefox\n",
+        "Original config should be untouched after failed validation"
+    );
 }
 
 #[test]
@@ -272,16 +311,21 @@ fn test_critical_danger_blocks_commit() {
 
     match result.unwrap_err() {
         ConfigError::DangerousCommand(msg) => {
-            assert!(msg.contains("Critical danger") || msg.contains("blocked"),
-                    "Error should mention danger: {}", msg);
+            assert!(
+                msg.contains("Critical danger") || msg.contains("blocked"),
+                "Error should mention danger: {}",
+                msg
+            );
         }
         other => panic!("Expected DangerousCommand, got {:?}", other),
     }
 
     // Original config should be unchanged
     let current = manager.read_config().unwrap();
-    assert_eq!(current, "bind = SUPER, K, exec, firefox\n",
-               "Original config should be untouched after blocked danger");
+    assert_eq!(
+        current, "bind = SUPER, K, exec, firefox\n",
+        "Original config should be untouched after blocked danger"
+    );
 }
 
 #[test]
@@ -334,15 +378,26 @@ bind = SUPER, F, togglefloating
     let result = tx.commit_with_validation(clean);
 
     // Should succeed
-    assert!(result.is_ok(), "Clean config should commit successfully: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Clean config should commit successfully: {:?}",
+        result
+    );
 
     // Config should be updated exactly
     let current = manager.read_config().unwrap();
-    assert_eq!(current, clean, "Config should match committed content exactly");
+    assert_eq!(
+        current, clean,
+        "Config should match committed content exactly"
+    );
 
     // Should have one backup from transaction
     let backups = manager.list_backups().unwrap();
-    assert_eq!(backups.len(), 1, "Should have backup from transaction begin");
+    assert_eq!(
+        backups.len(),
+        1,
+        "Should have backup from transaction begin"
+    );
 }
 
 // ============================================================================
@@ -358,7 +413,7 @@ fn test_format_binding_with_modifiers() {
     let manager = ConfigManager::new(config_path).unwrap();
 
     let binding = Keybinding {
-        key_combo: KeyCombo::new(vec![Modifier::Super], "K"),
+        key_combo: KeyCombo::new(vec![Super], "K"),
         bind_type: BindType::Bind,
         dispatcher: "exec".to_string(),
         args: Some("firefox".to_string()),
@@ -385,7 +440,7 @@ fn test_format_binding_multiple_modifiers() {
     let manager = ConfigManager::new(config_path).unwrap();
 
     let binding = Keybinding {
-        key_combo: KeyCombo::new(vec![Modifier::Super, Modifier::Shift], "M"),
+        key_combo: KeyCombo::new(vec![Super, Shift], "M"),
         bind_type: BindType::Bind,
         dispatcher: "exec".to_string(),
         args: Some("kitty".to_string()),
@@ -407,7 +462,7 @@ fn test_format_binding_no_args() {
     let manager = ConfigManager::new(config_path).unwrap();
 
     let binding = Keybinding {
-        key_combo: KeyCombo::new(vec![Modifier::Super], "Q"),
+        key_combo: KeyCombo::new(vec![Super], "Q"),
         bind_type: BindType::Bind,
         dispatcher: "killactive".to_string(),
         args: None,
@@ -448,16 +503,16 @@ decoration {
     // New bindings (modified)
     let new_bindings = vec![
         Keybinding {
-            key_combo: KeyCombo::new(vec![Modifier::Super], "K"),
+            key_combo: KeyCombo::new(vec![Super], "K"),
             bind_type: BindType::Bind,
             dispatcher: "exec".to_string(),
-            args: Some("brave".to_string()),  // Changed from firefox
+            args: Some("brave".to_string()), // Changed from firefox
         },
         Keybinding {
-            key_combo: KeyCombo::new(vec![Modifier::Super], "M"),
+            key_combo: KeyCombo::new(vec![Super], "M"),
             bind_type: BindType::Bind,
             dispatcher: "exec".to_string(),
-            args: Some("alacritty".to_string()),  // Changed from kitty
+            args: Some("alacritty".to_string()), // Changed from kitty
         },
     ];
 
@@ -469,17 +524,32 @@ decoration {
 
     // Verify: Should have new bindings
     assert!(result.contains("brave"), "Should have new firefox → brave");
-    assert!(result.contains("alacritty"), "Should have new kitty → alacritty");
+    assert!(
+        result.contains("alacritty"),
+        "Should have new kitty → alacritty"
+    );
 
     // Verify: Should NOT have old bindings
     assert!(!result.contains("firefox"), "Should not have old firefox");
     assert!(!result.contains("kitty"), "Should not have old kitty");
 
     // Verify: Should preserve comments and settings
-    assert!(result.contains("# My Hyprland Config"), "Should preserve header comment");
-    assert!(result.contains("$mainMod = SUPER"), "Should preserve variables");
-    assert!(result.contains("windowrule"), "Should preserve window rules");
-    assert!(result.contains("decoration"), "Should preserve decoration section");
+    assert!(
+        result.contains("# My Hyprland Config"),
+        "Should preserve header comment"
+    );
+    assert!(
+        result.contains("$mainMod = SUPER"),
+        "Should preserve variables"
+    );
+    assert!(
+        result.contains("windowrule"),
+        "Should preserve window rules"
+    );
+    assert!(
+        result.contains("decoration"),
+        "Should preserve decoration section"
+    );
     assert!(result.contains("rounding = 10"), "Should preserve settings");
 }
 
@@ -499,14 +569,7 @@ bind = SUPER, K, exec, firefox
 
     let mut manager = ConfigManager::new(config_path.clone()).unwrap();
 
-    let new_bindings = vec![
-        Keybinding {
-            key_combo: KeyCombo::new(vec![Modifier::Super], "M"),
-            bind_type: BindType::Bind,
-            dispatcher: "exec".to_string(),
-            args: Some("kitty".to_string()),
-        },
-    ];
+    let new_bindings = vec![create_test_binding()];
 
     manager.write_bindings(&new_bindings).unwrap();
 
@@ -537,14 +600,7 @@ fn test_write_bindings_creates_backup() {
     assert_eq!(backups_before.len(), 0);
 
     // Write new bindings
-    let new_bindings = vec![
-        Keybinding {
-            key_combo: KeyCombo::new(vec![Modifier::Super], "M"),
-            bind_type: BindType::Bind,
-            dispatcher: "exec".to_string(),
-            args: Some("kitty".to_string()),
-        },
-    ];
+    let new_bindings = vec![create_test_binding()];
 
     manager.write_bindings(&new_bindings).unwrap();
 
@@ -554,5 +610,8 @@ fn test_write_bindings_creates_backup() {
 
     // Backup should contain original content
     let backup_content = fs::read_to_string(&backups_after[0]).unwrap();
-    assert!(backup_content.contains("firefox"), "Backup should have original binding");
+    assert!(
+        backup_content.contains("firefox"),
+        "Backup should have original binding"
+    );
 }

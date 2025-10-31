@@ -33,11 +33,19 @@
 //! The parser only reads and structures data - it never executes commands
 //! or modifies files. All validation happens in validator.rs after parsing.
 
-use nom::{branch::alt, bytes::complete::{tag, take_until, take_while1}, character::complete::{char, space0}, combinator::{map, opt}, sequence::preceded, IResult, Parser};
+use nom::{
+    branch::alt,
+    bytes::complete::{tag, take_until, take_while1},
+};
+use nom::{
+    character::complete::{char, space0},
+    combinator::{map, opt},
+};
+use nom::{sequence::preceded, IResult, Parser};
 use std::{collections::HashMap, path::Path};
 use thiserror::Error;
 
-use crate::core::types::{BindType, Keybinding, KeyCombo, Modifier};
+use crate::core::types::{BindType, KeyCombo, Keybinding, Modifier};
 
 /// Parse errors with line number context
 #[derive(Debug, Error)]
@@ -74,7 +82,7 @@ pub fn parse_config_file(content: &str, _file_path: &Path) -> Result<Vec<Keybind
     let mut keybindings = Vec::new();
 
     for (line_num, line) in content.lines().enumerate() {
-        let line_num = line_num + 1;  // Human-readable numbers start at 1
+        let line_num = line_num + 1; // Human-readable numbers start at 1
 
         // Skip empty lines and comments
         let line_trimmed = line.trim();
@@ -96,7 +104,7 @@ pub fn parse_config_file(content: &str, _file_path: &Path) -> Result<Vec<Keybind
             Err(e) => {
                 return Err(ParseError::InvalidSyntax {
                     line: line_num,
-                    message: format!("{:?}", e)
+                    message: format!("{:?}", e),
                 });
             }
         }
@@ -114,7 +122,7 @@ pub fn parse_config_file(content: &str, _file_path: &Path) -> Result<Vec<Keybind
 /// ```
 ///
 /// Returns a HashMap mapping variable names to their values
-fn collect_variables(contents: &str) -> HashMap<String, String> {
+pub fn collect_variables(contents: &str) -> HashMap<String, String> {
     let mut variables = HashMap::new();
 
     for line in contents.lines() {
@@ -136,7 +144,7 @@ fn collect_variables(contents: &str) -> HashMap<String, String> {
 /// Substitute variables in a line
 ///
 /// Replaces $varName with its value from the variables HashMap
-fn substitute_variables(line: &str, variables: &HashMap<String, String>) -> String {
+pub fn substitute_variables(line: &str, variables: &HashMap<String, String>) -> String {
     let mut result = line.to_string();
 
     for (var_name, var_value) in variables {
@@ -153,7 +161,7 @@ fn substitute_variables(line: &str, variables: &HashMap<String, String>) -> Stri
 /// Example: bind = SUPER, K, exec, firefox
 ///
 /// Returns a Keybinding struct or nom error
-fn parse_bind_line(input: &str) -> IResult<&str, Keybinding> {
+pub fn parse_bind_line(input: &str) -> IResult<&str, Keybinding> {
     // Parse: <bind_type> = <key_combo>, <dispatcher>, <args>
     let (input, bind_type) = parse_bind_type(input)?;
     let (input, _) = (space0, char('='), space0).parse(input)?;
@@ -182,26 +190,27 @@ fn parse_bind_line(input: &str) -> IResult<&str, Keybinding> {
 ///
 /// The parsed BindType variant, or a nom parsing error if the input
 /// doesn't start with a valid bind type keyword.
-fn parse_bind_type(input: &str) -> IResult<&str, BindType> {
+pub fn parse_bind_type(input: &str) -> IResult<&str, BindType> {
     map(
         alt((
-            tag("bindel"),  // Must come before "binde" due to being a longer match
+            tag("bindel"), // Must come before "binde" due to being a longer match
             tag("binde"),
             tag("bindl"),
             tag("bindm"),
             tag("bindr"),
             tag("bind"),
-            )),
-            |s: &str| match s {
-                "bind" => BindType::Bind,
-                "binde" => BindType::BindE,
-                "bindl" => BindType::BindL,
-                "bindm" => BindType::BindM,
-                "bindr" => BindType::BindR,
-                "bindel" => BindType::BindEL,
-                _ => unreachable!(),
+        )),
+        |s: &str| match s {
+            "bind" => BindType::Bind,
+            "binde" => BindType::BindE,
+            "bindl" => BindType::BindL,
+            "bindm" => BindType::BindM,
+            "bindr" => BindType::BindR,
+            "bindel" => BindType::BindEL,
+            _ => unreachable!(),
         },
-    ).parse(input)
+    )
+    .parse(input)
 }
 
 /// Parse key combination
@@ -211,7 +220,7 @@ fn parse_bind_type(input: &str) -> IResult<&str, BindType> {
 /// - "SUPER_SHIFT, K" (underscore-separated modifiers)
 /// - "SUPER SHIFT, K" (space-separated modifiers)
 /// - ", K" (no modifiers)
-fn parse_key_combo(input: &str) -> IResult<&str, KeyCombo> {
+pub fn parse_key_combo(input: &str) -> IResult<&str, KeyCombo> {
     let (input, modifier_str) = take_until(",")(input)?;
     let modifier_str = modifier_str.trim();
 
@@ -243,7 +252,7 @@ fn parse_key_combo(input: &str) -> IResult<&str, KeyCombo> {
 /// - "SUPER" → [Super]
 /// - "SUPER_SHIFT" → [Super, Shift]
 /// - "SUPER SHIFT" → [Super, Shift]
-fn parse_modifiers(input: &str) -> Result<Vec<Modifier>, nom::Err<nom::error::Error<&str>>> {
+pub fn parse_modifiers(input: &str) -> Result<Vec<Modifier>, nom::Err<nom::error::Error<&str>>> {
     let mut modifiers = Vec::new();
 
     // Split by underscore or space
@@ -273,99 +282,17 @@ fn parse_modifiers(input: &str) -> Result<Vec<Modifier>, nom::Err<nom::error::Er
 /// Examples:
 /// - "exec, firefox" → ("exec", Some("firefox"))
 /// - "killactive" → ("killactive", None)
-fn parse_dispatcher(input: &str) -> IResult<&str, (String, Option<String>)> {
+pub fn parse_dispatcher(input: &str) -> IResult<&str, (String, Option<String>)> {
     let (input, dispatcher) = take_while1(|c: char| c.is_alphanumeric() || c == '_')(input)?;
 
     // Check if there are arguments (after comma)
     let (input, args) = opt(preceded(
         (space0, char(','), space0),
         take_while1(|c: char| c != '\n'),
-    )).parse(input)?;
+    ))
+    .parse(input)?;
 
     let args_trimmed = args.map(|s: &str| s.trim().to_string());
 
     Ok((input, (dispatcher.to_string(), args_trimmed)))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_bind_type() {
-        assert!(matches!(
-            parse_bind_type("bind = SUPER, K"),
-            Ok((_, BindType::Bind))
-        ));
-        assert!(matches!(
-            parse_bind_type("binde = SUPER, K"),
-            Ok((_, BindType::BindE))
-        ));
-        assert!(matches!(
-            parse_bind_type("bindel = SUPER, K"),
-            Ok((_, BindType::BindEL))
-        ));
-    }
-
-    #[test]
-    fn test_parse_modifiers() {
-        let mods = parse_modifiers("SUPER").unwrap();
-        assert_eq!(mods.len(), 1);
-        assert_eq!(mods[0], Modifier::Super);
-
-        let mods = parse_modifiers("SUPER_SHIFT").unwrap();
-        assert_eq!(mods.len(), 2);
-
-        let mods = parse_modifiers("SUPER SHIFT").unwrap();
-        assert_eq!(mods.len(), 2);
-    }
-
-    #[test]
-    fn test_dispatcher() {
-        let (_, (disp, args)) = parse_dispatcher("exec, firefox").unwrap();
-        assert_eq!(disp, "exec");
-        assert_eq!(args, Some("firefox".to_string()));
-
-        let (_, (disp, args)) = parse_dispatcher("killactive").unwrap();
-        assert_eq!(disp, "killactive");
-        assert_eq!(args, None);
-    }
-
-    #[test]
-    fn test_parse_bind_line() {
-        let result = parse_bind_line("bind = SUPER, K, exec, firefox");
-        assert!(result.is_ok());
-
-        let (_, binding) = result.unwrap();
-        assert!(matches!(binding.bind_type, BindType::Bind));
-        assert_eq!(binding.key_combo.key, "K");
-        assert_eq!(binding.dispatcher, "exec");
-        assert_eq!(binding.args, Some("firefox".to_string()));
-    }
-
-    #[test]
-    fn test_variable_substitution() {
-        let content = "$mainMod = SUPER\nbind = $mainMod, K, exec, firefox";
-        let vars = collect_variables(content);
-        assert_eq!(vars.get("mainMod"), Some(&"SUPER".to_string()));
-
-        let substituted = substitute_variables("bind = $mainMod, K", &vars);
-        assert_eq!(substituted, "bind = SUPER, K");
-    }
-
-    #[test]
-    fn test_parse_config_file() {
-        let config = r#"
-# Comment line
-$mainMod = SUPER
-
-bind = $mainMod, K, exec, firefox
-binde = $mainMod SHIFT, R, exec, wofi
-"#;
-        let result = parse_config_file(config, Path::new("test.conf"));
-        assert!(result.is_ok());
-
-        let bindings = result.unwrap();
-        assert_eq!(bindings.len(), 2);
-    }
 }

@@ -26,16 +26,16 @@
 //! - `backup_dialog.rs` - Backup management dialog
 
 mod conflict_panel;
+mod details_panel;
 mod edit_dialog;
 mod keybind_list;
 mod search_bar;
-mod details_panel;
-mod backup_dialog;
+
+pub(crate) mod backup_dialog;
+
 pub mod conflict_resolution_dialog;
 
-pub use conflict_panel::ConflictPanel;
-pub use edit_dialog::EditDialog;
-pub use keybind_list::KeybindList;
-pub use search_bar::SearchBar;
-pub use details_panel::DetailsPanel;
-pub use backup_dialog::BackupDialog;
+pub use {
+    backup_dialog::BackupDialog, conflict_panel::ConflictPanel, details_panel::DetailsPanel,
+    edit_dialog::EditDialog, keybind_list::KeybindList, search_bar::SearchBar,
+};

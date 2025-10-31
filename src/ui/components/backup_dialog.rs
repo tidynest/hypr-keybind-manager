@@ -12,8 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use gtk4::{prelude::*, Align, Box as GtkBox, Button, Label, ListBox, Orientation, ScrolledWindow, Window};
-use std::{cell::Cell, path::{Path, PathBuf}, rc::Rc};
+use gtk4::{
+    prelude::*, Align, Box as GtkBox, Button, Label, ListBox, Orientation, ScrolledWindow, Window,
+};
+use std::{
+    cell::Cell,
+    path::{Path, PathBuf},
+    rc::Rc,
+};
 
 /// Dialog for managing configuration file backups.
 ///
@@ -46,7 +52,7 @@ impl BackupDialog {
     /// # Returns
     ///
     /// Formatted display string (e.g., "2025-10-15 14:30:25")
-    fn format_backup_display(backup_path: &Path) -> String {
+    pub(crate) fn format_backup_display(backup_path: &Path) -> String {
         // Extract filename from path
         let filename = backup_path
             .file_name()
@@ -54,8 +60,8 @@ impl BackupDialog {
             .unwrap_or("Unknown backup");
 
         // Timestamp parsing and reformatting/-styling
-        let parts: Vec<&str> = filename.split('.').collect();                   // parts = ["hyprland", "conf", "2025-10-15_143025"}
-        let timestamp = parts.last().unwrap_or(&"");                            // timestamp = "2025-10-15_143025"
+        let parts: Vec<&str> = filename.split('.').collect(); // parts = ["hyprland", "conf", "2025-10-15_143025"}
+        let timestamp = parts.last().unwrap_or(&""); // timestamp = "2025-10-15_143025"
 
         // Start with the filename as fallback
         let mut display_text = filename.to_string();
@@ -112,7 +118,7 @@ impl BackupDialog {
 
         // Create scrolled window for the list
         let scrolled_window = ScrolledWindow::builder()
-            .vexpand(true)  //Expands vertically to fill space
+            .vexpand(true) //Expands vertically to fill space
             .build();
 
         // Create list box for backups
@@ -138,23 +144,18 @@ impl BackupDialog {
 
         // Create button row
         let button_box = GtkBox::new(Orientation::Horizontal, 12);
-        button_box.set_halign(Align::End);  // Push buttons to the right
+        button_box.set_halign(Align::End); // Push buttons to the right
 
         let restore_button = Button::builder()
             .label("Restore")
-            .sensitive(false)  // Disabled until something is selected
+            .sensitive(false) // Disabled until something is selected
             .build();
-        restore_button.add_css_class("suggested-action");  // Blue/primary colour
+        restore_button.add_css_class("suggested-action"); // Blue/primary colour
 
-        let delete_button = Button::builder()
-            .label("Delete")
-            .sensitive(false)
-            .build();
-        delete_button.add_css_class("destructive-action");  // Red colour
+        let delete_button = Button::builder().label("Delete").sensitive(false).build();
+        delete_button.add_css_class("destructive-action"); // Red colour
 
-        let close_button = Button::builder()
-            .label("Close")
-            .build();
+        let close_button = Button::builder().label("Close").build();
 
         button_box.append(&restore_button);
         button_box.append(&delete_button);
@@ -320,59 +321,5 @@ impl BackupDialog {
 
         self.list_box.unselect_all();
         self.dialog_ready.set(true);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::path::PathBuf;
-
-    #[test]
-    fn test_format_backup_display_valid_timestamp() {
-        let path = PathBuf::from("/backups/hyprland.conf.2025-10-15_143025");
-        let result = BackupDialog::format_backup_display(&path);
-        assert_eq!(result, "2025-10-15 14:30:25");
-    }
-
-    #[test]
-    fn test_format_backup_display_different_timestamp() {
-        let path = PathBuf::from("/backups/hyprland.conf.2024-12-31_235959");
-        let result = BackupDialog::format_backup_display(&path);
-        assert_eq!(result, "2024-12-31 23:59:59");
-    }
-
-    #[test]
-    fn test_format_backup_display_invalid_format() {
-        // Invalid: wrong number of parts
-        let path = PathBuf::from("/backups/hyprland.conf");
-        let result = BackupDialog::format_backup_display(&path);
-        assert_eq!(result, "hyprland.conf", "Should fall back to filename");
-    }
-
-    #[test]
-    fn test_format_backup_display_malformed_timestamp() {
-        // Valid structure but malformed timestamp (7 digits instead of 6)
-        let path = PathBuf::from("/backups/hyprland.conf.2025-10-15_1430255");
-        let result = BackupDialog::format_backup_display(&path);
-        // Should fall back to original filename since time_part.len() != 6
-        assert_eq!(result, "hyprland.conf.2025-10-15_1430255");
-    }
-
-    #[test]
-    fn test_format_backup_display_no_underscore() {
-        // Missing underscore in timestamp
-        let path = PathBuf::from("/backups/hyprland.conf.20251015143025");
-        let result = BackupDialog::format_backup_display(&path);
-        // Should fall back to original filename since split('_') won't give 2 parts
-        assert_eq!(result, "hyprland.conf.20251015143025");
-    }
-
-    #[test]
-    fn test_format_backup_display_unknown_backup() {
-        // Path with no filename
-        let path = PathBuf::from("/");
-        let result = BackupDialog::format_backup_display(&path);
-        assert_eq!(result, "Unknown backup");
     }
 }

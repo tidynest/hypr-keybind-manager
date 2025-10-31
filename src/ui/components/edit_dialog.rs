@@ -30,8 +30,7 @@
 //! # Example
 //!
 //! ```no_run
-//! use hypr_keybind_manager::ui::components::EditDialog;
-//! use hypr_keybind_manager::core::types::{Keybinding, KeyCombo, Modifier, BindType};
+//! use hypr_keybind_manager::{core::types::{Keybinding, KeyCombo, Modifier, BindType}, ui::components::EditDialog};
 //! use gtk4::ApplicationWindow;
 //!
 //! # fn example(parent: &ApplicationWindow) {
@@ -49,10 +48,12 @@
 //! # }
 //! ```
 
-use gtk4::{prelude::*, ApplicationWindow, Box as GtkBox, Button, Entry, Grid, Label, Orientation, Window};
+use gtk4::{
+    prelude::*, ApplicationWindow, Box as GtkBox, Button, Entry, Grid, Label, Orientation, Window,
+};
 use std::{cell::Cell, rc::Rc};
 
-use crate::core::types::{Keybinding, KeyCombo, Modifier, BindType};
+use crate::core::types::{BindType, KeyCombo, Keybinding, Modifier};
 
 /// Dialog for editing an existing keybinding
 pub struct EditDialog {
@@ -155,13 +156,9 @@ impl EditDialog {
             .margin_bottom(20)
             .build();
 
-        let cancel_button = Button::builder()
-            .label("Cancel")
-            .build();
+        let cancel_button = Button::builder().label("Cancel").build();
 
-        let save_button = Button::builder()
-            .label("💾 Save")
-            .build();
+        let save_button = Button::builder().label("💾 Save").build();
         save_button.add_css_class("suggested-action");
 
         button_box.append(&cancel_button);
@@ -339,7 +336,7 @@ impl EditDialog {
                     match self.parse_binding() {
                         Ok(binding) => {
                             self.dialog_window.close();
-                            return Some(binding)
+                            return Some(binding);
                         }
                         Err(e) => {
                             self.show_error(&e);
@@ -354,7 +351,7 @@ impl EditDialog {
                 }
                 None => {
                     self.dialog_window.close();
-                    return None
+                    return None;
                 }
             }
         }

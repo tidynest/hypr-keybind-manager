@@ -19,3 +19,6 @@
 
 #[cfg(test)]
 mod controller_tests;
+
+#[cfg(test)]
+mod backup_dialog_tests;

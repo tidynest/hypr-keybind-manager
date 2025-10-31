@@ -26,8 +26,8 @@
 //! For typical configs (100-500 bindings), conflict checking completes
 //! in <5 microseconds.
 
+use crate::core::types::{KeyCombo, Keybinding};
 use std::collections::HashMap;
-use crate::core::types::{Keybinding, KeyCombo};
 
 /// Detects keybinding conflicts in O(1) time using HashMap-based indexing.
 ///
@@ -74,7 +74,7 @@ impl ConflictDetector {
         self.bindings
             .iter()
             .filter(|(_, bindings)| bindings.len() > 1)
-            .map(|(key_combo, bindings)| Conflict{
+            .map(|(key_combo, bindings)| Conflict {
                 key_combo: key_combo.clone(),
                 conflicting_bindings: bindings.clone(),
             })
@@ -102,4 +102,3 @@ impl Default for ConflictDetector {
         Self::new()
     }
 }
-

@@ -76,4 +76,3 @@ fn test_keybinding_no_args() {
     assert!(display.contains("killactive"));
     assert!(!display.ends_with(",")); // No trailing comma when no args
 }
-

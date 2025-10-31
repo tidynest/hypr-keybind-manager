@@ -31,9 +31,11 @@ pub mod parser;
 pub mod types;
 pub mod validator;
 
-pub use conflict::{ConflictDetector, Conflict};
-pub use types::*;
 pub use validator::{validate_keybinding, ValidationError};
+pub use {
+    conflict::{Conflict, ConflictDetector},
+    types::*,
+};
 
 #[cfg(test)]
 mod tests;

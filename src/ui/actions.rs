@@ -17,10 +17,14 @@
 //! This module contains all GTK action definitions (quit, export, import)
 //! and their setup functions
 
-use gtk4::{prelude::*, gio::{Cancellable, SimpleAction}, Application, ApplicationWindow, FileDialog};
+use gtk4::{
+    gio::{Cancellable, SimpleAction},
+    prelude::*,
+    Application, ApplicationWindow, FileDialog,
+};
 use std::rc::Rc;
 
-use crate::ui::{{controller::ImportMode}, Controller};
+use crate::ui::{controller::ImportMode, Controller};
 
 /// Sets up the quit action
 ///
@@ -43,7 +47,7 @@ pub fn setup_quit_action(app: &Application) {
 pub fn setup_export_action(
     app: &Application,
     window: &ApplicationWindow,
-    controller: Rc<Controller>
+    controller: Rc<Controller>,
 ) {
     let export_action = SimpleAction::new("export", None);
     let controller_for_export = controller.clone();
@@ -60,8 +64,10 @@ pub fn setup_export_action(
         let controller_clone = controller_for_export.clone();
         let window_clone = window_for_export.clone();
 
-        file_dialog.save(Some(&window_clone), None::<&Cancellable>, move |result| {
-            match result {
+        file_dialog.save(
+            Some(&window_clone),
+            None::<&Cancellable>,
+            move |result| match result {
                 Ok(file) => {
                     let path = file.path().unwrap();
                     eprintln!("💾 Exporting to: {:?}", path);
@@ -72,8 +78,8 @@ pub fn setup_export_action(
                     }
                 }
                 Err(_) => eprintln!("🚫 Export cancelled"),
-            }
-        });
+            },
+        );
     });
 
     app.add_action(&export_action);
@@ -115,18 +121,18 @@ pub fn setup_import_action(
         eprintln!("📋 Import mode: {:?}", chosen_mode);
 
         // Step 2: Show file picker
-        let file_dialog = FileDialog::builder()
-            .title("Import Keybindings")
-            .build();
+        let file_dialog = FileDialog::builder().title("Import Keybindings").build();
 
-        let controller_clone     = controller_for_import.clone();
-        let keybind_list_clone   = keybind_list_for_import.clone();
-        let details_panel_clone  = details_panel_for_import.clone();
+        let controller_clone = controller_for_import.clone();
+        let keybind_list_clone = keybind_list_for_import.clone();
+        let details_panel_clone = details_panel_for_import.clone();
         let conflict_panel_clone = conflict_panel_for_import.clone();
-        let window_clone         = window_for_import.clone();
+        let window_clone = window_for_import.clone();
 
-        file_dialog.open(Some(&window_clone), None::<&Cancellable>, move |result| {
-            match result {
+        file_dialog.open(
+            Some(&window_clone),
+            None::<&Cancellable>,
+            move |result| match result {
                 Ok(file) => {
                     let path = file.path().unwrap();
                     eprintln!("📥 Importing from: {:?}", path);
@@ -143,8 +149,8 @@ pub fn setup_import_action(
                     }
                 }
                 Err(_) => eprintln!("🚫 Import cancelled"),
-            }
-        });
+            },
+        );
     });
 
     app.add_action(&import_action);
@@ -153,7 +159,9 @@ pub fn setup_import_action(
     ///
     /// Returns the chosen ImportMode wrapped in Rc<std::cell::Cell<Option<ImportMode>>>
     /// so it can be shared across GTK callbacks
-    fn show_import_mode_dialog(parent: &ApplicationWindow) -> Rc<std::cell::Cell<Option<ImportMode>>> {
+    fn show_import_mode_dialog(
+        parent: &ApplicationWindow,
+    ) -> Rc<std::cell::Cell<Option<ImportMode>>> {
         use gtk4::{Box as GtkBox, Button, CheckButton, Label, Orientation, Window};
         use std::cell::Cell;
 
@@ -184,7 +192,8 @@ pub fn setup_import_action(
         vbox.append(&replace_radio);
 
         // Radio button: Merge
-        let merge_radio = CheckButton::with_label("Merge - Keep existing, add imported (skip duplicates)");
+        let merge_radio =
+            CheckButton::with_label("Merge - Keep existing, add imported (skip duplicates)");
         merge_radio.set_group(Some(&replace_radio));
         vbox.append(&merge_radio);
 
@@ -235,10 +244,7 @@ pub fn setup_import_action(
 ///
 /// Creates a GTK action that triggers Hyprland to reload its configuration,
 /// applying all pending changes immediately without restart.
-pub fn setup_apply_action(
-    app: &Application,
-    controller: Rc<Controller>,
-) {
+pub fn setup_apply_action(app: &Application, controller: Rc<Controller>) {
     let apply_action = SimpleAction::new("apply-to-hyprland", None);
     let controller_for_apply = controller.clone();
 

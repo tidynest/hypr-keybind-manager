@@ -39,13 +39,17 @@ pub mod error;
 pub mod transaction;
 pub mod validator;
 
-pub use error::ConfigError;
-pub use transaction::ConfigTransaction;
+pub use {error::ConfigError, transaction::ConfigTransaction};
 
+use atomic_write_file::AtomicWriteFile;
 use chrono::Local;
-use std::{fs, path::{Path, PathBuf}};
+use std::{
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+};
 
-use crate::Keybinding;
+use crate::{core::types::Keybinding, Modifier::*};
 
 /// Manages Hyprland configuration files with safe atomic operations.
 /// The ConfigManager provides read-only access and transactional writes
@@ -95,7 +99,10 @@ impl ConfigManager {
 
         // Warn if config is a symlink (but allow it per user preference)
         if config_path.read_link().is_ok() {
-            eprintln!("⚠ Warning: Config file is a symlink: {}", config_path.display());
+            eprintln!(
+                "⚠ Warning: Config file is a symlink: {}",
+                config_path.display()
+            );
             eprintln!("  This is allowed, but be aware of what it points to.");
         }
 
@@ -104,17 +111,16 @@ impl ConfigManager {
         let backup_dir = config_path
             .parent()
             .ok_or_else(|| {
-                ConfigError::BackupDirNotWritable(
-                    PathBuf::from("Config file has no parent directory")
-                )
+                ConfigError::BackupDirNotWritable(PathBuf::from(
+                    "Config file has no parent directory",
+                ))
             })?
             .join("backups");
 
         // Create backup directory if it doesn't exist
         if !backup_dir.exists() {
-            fs::create_dir_all(&backup_dir).map_err(|_| {
-                ConfigError::BackupDirNotWritable(backup_dir.clone())
-            })?;
+            fs::create_dir_all(&backup_dir)
+                .map_err(|_| ConfigError::BackupDirNotWritable(backup_dir.clone()))?;
         }
 
         // Verify backup directory is writable
@@ -165,7 +171,8 @@ impl ConfigManager {
 
         // Build the backup filename
         // Extract the original filename (e.g., "hyprland.conf")
-        let original_name = self.config_path
+        let original_name = self
+            .config_path
             .file_name()
             .expect("Config path should have a file name")
             .to_str()
@@ -203,8 +210,7 @@ impl ConfigManager {
     /// ```
     pub fn list_backups(&self) -> Result<Vec<PathBuf>, ConfigError> {
         // Read the backup directory
-        let entries = fs::read_dir(&self.backup_dir)
-            .map_err(ConfigError::Io)?;
+        let entries = fs::read_dir(&self.backup_dir).map_err(ConfigError::Io)?;
 
         // Collect valid backups with their timestamps
         let mut backups: Vec<(PathBuf, chrono::NaiveDateTime)> = Vec::new();
@@ -236,10 +242,7 @@ impl ConfigManager {
 
             // Extract and parse the timestamp (3rd part)
             let timestamp_str = parts[2];
-            match chrono::NaiveDateTime::parse_from_str(
-                timestamp_str,
-                "%Y-%m-%d_%H%M%S"
-            ) {
+            match chrono::NaiveDateTime::parse_from_str(timestamp_str, "%Y-%m-%d_%H%M%S") {
                 Ok(timestamp) => {
                     backups.push((path, timestamp));
                 }
@@ -290,8 +293,7 @@ impl ConfigManager {
         // Delete the old backups
         let mut deleted_count = 0;
         for backup_path in to_delete {
-            fs::remove_file(backup_path)
-                .map_err(ConfigError::Io)?;
+            fs::remove_file(backup_path).map_err(ConfigError::Io)?;
             deleted_count += 1;
         }
 
@@ -342,28 +344,25 @@ impl ConfigManager {
     /// This function creates a safety backup before restoring, so you can
     /// always revert the restore operation by restoring from the safety backup.
     pub fn restore_backup(&self, backup_path: &Path) -> Result<(), ConfigError> {
-        use std::io::Write;
-        use atomic_write_file::AtomicWriteFile;
-
         // Step 1: Validate backup exists and is readable
         if !backup_path.exists() {
-            return Err(ConfigError::BackupFailed(
-                format!("Backup file does not exist: {}", backup_path.display())
-            ));
+            return Err(ConfigError::BackupFailed(format!(
+                "Backup file does not exist: {}",
+                backup_path.display()
+            )));
         }
 
         if !backup_path.is_file() {
-            return Err(ConfigError::BackupFailed(
-                format!("Backup path is not a file: {}", backup_path.display())
-            ));
+            return Err(ConfigError::BackupFailed(format!(
+                "Backup path is not a file: {}",
+                backup_path.display()
+            )));
         }
 
         // Step 2: Read content from the specified backup FIRST
         // (Do this before creating safety backup to ensure backup is readable)
         let backup_content = fs::read_to_string(backup_path)
-            .map_err(|e| ConfigError::BackupFailed(
-                format!("Failed to read backup file: {}", e)
-            ))?;
+            .map_err(|e| ConfigError::BackupFailed(format!("Failed to read backup file: {}", e)))?;
 
         // Step 3: Create safety backup of CURRENT state
         // This allows undoing the restore if needed
@@ -372,19 +371,16 @@ impl ConfigManager {
         // Step 4: Atomically write backup content to config file
         let mut file = AtomicWriteFile::options()
             .open(&self.config_path)
-            .map_err(|e| ConfigError::WriteFailed(
-                format!("Failed to open config for restore: {}", e)
-            ))?;
+            .map_err(|e| {
+                ConfigError::WriteFailed(format!("Failed to open config for restore: {}", e))
+            })?;
 
-        file.write_all(backup_content.as_bytes())
-            .map_err(|e| ConfigError::WriteFailed(
-                format!("Failed to write restored content: {}", e)
-            ))?;
+        file.write_all(backup_content.as_bytes()).map_err(|e| {
+            ConfigError::WriteFailed(format!("Failed to write restored content: {}", e))
+        })?;
 
         file.commit()
-            .map_err(|e| ConfigError::WriteFailed(
-                format!("Failed to commit restore: {}", e)
-            ))?;
+            .map_err(|e| ConfigError::WriteFailed(format!("Failed to commit restore: {}", e)))?;
 
         Ok(())
     }
@@ -405,8 +401,7 @@ impl ConfigManager {
     ///
     /// # Example
     /// ```no_run
-    /// # use hypr_keybind_manager::config::ConfigManager;
-    /// # use hypr_keybind_manager::core::Keybinding;
+    /// # use hypr_keybind_manager::{config::ConfigManager, core::Keybinding};
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut manager = ConfigManager::new("~/.config/hypr/hyprland.conf".into())?;
     /// let bindings = vec![/* your modified bindings */];
@@ -432,7 +427,11 @@ impl ConfigManager {
     /// Exports keybindings to a specified file path
     ///
     /// Creates a new config file containing only keybinding (no preservation of other content)
-    pub fn export_to(&self, export_path: &Path, bindings: &[Keybinding]) -> Result<(), ConfigError> {
+    pub fn export_to(
+        &self,
+        export_path: &Path,
+        bindings: &[Keybinding],
+    ) -> Result<(), ConfigError> {
         let mut content = String::from("# Exported Hyprland Keybindings\n\n");
 
         for binding in bindings {
@@ -463,7 +462,11 @@ impl ConfigManager {
     ///
     /// # Returns
     /// The rebuilt config as a string
-    fn rebuild_config(&self, original: &str, bindings: &[Keybinding]) -> Result<String, ConfigError> {
+    fn rebuild_config(
+        &self,
+        original: &str,
+        bindings: &[Keybinding],
+    ) -> Result<String, ConfigError> {
         let mut result = String::new();
         let mut in_keybinding_section = false;
         let mut keybindings_written = false;
@@ -528,12 +531,13 @@ impl ConfigManager {
     /// # Returns
     /// A formatted config line (without trailing newline)
     fn format_binding(&self, binding: &Keybinding) -> String {
-        use crate::core::types::Modifier::*;
         // Build a modifier string
         let modifiers_str = if binding.key_combo.modifiers.is_empty() {
             String::new()
         } else {
-            binding.key_combo.modifiers
+            binding
+                .key_combo
+                .modifiers
                 .iter()
                 .map(|m| match m {
                     Super => "SUPER",

@@ -31,7 +31,7 @@ pub enum DangerLevel {
 #[derive(Clone, Debug, PartialEq)]
 pub struct DangerAssessment {
     /// Assessed danger level
-    pub danger_level: crate::config::danger::DangerLevel,
+    pub danger_level: DangerLevel,
     /// Human-readable explanation of the risk
     pub reason: String,
     /// Suggested mitigation or alternative

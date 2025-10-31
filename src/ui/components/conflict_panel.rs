@@ -35,17 +35,13 @@
 //! # Example
 //!
 //! ```rust,no_run
-//! use hypr_keybind_manager::ui::{Controller, components::ConflictPanel};
-//! use std::rc::Rc;
-//! use std::path::PathBuf;
-//!
+//! use hypr_keybind_manager::ui::{components::ConflictPanel, Controller};
+//! use std::{path::PathBuf, rc::Rc};
 //! let controller = Rc::new(
 //!     Controller::new(PathBuf::from("~/.config/hypr/hyprland.conf"))
 //!         .expect("Failed to create controller")
 //! );
-//!
 //! let panel = ConflictPanel::new(controller.clone());
-//!
 //! // Initially hidden (no conflicts loaded yet)
 //! // After loading keybindings:
 //! panel.refresh();  // Shows banner if conflicts exist
@@ -54,8 +50,7 @@
 use gtk4::{prelude::*, Box as GtkBox, Button, Label, Orientation, Revealer};
 use std::rc::Rc;
 
-use crate::ui::components::KeybindList;
-use crate::ui::Controller;
+use crate::ui::{components::KeybindList, Controller};
 
 /// Warning panel that displays when keybinding conflicts are detected
 ///
@@ -80,22 +75,17 @@ impl ConflictPanel {
     /// loading keybindings to update the panel based on actual conflict state.
     ///
     /// # Arguments
-    ///
     /// * `controller` - Shared controller for accessing conflict data
     ///
     /// # Returns
-    ///
     /// A new ConflictPanel instance ready to be added to a window
     ///
     /// # Example
-    ///
     /// ```rust,no_run
-    /// # use hypr_keybind_manager::ui::{Controller, components::ConflictPanel};
-    /// # use std::rc::Rc;
-    /// # use std::path::PathBuf;
+    /// # use hypr_keybind_manager::ui::{components::ConflictPanel, Controller};
+    /// # use std::{path::PathBuf, rc::Rc};
     /// let controller = Rc::new(Controller::new(PathBuf::from("test.conf")).unwrap());
     /// let panel = ConflictPanel::new(controller);
-    ///
     /// // Add to window
     /// // vbox.append(panel.widget());
     /// ```
@@ -130,9 +120,7 @@ impl ConflictPanel {
             .margin_bottom(5)
             .build();
 
-        let resolve_button = Button::builder()
-            .label("Resolve Conflict(s)")
-            .build();
+        let resolve_button = Button::builder().label("Resolve Conflict(s)").build();
 
         // Add label, spacer, and button to warning box
         warning_box.append(&message_label);
@@ -163,11 +151,11 @@ impl ConflictPanel {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # use hypr_keybind_manager::ui::{Controller, components::ConflictPanel};
-    /// # use std::rc::Rc;
-    /// # use std::path::PathBuf;
+    /// # use hypr_keybind_manager::ui::{components::ConflictPanel, Controller};
+    /// # use std::{path::PathBuf, rc::Rc};
     /// # let controller = Rc::new(Controller::new(PathBuf::from("test.conf")).unwrap());
     /// # let panel = ConflictPanel::new(controller.clone());
+    ///
     /// // After loading keybindings
     /// panel.refresh();  // Updates based on current conflicts
     ///
@@ -207,9 +195,8 @@ impl ConflictPanel {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # use hypr_keybind_manager::ui::{Controller, components::ConflictPanel};
-    /// # use std::rc::Rc;
-    /// # use std::path::PathBuf;
+    /// # use hypr_keybind_manager::ui::{components::ConflictPanel, Controller};
+    /// # use std::{path::PathBuf, rc::Rc};
     /// # use gtk4::prelude::*;
     /// # let controller = Rc::new(Controller::new(PathBuf::from("test.conf")).unwrap());
     /// # let panel = ConflictPanel::new(controller);
@@ -234,24 +221,24 @@ impl ConflictPanel {
     /// Connects the "Resolve Conflicts" button to open the resolution dialog
     ///
     /// # Arguments
-    ///
     /// * `parent` - Parent window for the modal dialog
     pub fn connect_resolve_button(
         &self,
         parent: &gtk4::Window,
         conflict_panel: Rc<ConflictPanel>,
-        keybind_list: Rc<KeybindList>
+        keybind_list: Rc<KeybindList>,
     ) {
-       let parent_clone = parent.clone();
+        let parent_clone = parent.clone();
         let controller_clone = self.controller.clone();
 
         self.resolve_button.connect_clicked(move |_| {
-            let dialog = crate::ui::components::conflict_resolution_dialog::ConflictResolutionDialog::new(
-                &parent_clone,
-                controller_clone.clone(),
-                conflict_panel.clone(),
-                keybind_list.clone(),
-            );
+            let dialog =
+                crate::ui::components::conflict_resolution_dialog::ConflictResolutionDialog::new(
+                    &parent_clone,
+                    controller_clone.clone(),
+                    conflict_panel.clone(),
+                    keybind_list.clone(),
+                );
             dialog.show();
         });
     }

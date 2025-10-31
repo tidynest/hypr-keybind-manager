@@ -69,25 +69,86 @@ This project is likely to be enhanced and further developed in the near future.
 
 ## Screenshots
 
-> **Note**: Screenshots coming soon. The application features a clean, modern interface with:
-> - Left panel: Searchable keybinding list with "Add Keybinding" and "Manage Backups" buttons
-> - Right panel: Detailed view of selected keybinding with Edit/Delete buttons
-> - Top panel: Conflict warnings (when detected)
+> The screenshots below follow the typical user workflow, from launching the application to performing various operations.
 
-### Placeholder Images
-```
-**[Main Window]**        [Edit Dialog]        [Backup Management]
-┌──────────────────┐    ┌──────────────┐     ┌───────────────────┐
-│ Search: [____]   │    │ Edit Binding │     │ Manage Backups    │
-│  + Add Binding   │    │              │     │                   │
-│  <=> Backups     │    │ Key: [____]  │     │ 2025-01-15 14:30  │
-│                  │    │ Disp: [___]  │     │ 2025-01-14 09:15  │
-│  SUPER+K → exec  │    │ Args: [___]  │     │ 2025-01-13 18:45  │
-│  SUPER+M → exec  │    │ Type: [___]  │     │                   │
-│  SUPER+Q → kill  │    │              │     │ [Restore][Delete] │
-└──────────────────┘    │ [Save][Canc] │     └───────────────────┘
-                        └──────────────┘
-```
+### 1. Main Interface
+
+![Main Window](docs/screenshots/main-window.png)  
+*Application launches with clean interface: searchable keybinding list (left), details panel (right), and action buttons*
+
+---
+
+### 2. Search & Filter
+
+![Search Bar Active](docs/screenshots/search-bar-active.png)  
+*Search bar filters keybindings in real-time as you type*
+
+---
+
+### 3. Adding a New Keybinding
+
+**Step 1:** Click the "Add Keybinding" button
+
+![Add Dialog](docs/screenshots/add-dialog.png)  
+*Fill in the key combination, dispatcher, and arguments with real-time validation*  
+
+![Validation Error](docs/screenshots/validation-error.png)  
+*Three-layer security validation prevents dangerous commands and empty values*
+
+---
+
+### 4. Editing an Existing Keybinding
+
+**Step 1:** Select a keybinding from the list
+
+![Right Panel - Selected Keybinding](docs/screenshots/right-panel-selected.png)  
+*Right panel shows full details and activates Edit/Delete buttons when a binding is selected*
+
+**Step 2:** Click "Edit Keybinding"
+
+![Edit Dialog](docs/screenshots/edit-dialog.png)  
+*Modify any field with the same security validation as adding*
+
+---
+
+### 5. Deleting a Keybinding
+
+**Step 1:** Select a keybinding (same as Edit workflow above)
+
+**Step 2:** Click "Delete Keybinding"
+
+![Delete Dialog](docs/screenshots/delete-dialog.png)  
+*Confirmation dialog shows binding details before deletion*
+
+---
+
+### 6. Conflict Detection & Resolution
+
+![Conflict Detection Banner](docs/screenshots/conflict-banner.png)  
+*Automatic conflict detection displays warning banner when duplicate key combinations exist*
+
+![Resolve Conflicts Button](docs/screenshots/resolve-button.png)  
+*Click the "Resolve Conflict(s)" button on the right side of the warning banner to open the resolution dialog*
+
+![Resolve Conflicts Dialog](docs/screenshots/resolve-conflicts.png)  
+*One-click resolution: choose which conflicting bindings to keep or delete*
+
+---
+
+### 7. Backup Management
+
+![Manage Backups](docs/screenshots/manage-backups.png)  
+*View all automatic backups with timestamps, restore previous versions, or delete old backups*
+
+---
+
+### 8. Import/Export & Menu Options
+
+![Menu Options](docs/screenshots/menu-options.png)  
+*Access Export, Import, and Quit from the menu button*
+
+![Import Modes](docs/screenshots/import-dialog.png)  
+*Smart import: choose "Merge" to add new bindings or "Replace" to overwrite entire configuration*
 
 ---
 
@@ -429,7 +490,21 @@ hypr-keybind-manager/
 │   ├── ARCHITECTURE.md                         # System design and data flow (762 lines)
 │   ├── DESIGN_DECISIONS.md                     # Rationale for architectural choices (1082 lines)
 │   ├── ENTROPY_DETECTION.md                    # Shannon entropy deep-dive (944 lines)
-│   └── GTK_INSPECTOR_GUIDE.md                  # GTK debugging guide (215 lines)
+│   ├── GTK_INSPECTOR_GUIDE.md                  # GTK debugging guide (215 lines)
+│   └── screenshots/                            # Application screenshots (13 images, ~700 KB)
+│       ├── main-window.png                     # Main interface overview
+│       ├── search-bar-active.png               # Search functionality in action
+│       ├── add-dialog.png                      # Add keybinding dialog
+│       ├── validation-error.png                # Validation error example
+│       ├── right-panel-selected.png            # Selected keybinding details panel
+│       ├── edit-dialog.png                     # Edit keybinding dialog
+│       ├── delete-dialog.png                   # Delete confirmation dialog
+│       ├── conflict-banner.png                 # Conflict detection warning
+│       ├── resolve-button.png                  # Resolve Conflicts button close-up
+│       ├── resolve-conflicts.png               # Conflict resolution dialog
+│       ├── manage-backups.png                  # Backup management dialog
+│       ├── menu-options.png                    # Menu with Export/Import/Quit
+│       └── import-dialog.png                   # Import with Merge/Replace modes
 ├── test-data/                                  # Test configuration files
 │   ├── hyprland-test.conf                      # Safe test config (22 lines)
 │   └── backups/                                # Test backup files
@@ -588,7 +663,7 @@ git push origin main && git push origin v1.1.0
 
 1. **[MVC](https://en.wikipedia.org/wiki/Model%E2%80%93view%E2%80%93controller) Architecture**: Clean separation of concerns (Model, View, Controller)
 2. **[Builder Pattern](https://en.wikipedia.org/wiki/Builder_pattern)**: GTK4 widget construction with fluent API
-3. **[Command Pattern](https://en.wikipedia.org/wiki/Command_pattern)**: Future undo/redo system (planned Phase 6.6)
+3. **[Command Pattern](https://en.wikipedia.org/wiki/Command_pattern)**: Future undo/redo system
 4. **[Transaction Pattern](https://en.wikipedia.org/wiki/Database_transaction)**: [ACID](https://en.wikipedia.org/wiki/ACID) properties for config file operations
 5. **[Observer Pattern](https://en.wikipedia.org/wiki/Observer_pattern)**: GTK signal handlers for reactive UI updates
 
@@ -626,7 +701,7 @@ All planned features are implemented and production-ready. Quality audit (Phases
 **Features:**
 - ✅ **Export/Import**: Replace and Merge modes for sharing configs
 - ✅ **Conflict Resolution UI**: Advanced visual conflict resolution
-- ✅ **Live Hyprland IPC**: `hyprctl reload` integration (no restart needed)
+- ✅ **Live Hyprland IPC**: automated `hyprctl reload` integration (no restart needed)
 - ✅ **Live File Monitoring**: Automatic UI refresh on external config changes
 - ✅ **Three-Layer Security**: Complete validation system
 
@@ -637,7 +712,7 @@ All planned features are implemented and production-ready. Quality audit (Phases
 - ✅ **Phase 7.4**: Test coverage audit (2 scripts identified requiring tests)
 - ✅ **Phase 7.5**: Modular test creation (68 shell tests, 100% pass rate)
 
-### Future Enhancements (Post v1.1.0)
+### Future Enhancements (Post v1.1.1+)
 
 Potential features being considered for future releases:
 
@@ -645,6 +720,7 @@ Potential features being considered for future releases:
 - Multi-monitor awareness and per-monitor bindings
 - Plugin architecture for custom validators
 - Keybinding suggestion system (show available key combinations)
+- Community feedback and suggestions are welcomed!
 
 ---
 
@@ -710,7 +786,7 @@ This project maintains comprehensive technical documentation for developers, con
 
 | Document | Description | Lines | Status |
 |----------|-------------|-------|--------|
-| **[ENTROPY_DETECTION.md](docs/ENTROPY_DETECTION.md)** | Shannon entropy theory, implementation, empirical validation | 944 | Complete |
+| **[ENTROPY_DETECTION.md](docs/ENTROPY_DETECTION.md)** | Shannon entropy theory, implementation, empirical validation|
 
 **ENTROPY_DETECTION.md** provides a comprehensive technical analysis of using Shannon entropy for detecting obfuscated malicious commands (base64/hex encoding). It covers:
 - Shannon entropy fundamentals and mathematical foundation
@@ -796,12 +872,13 @@ This project stands on the shoulders of giants. Special thanks to:
 
 ### Codebase
 - **Primary Language**: Rust 1.83+
-- **Total Project Files**: 51 Rust files + 6 Markdown files + 6 shell scripts + 4 config files
+- **Total Project Files**: 51 Rust files + 6 Markdown files + 6 shell scripts + 4 config files + 13 screenshots
 - **Total Lines of Code**: 16,493 lines across entire project
   - Rust source code: 10,564 lines (51 .rs files: 36 production + 15 test modules)
   - Documentation: 4,613 lines (6 .md files: README, CONTRIBUTING, SECURITY, ARCHITECTURE, DESIGN_DECISIONS, ENTROPY_DETECTION)
   - Shell scripts: 1,134 lines (6 .sh files: 3 test scripts + 2 automation scripts + 1 utility script)
   - Configuration: 182 lines (.toml, .css, .conf files)
+  - Screenshots: 13 images (~700 KB total, organized by workflow: interface, search, CRUD operations, conflicts with button close-up, backups, import/export)
 - **Production Code**: 7,795 lines (Rust code excluding tests)
 - **Test Code**: 2,769 lines (26% of Rust code, 15 test modules)
 - **Documentation Coverage**: 100% of public APIs with examples

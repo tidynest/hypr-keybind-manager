@@ -96,4 +96,4 @@ pub mod ipc;
 pub mod ui;
 
 // Re-export commonly used types for convenience
-pub use core::{BindType, Keybinding, KeyCombo, Modifier};
+pub use core::{BindType, KeyCombo, Keybinding, Modifier};

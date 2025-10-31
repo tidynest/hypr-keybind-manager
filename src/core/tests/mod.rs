@@ -21,7 +21,12 @@
 
 #[cfg(test)]
 mod conflict_tests;
+
 #[cfg(test)]
 mod validator_tests;
+
 #[cfg(test)]
 mod types_tests;
+
+#[cfg(test)]
+mod parser_tests;

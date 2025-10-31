@@ -16,10 +16,12 @@
 //!
 //! Creates the main application layout structure.
 
+use crate::ui::{
+    components::{ConflictPanel, DetailsPanel, KeybindList, SearchBar},
+    Controller,
+};
 use gtk4::{prelude::*, Box as GtkBox, Button, Orientation, Paned};
 use std::rc::Rc;
-use crate::ui::components::{ConflictPanel, DetailsPanel, KeybindList, SearchBar};
-use crate::ui::Controller;
 
 /// Builds the main application layout
 ///
@@ -65,15 +67,11 @@ pub fn build_main_layout(
     let search_bar = SearchBar::new();
     left_vbox.append(search_bar.widget());
 
-    let add_keybinding_button = Button::builder()
-        .label("➕ Add Keybinding")
-        .build();
+    let add_keybinding_button = Button::builder().label("➕ Add Keybinding").build();
     add_keybinding_button.add_css_class("suggested-action");
     left_vbox.append(&add_keybinding_button);
 
-    let backup_button = Button::builder()
-        .label("📦 Manage Backups")
-        .build();
+    let backup_button = Button::builder().label("📦 Manage Backups").build();
     left_vbox.append(&backup_button);
 
     // Add keybind list to left side
@@ -95,15 +93,15 @@ pub fn build_main_layout(
 
     // KEY: Configure Paned to keep right side fixed at 280px
     paned.set_start_child(Some(&left_vbox));
-    paned.set_resize_start_child(true);   // Left side resizes with window
-    paned.set_shrink_start_child(true);   // Left side can shrink
+    paned.set_resize_start_child(true); // Left side resizes with window
+    paned.set_shrink_start_child(true); // Left side can shrink
 
     paned.set_end_child(Some(details_panel.widget()));
-    paned.set_resize_end_child(false);    // Right side DOES NOT resize!
-    paned.set_shrink_end_child(false);    // Right side CANNOT shrink!
+    paned.set_resize_end_child(false); // Right side DOES NOT resize!
+    paned.set_shrink_end_child(false); // Right side CANNOT shrink!
 
     // Set divider position (window width - panel width)
-    paned.set_position(720);  // 1000px default width - 280px panel = 720px
+    paned.set_position(720); // 1000px default width - 280px panel = 720px
 
     // Add paned to main
     main_vbox.append(&paned);

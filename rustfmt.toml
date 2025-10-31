@@ -1,0 +1,13 @@
+# rustfmt.toml - Rust formatting configuration (stable channel)
+# For full options: https://rust-lang.github.io/rustfmt/
+
+# === Line Length ===
+max_width = 100
+
+# === Style ===
+# Use field init shorthand when possible
+use_field_init_shorthand = true
+# Use try shorthand (`?` operator)
+use_try_shorthand = true
+# Ensure newline at end of file
+newline_style = "Unix"

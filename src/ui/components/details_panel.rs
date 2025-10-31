@@ -18,12 +18,13 @@
 //! including its key combination, dispatcher, arguments, bind type, and
 //! conflict status.
 
-use gtk4::pango::WrapMode::WordChar;
-use gtk4::{prelude::*, Align, Box as GtkBox, Button, Frame, Grid, Label, Orientation, Separator};
+use gtk4::{
+    pango::WrapMode::WordChar, prelude::*, Align, Box as GtkBox, Button, Frame, Grid, Label,
+    Orientation, Separator,
+};
 use std::{cell::RefCell, rc::Rc};
 
-use crate::core::types::Keybinding;
-use crate::ui::Controller;
+use crate::{core::types::Keybinding, ui::Controller};
 
 /// A panel that displays detailed information about a selected keybinding.
 ///
@@ -50,9 +51,9 @@ pub struct DetailsPanel {
     /// Label displaying conflict status
     status_label: Label,
     /// Edit button
-    edit_button: gtk4::Button,
+    edit_button: Button,
     /// Delete button
-    delete_button: gtk4::Button,
+    delete_button: Button,
     /// Controller for accessing conflict information
     controller: Rc<Controller>,
     /// Currently displayed binding (for delete operation)
@@ -60,6 +61,57 @@ pub struct DetailsPanel {
 }
 
 impl DetailsPanel {
+    /// Helper to create a label row (header + value) for the details grid
+    ///
+    /// Creates a consistent header/value label pair with proper styling and alignment.
+    ///
+    /// # Arguments
+    ///
+    /// * `header_text` - Text for the header label (e.g., "🎹 Key Combo:")
+    /// * `initial_value` - Initial text for the value label
+    ///
+    /// # Returns
+    ///
+    /// Tuple of (header_label, value_label)
+    fn create_label_row(header_text: &str, initial_value: &str) -> (Label, Label) {
+        let header = Label::builder()
+            .label(header_text)
+            .halign(Align::End)
+            .xalign(1.0)
+            .build();
+        header.add_css_class("field-header");
+
+        let value = Label::builder()
+            .label(initial_value)
+            .halign(Align::Start)
+            .xalign(0.0)
+            .wrap(true)
+            .wrap_mode(WordChar)
+            .max_width_chars(20)
+            .build();
+
+        (header, value)
+    }
+
+    /// Helper to create a preview of arguments (truncated to 30 chars if needed)
+    ///
+    /// # Arguments
+    /// * `args` - Optional arguments string
+    ///
+    /// # Returns
+    /// Truncated preview string (empty if no args)
+    fn format_args_preview(args: &Option<String>) -> String {
+        if let Some(args) = args {
+            if args.len() > 30 {
+                format!("({}", &args[0..30])
+            } else {
+                args.clone()
+            }
+        } else {
+            String::new()
+        }
+    }
+
     /// Create a new details panel.
     ///
     /// # Arguments
@@ -88,108 +140,31 @@ impl DetailsPanel {
         vbox.set_margin_bottom(15);
 
         // Create grid for two-column layout (label / value)
-        let grid = Grid::builder()
-            .row_spacing(10)
-            .column_spacing(15)
-            .build();
+        let grid = Grid::builder().row_spacing(10).column_spacing(15).build();
 
         // Row 0: Key Combo
-        let key_header = Label::builder()
-            .label("🎹 Key Combo:")
-            .halign(Align::End)
-            .xalign(1.0)
-            .build();
-        key_header.add_css_class("field-header");
-
-        let key_label = Label::builder()
-            .label("Select a keybinding...")
-            .halign(Align::Start)
-            .xalign(0.0)
-            .wrap(true)
-            .wrap_mode(WordChar)
-            .max_width_chars(20)
-            .build();
-
+        let (key_header, key_label) =
+            Self::create_label_row("🎹 Key Combo:", "Select a keybinding...");
         grid.attach(&key_header, 0, 0, 1, 1);
         grid.attach(&key_label, 1, 0, 1, 1);
 
         // Row 1: Dispatcher
-        let dispatcher_header = Label::builder()
-            .label("⚡ Dispatcher:")
-            .halign(Align::End)
-            .xalign(1.0)
-            .build();
-        dispatcher_header.add_css_class("field-header");
-
-        let dispatcher_label = Label::builder()
-            .label("")
-            .halign(Align::Start)
-            .xalign(0.0)
-            .wrap(true)
-            .wrap_mode(WordChar)
-            .max_width_chars(20)
-            .build();
-
+        let (dispatcher_header, dispatcher_label) = Self::create_label_row("⚡ Dispatcher:", "");
         grid.attach(&dispatcher_header, 0, 1, 1, 1);
         grid.attach(&dispatcher_label, 1, 1, 1, 1);
 
         // Row 2: Arguments
-        let args_header = Label::builder()
-            .label("📝 Arguments:")
-            .halign(Align::End)
-            .xalign(1.0)
-            .build();
-        args_header.add_css_class("field-header");
-
-        let args_label = Label::builder()
-            .label("")
-            .halign(Align::Start)
-            .xalign(0.0)
-            .wrap(true)
-            .wrap_mode(WordChar)
-            .max_width_chars(20)
-            .build();
-
+        let (args_header, args_label) = Self::create_label_row("📝 Arguments:", "");
         grid.attach(&args_header, 0, 2, 1, 1);
         grid.attach(&args_label, 1, 2, 1, 1);
 
         // Row 3: Bind Type
-        let bind_type_header = Label::builder()
-            .label("🔗 Bind Type:")
-            .halign(Align::End)
-            .xalign(1.0)
-            .build();
-        bind_type_header.add_css_class("field-header");
-
-        let bind_type_label = Label::builder()
-            .label("")
-            .halign(Align::Start)
-            .xalign(0.0)
-            .wrap(true)
-            .wrap_mode(WordChar)
-            .max_width_chars(20)
-            .build();
-
+        let (bind_type_header, bind_type_label) = Self::create_label_row("🔗 Bind Type:", "");
         grid.attach(&bind_type_header, 0, 3, 1, 1);
         grid.attach(&bind_type_label, 1, 3, 1, 1);
 
         // Row 4: Status
-        let status_header = Label::builder()
-            .label("📊 Status:")
-            .halign(Align::End)
-            .xalign(1.0)
-            .build();
-        status_header.add_css_class("field-header");
-
-        let status_label = Label::builder()
-            .label("")
-            .halign(Align::Start)
-            .xalign(0.0)
-            .wrap(true)
-            .wrap_mode(WordChar)
-            .max_width_chars(20)
-            .build();
-
+        let (status_header, status_label) = Self::create_label_row("📊 Status:", "");
         grid.attach(&status_header, 0, 4, 1, 1);
         grid.attach(&status_label, 1, 4, 1, 1);
 
@@ -205,14 +180,14 @@ impl DetailsPanel {
         // Add edit button
         let edit_button = Button::builder()
             .label("✏️ Edit Keybinding")
-            .sensitive(false)  // Disabled until a binding is selected
+            .sensitive(false) // Disabled until a binding is selected
             .build();
         vbox.append(&edit_button);
 
         // Add delete button
         let delete_button = Button::builder()
             .label("🗑️  Delete Keybinding")
-            .sensitive(false)  // Disabled until a binding is selected
+            .sensitive(false) // Disabled until a binding is selected
             .build();
         delete_button.add_css_class("destructive-action");
         vbox.append(&delete_button);
@@ -288,9 +263,10 @@ impl DetailsPanel {
 
                 for conflict in conflicts.iter() {
                     // Check if this binding is part of this conflict
-                    let is_involved = conflict.conflicting_bindings.iter().any(|cb| {
-                        cb.key_combo == b.key_combo && cb.dispatcher == b.dispatcher
-                    });
+                    let is_involved = conflict
+                        .conflicting_bindings
+                        .iter()
+                        .any(|cb| cb.key_combo == b.key_combo && cb.dispatcher == b.dispatcher);
 
                     if is_involved {
                         // Collect all other bindings in this conflict
@@ -307,25 +283,16 @@ impl DetailsPanel {
                 // Format the status message based on conflicts found
                 if conflicting_bindings.is_empty() {
                     self.status_label.set_label("✅ No conflicts");
-                    self.status_label.set_tooltip_text(Some("This keybinding has no conflicts"));
+                    self.status_label
+                        .set_tooltip_text(Some("This keybinding has no conflicts"));
                 } else if conflicting_bindings.len() == 1 {
                     // Single conflict - show the full details
                     let other = &conflicting_bindings[0];
-                    let args_preview = if let Some(args) = &other.args {
-                        if args.len() > 30 {
-                            format!("({}", &args[..30])
-                        } else {
-                            args.clone()
-                        }
-                    } else {
-                        String::new()
-                    };
+                    let args_preview = Self::format_args_preview(&other.args);
 
                     let conflict_description = format!(
                         "⚠️ Conflicts with:\n{} → {} {}",
-                        other.key_combo,
-                        other.dispatcher,
-                        args_preview
+                        other.key_combo, other.dispatcher, args_preview
                     );
 
                     let full_conflict = format!(
@@ -340,15 +307,7 @@ impl DetailsPanel {
                 } else {
                     // Multiple conflicts - show first one and count
                     let first_conflict = &conflicting_bindings[0];
-                    let args_preview = if let Some(args) = &first_conflict.args {
-                        if args.len() > 30 {
-                            format!("({}", &args[..30])
-                        } else {
-                            args.clone()
-                        }
-                    } else {
-                        String::new()
-                    };
+                    let args_preview = Self::format_args_preview(&first_conflict.args);
 
                     let conflict_description = format!(
                         "⚠️  {}\n   {} {}\n   (and {} more)",

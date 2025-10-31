@@ -50,7 +50,11 @@ fn test_danger_warned_by_layer2() {
     assert!(!report.has_errors(), "Safe command should not have errors");
 
     // Should not have warnings (safe command)
-    assert_eq!(report.issues.len(), 0, "Safe command should have no warnings");
+    assert_eq!(
+        report.issues.len(),
+        0,
+        "Safe command should have no warnings"
+    );
 }
 
 #[test]
@@ -65,11 +69,15 @@ fn test_critical_danger_reported() {
     assert!(report.has_critical_dangers(), "rm -rf / should be critical");
 
     // Should NOT have errors (critical blocks commit)
-    assert!(!report.has_errors(), "Critical danger should not be an error - it's a danger");
+    assert!(
+        !report.has_errors(),
+        "Critical danger should not be an error - it's a danger"
+    );
 
     // Should record the danger in dangerous_commands
     assert_eq!(
-        report.dangerous_commands.len(), 1,
+        report.dangerous_commands.len(),
+        1,
         "Should record one dangerous command"
     );
 
@@ -95,7 +103,8 @@ bind = SUPER, M, exec, dd if=/dev/zero of=/dev/sda
     // Should have errors from injection only
     assert!(report.has_errors(), "Should have errors");
     assert_eq!(
-        report.issues.len(), 1,
+        report.issues.len(),
+        1,
         "Should have one issue (injection only - critical dangers aren't errors)"
     );
 
@@ -106,7 +115,10 @@ bind = SUPER, M, exec, dd if=/dev/zero of=/dev/sda
     );
 
     // Should have critical danger
-    assert!(report.has_critical_dangers(), "Should detect critical danger");
+    assert!(
+        report.has_critical_dangers(),
+        "Should detect critical danger"
+    );
 }
 
 #[test]
@@ -130,7 +142,9 @@ bind = SUPER, F, togglefloating
     assert_eq!(report.issues.len(), 0, "Safe config should have no issues");
 
     // Should have no dangers
-    assert!(!report.has_critical_dangers(), "Safe config should have no dangers");
+    assert!(
+        !report.has_critical_dangers(),
+        "Safe config should have no dangers"
+    );
     assert_eq!(report.highest_danger, DangerLevel::Safe);
 }
-

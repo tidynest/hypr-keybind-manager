@@ -20,10 +20,10 @@
 //! - Integration tests (end-to-end danger assessment)
 
 #[cfg(test)]
-mod patterns_tests;
-
-#[cfg(test)]
 mod entropy_tests;
 
 #[cfg(test)]
 mod integration_tests;
+
+#[cfg(test)]
+mod patterns_tests;

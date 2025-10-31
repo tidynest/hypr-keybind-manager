@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::super::{*, entropy};
+use super::super::{entropy, *};
 
 // ========================================================================
 // ROUND 3: Entropy Analysis
@@ -22,11 +22,11 @@ use super::super::{*, entropy};
 fn test_entropy_calculation_low() {
     // Normal commands and text have lower entropy due to patterns
     let test_cases = vec![
-        ("firefox", 1.5, 3.5),           // Normal command
-        ("alacritty", 2.0, 4.0),         // Longer command
-        ("hello world", 2.0, 4.0),       // Natural language (spaces reduce entropy)
-        ("aaaaaaaaa", 0.0, 0.1),         // Repetition = very low entropy
-        ("/usr/bin/bash", 2.0, 3.5),     // Path with common characters
+        ("firefox", 1.5, 3.5),       // Normal command
+        ("alacritty", 2.0, 4.0),     // Longer command
+        ("hello world", 2.0, 4.0),   // Natural language (spaces reduce entropy)
+        ("aaaaaaaaa", 0.0, 0.1),     // Repetition = very low entropy
+        ("/usr/bin/bash", 2.0, 3.5), // Path with common characters
     ];
 
     for (input, min_expected, max_expected) in test_cases {
@@ -48,17 +48,15 @@ fn test_entropy_calculation_high() {
     // Real-world entropy is MUCH lower than theoretical maximums
     let test_cases = vec![
         // Base64 examples (actual range: 2.5-4.0 bits/char, NOT 6.0)
-        ("ZmlyZWZveA==", 2.5, 4.5),      // "firefox" encoded
-        ("Y2htb2QgNzc3", 2.5, 4.5),      // "chmod 777" encoded
-        ("cm0gLXJmIC8=", 2.5, 4.5),      // "rm -rf /" encoded
-        ("SGVsbG8gV29ybGQ=", 2.5, 4.5),  // "Hello World" encoded
-
+        ("ZmlyZWZveA==", 2.5, 4.5),     // "firefox" encoded
+        ("Y2htb2QgNzc3", 2.5, 4.5),     // "chmod 777" encoded
+        ("cm0gLXJmIC8=", 2.5, 4.5),     // "rm -rf /" encoded
+        ("SGVsbG8gV29ybGQ=", 2.5, 4.5), // "Hello World" encoded
         // Hex examples (actual range: 2.0-4.0 bits/char, NOT 4.0)
         // Lower minimum because short hex strings encoding ASCII have very low entropy
-        ("48656c6c6f", 1.8, 4.0),          // "Hello" - allows for 2.0
-        ("deadbeef1337", 2.0, 4.0),        // Mixed hex
-        ("726d202d7266202f", 2.0, 4.0),    // "rm -rf /" - measured at 2.36
-
+        ("48656c6c6f", 1.8, 4.0),       // "Hello" - allows for 2.0
+        ("deadbeef1337", 2.0, 4.0),     // Mixed hex
+        ("726d202d7266202f", 2.0, 4.0), // "rm -rf /" - measured at 2.36
         // Random-looking strings (closer to theoretical, but still not maximum)
         ("aB3$dE9#fG2", 3.0, 4.5),
     ];
@@ -125,9 +123,9 @@ fn test_base64_detection_heuristic() {
 
     // Negative cases (should NOT detect as base64)
     let non_base64 = vec![
-        "firefox",              // Normal text
-        "hello",                // Too short
-        "rm -rf /",             // Contains spaces (not base64 alphabet)
+        "firefox",  // Normal text
+        "hello",    // Too short
+        "rm -rf /", // Contains spaces (not base64 alphabet)
     ];
 
     for text in non_base64 {
@@ -163,10 +161,10 @@ fn test_hex_detection_heuristic() {
 
     // Negative cases (should NOT detect as hex)
     let non_hex = vec![
-        "firefox",              // Contains non-hex chars
-        "hello",                // Too short
-        "GGGG",                 // Not hex alphabet
-        "abc",                  // Odd length
+        "firefox", // Contains non-hex chars
+        "hello",   // Too short
+        "GGGG",    // Not hex alphabet
+        "abc",     // Odd length
     ];
 
     for text in non_hex {

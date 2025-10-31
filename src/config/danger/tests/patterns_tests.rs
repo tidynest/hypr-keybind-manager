@@ -23,8 +23,14 @@ fn test_detect_rm_rf_root_critical() {
     let detector = DangerDetector::new();
 
     let test_cases = vec![
-        "rm -rf /", "rm -rf / ", "rm -Rf /", "rm -Rf / ", "rm -fR /", "rm -fR / ",
-        "rm -r -f /", "rm -r -f / ",
+        "rm -rf /",
+        "rm -rf / ",
+        "rm -Rf /",
+        "rm -Rf / ",
+        "rm -fR /",
+        "rm -fR / ",
+        "rm -r -f /",
+        "rm -r -f / ",
     ];
 
     for command in test_cases {
@@ -155,8 +161,11 @@ fn test_safe_commands_with_arguments() {
 fn test_dangerous_chmod_777() {
     let detector = DangerDetector::new();
 
-    let test_cases =
-        vec!["chmod 777 file.txt", "chmod 777 ~/.ssh", "chmod -R 777 /home/user"];
+    let test_cases = vec![
+        "chmod 777 file.txt",
+        "chmod 777 ~/.ssh",
+        "chmod -R 777 /home/user",
+    ];
 
     for command in test_cases {
         let assessment = detector.assess_command(command);
@@ -210,7 +219,11 @@ fn test_dangerous_recursive_rm() {
     let detector = DangerDetector::new();
 
     // Not root (that's Critical), but still dangerous
-    let test_cases = vec!["rm -rf /home/user/project", "rm -fr ~/.config", "rm -rf /tmp/*"];
+    let test_cases = vec![
+        "rm -rf /home/user/project",
+        "rm -fr ~/.config",
+        "rm -rf /tmp/*",
+    ];
 
     for command in test_cases {
         let assessment = detector.assess_command(command);
@@ -231,7 +244,12 @@ fn test_dangerous_recursive_rm() {
 fn test_dangerous_privilege_escalation() {
     let detector = DangerDetector::new();
 
-    let test_cases = vec!["sudo rm file", "doas reboot", "su - root", "pkexec nautilus"];
+    let test_cases = vec![
+        "sudo rm file",
+        "doas reboot",
+        "su - root",
+        "pkexec nautilus",
+    ];
 
     for command in test_cases {
         let assessment = detector.assess_command(command);
@@ -266,7 +284,11 @@ fn test_dangerous_firewall_flush() {
 fn test_suspicious_encoding_tools() {
     let detector = DangerDetector::new();
 
-    let test_cases = vec!["base64 -d payload.txt", "xxd -r malware.hex", "uuencode file"];
+    let test_cases = vec![
+        "base64 -d payload.txt",
+        "xxd -r malware.hex",
+        "uuencode file",
+    ];
 
     for command in test_cases {
         let assessment = detector.assess_command(command);
@@ -288,7 +310,10 @@ fn test_suspicious_download_tools() {
     let detector = DangerDetector::new();
 
     // wget/curl without pipe are suspicious but not dangerous
-    let test_cases = vec!["wget https://site.com/file", "curl -O https://site.com/binary"];
+    let test_cases = vec![
+        "wget https://site.com/file",
+        "curl -O https://site.com/binary",
+    ];
 
     for command in test_cases {
         let assessment = detector.assess_command(command);
@@ -305,7 +330,12 @@ fn test_suspicious_download_tools() {
 fn test_suspicious_background_execution() {
     let detector = DangerDetector::new();
 
-    let test_cases = vec!["nohup myapp &", "disown %1", "screen -dmS session", "tmux new -d"];
+    let test_cases = vec![
+        "nohup myapp &",
+        "disown %1",
+        "screen -dmS session",
+        "tmux new -d",
+    ];
 
     for command in test_cases {
         let assessment = detector.assess_command(command);

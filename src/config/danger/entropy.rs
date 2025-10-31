@@ -102,8 +102,7 @@ pub fn calculate_entropy(s: &str) -> f32 {
 
     // Step 1: Count character frequencies
     // Using HashMap for O(n) counting where n = string length
-    let mut char_counts: std::collections::HashMap<char, usize> =
-        std::collections::HashMap::new();
+    let mut char_counts: std::collections::HashMap<char, usize> = std::collections::HashMap::new();
 
     for c in s.chars() {
         *char_counts.entry(c).or_insert(0) += 1;
@@ -181,18 +180,14 @@ pub fn is_likely_base64(s: &str) -> bool {
     // Stage 1: Alphabet check (must be ≥90% base64 characters)
     // Base64 alphabet: A-Z, a-z, 0-9, +, /, =
     let base64_char_count = s
-      .chars()
-      .filter(|c|
-          c.is_ascii_alphanumeric()
-          || *c == '+'
-          || *c == '/'
-          || *c == '=')
-      .count();
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '+' || *c == '/' || *c == '=')
+        .count();
 
     let alphabet_ratio = base64_char_count as f32 / s.len() as f32;
 
     if alphabet_ratio < 0.9 {
-      return false; // Too many non-base64 characters
+        return false; // Too many non-base64 characters
     }
 
     // Stage 2: Entropy check (empirical threshold: 4.0 bits/char)
@@ -275,10 +270,7 @@ pub fn is_likely_hex(s: &str) -> bool {
 
     // Stage 1: Alphabet check (must be ≥95% hex characters)
     // Hex alphabet: 0-9, a-f, A-F
-    let hex_char_count = s
-        .chars()
-        .filter(|c| c.is_ascii_hexdigit())
-        .count();
+    let hex_char_count = s.chars().filter(|c| c.is_ascii_hexdigit()).count();
 
     let alphabet_ratio = hex_char_count as f32 / s.len() as f32;
 

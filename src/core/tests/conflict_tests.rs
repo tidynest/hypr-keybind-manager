@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::core::{types::{BindType, Modifier}, ConflictDetector, KeyCombo, Keybinding};
+use crate::core::{
+    types::{BindType, Modifier},
+    ConflictDetector, KeyCombo, Keybinding,
+};
 
 /// Helper to create test bindings
 fn test_binding(modifiers: Vec<Modifier>, key: &str, app: &str) -> Keybinding {
@@ -37,7 +40,11 @@ fn test_no_conflicts_with_unique_bindings() {
 
     detector.add_binding(test_binding(vec![Modifier::Super], "K", "firefox"));
     detector.add_binding(test_binding(vec![Modifier::Super], "J", "kitty"));
-    detector.add_binding(test_binding(vec![Modifier::Super, Modifier::Shift], "K", "chrome"));
+    detector.add_binding(test_binding(
+        vec![Modifier::Super, Modifier::Shift],
+        "K",
+        "chrome",
+    ));
 
     assert_eq!(detector.find_conflicts().len(), 0);
     assert_eq!(detector.total_bindings(), 3);
@@ -81,13 +88,13 @@ fn test_modifier_order_independence() {
     detector.add_binding(test_binding(
         vec![Modifier::Super, Modifier::Shift],
         "K",
-        "app1"
+        "app1",
     ));
 
     detector.add_binding(test_binding(
         vec![Modifier::Shift, Modifier::Super],
         "K",
-        "app2"
+        "app2",
     ));
 
     let conflicts = detector.find_conflicts();
@@ -138,4 +145,3 @@ fn test_total_bindings_count() {
 
     assert_eq!(detector.total_bindings(), 3);
 }
-

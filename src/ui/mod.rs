@@ -32,15 +32,14 @@
 //! └── components/     // Reusable UI widgets
 //! ```
 
-pub mod app;
-pub mod controller;
-pub mod components;
-pub mod file_watcher;
 mod actions;
+pub mod app;
 mod builders;
+pub mod components;
+pub mod controller;
+pub mod file_watcher;
 
-pub use app::App;
-pub use controller::Controller;
+pub use {app::App, controller::Controller};
 
 #[cfg(test)]
 mod tests;
