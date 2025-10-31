@@ -2,7 +2,7 @@
 
 > A secure, professional-grade GTK4 GUI application for managing Hyprland keybindings with real-time conflict detection and automatic backup system.
 
-[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/tidynest/hypr-keybind-manager/releases)
+[![Version](https://img.shields.io/badge/version-1.1.1-blue.svg)](https://github.com/tidynest/hypr-keybind-manager/releases)
 [![Rust](https://img.shields.io/badge/rust-1.83+-orange.svg)](https://www.rust-lang.org/)
 [![GTK4](https://img.shields.io/badge/GTK-4.0-blue.svg)](https://www.gtk.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
