@@ -221,7 +221,7 @@ impl App {
         );
 
         // Initial display
-        let all_bindings = controller.get_keybindings();
+        let all_bindings = controller.get_current_view();
         keybind_list.update_with_bindings(all_bindings);
 
         // Update conflict panel

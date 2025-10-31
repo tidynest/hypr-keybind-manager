@@ -48,12 +48,12 @@
 //! # }
 //! ```
 
+use crate::core::types::{BindType, KeyCombo, Keybinding, Modifier};
 use gtk4::{
-    prelude::*, ApplicationWindow, Box as GtkBox, Button, Entry, Grid, Label, Orientation, Window,
+    gdk, prelude::*, ApplicationWindow, Box as GtkBox, Button, Entry, EventControllerKey, Grid,
+    Label, Orientation, Window,
 };
 use std::{cell::Cell, rc::Rc};
-
-use crate::core::types::{BindType, KeyCombo, Keybinding, Modifier};
 
 /// Dialog for editing an existing keybinding
 pub struct EditDialog {
@@ -83,6 +83,20 @@ impl EditDialog {
             .default_height(300)
             .resizable(false)
             .build();
+
+        // Escape key handler
+        let key_controller = EventControllerKey::new();
+        let dialog_window_for_escape = dialog_window.clone();
+        key_controller.connect_key_pressed(move |_, key, _, _| {
+            if key == gdk::Key::Escape {
+                dialog_window_for_escape.close();
+                glib::Propagation::Stop
+            } else {
+                glib::Propagation::Proceed
+            }
+        });
+
+        dialog_window.add_controller(key_controller);
 
         // Create a grid for the form layout
         let grid = Grid::builder()
@@ -367,6 +381,18 @@ impl EditDialog {
             .default_height(150)
             .resizable(false)
             .build();
+
+        // Escape key handler
+        let key_controller = EventControllerKey::new();
+        let error_window_for_escape = error_window.clone();
+        key_controller.connect_key_pressed(move |_, key, _, _| {
+            if key == gdk::Key::Escape {
+                error_window_for_escape.close();
+                glib::Propagation::Stop
+            } else {
+                glib::Propagation::Proceed
+            }
+        });
 
         let vbox = GtkBox::builder()
             .orientation(Orientation::Vertical)

@@ -19,7 +19,10 @@
 //! for each conflicting binding. Automatically refreshes the UI after
 //! deletions and closes when all conflicts in view are resolved.
 
-use gtk4::{prelude::*, Align, Box as GtkBox, Button, Label, Orientation, ScrolledWindow, Window};
+use gtk4::{
+    gdk, prelude::*, Align, Box as GtkBox, Button, EventControllerKey, Label, Orientation,
+    ScrolledWindow, Window,
+};
 use std::rc::Rc;
 
 use crate::ui::{
@@ -45,6 +48,19 @@ impl ConflictResolutionDialog {
             .default_width(500)
             .default_height(400)
             .build();
+
+        // Escape key handler
+        let key_controller = EventControllerKey::new();
+        let window_for_escape = window.clone();
+        key_controller.connect_key_pressed(move |_, key, _, _| {
+            if key == gdk::Key::Escape {
+                window_for_escape.close();
+                glib::Propagation::Stop
+            } else {
+                glib::Propagation::Proceed
+            }
+        });
+        window.add_controller(key_controller);
 
         // Main container
         let main_box = GtkBox::new(Orientation::Vertical, 12);

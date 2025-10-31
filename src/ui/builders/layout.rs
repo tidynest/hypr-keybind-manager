@@ -84,7 +84,12 @@ pub fn build_main_layout(
     search_bar.widget().connect_search_changed(move |entry| {
         let query = entry.text().to_string();
         eprintln!("🔍 Search: '{}'", query);
-        let filtered = controller_for_search.filter_keybindings(&query);
+
+        // Store the query in Controller (single source of truth)
+        controller_for_search.set_search_query(query.clone());
+
+        // Update the view with filtered results
+        let filtered = controller_for_search.get_current_view();
         keybind_list_for_search.update_with_bindings(filtered);
     });
 

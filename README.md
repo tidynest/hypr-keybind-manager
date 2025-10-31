@@ -6,7 +6,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.83+-orange.svg)](https://www.rust-lang.org/)
 [![GTK4](https://img.shields.io/badge/GTK-4.0-blue.svg)](https://www.gtk.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-166%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-171%20passing-brightgreen.svg)](#testing)
 
 ---
 
@@ -59,8 +59,8 @@
 - **Real-Time Conflict Detection**: Instantly identifies duplicate key combinations with [O(1)](https://en.wikipedia.org/wiki/Time_complexity#Constant_time) performance
 - **Three-Layer Security Validation**: Prevents [shell injection](https://en.wikipedia.org/wiki/Code_injection#Shell_injection), dangerous commands, and encoded payloads
 - **Automatic Backup System**: Every change creates timestamped backups with [atomic write operations](https://en.wikipedia.org/wiki/Atomicity_(database_systems))
-- **Search & Filter**: Real-time search across key combinations, dispatchers, and arguments
-- **Keyboard Navigation**: Arrow keys, Enter, and Tab for efficient workflow
+- **Search & Filter**: Real-time search across key combinations, dispatchers, and arguments with persistent filtering
+- **Keyboard Navigation**: Arrow keys, Enter, Tab, and Escape for efficient workflow
 - **Modern GTK4 UI**: Clean, responsive interface with the intention of following [GNOME HIG](https://developer.gnome.org/hig/) guidelines
 
 This project is likely to be enhanced and further developed in the near future.
@@ -458,7 +458,7 @@ The application uses a **[HashMap](https://doc.rust-lang.org/std/collections/str
 **How It Works**:
 - Background file watcher (non-blocking)
 - Detects `MODIFY` events on the config file
-- Reloads and re-parses the entire config
+- Reloads and reparses the entire config
 - Updates all UI panels (keybind list, details, conflicts)
 
 **Use Case**:
@@ -474,7 +474,7 @@ The application uses a **[HashMap](https://doc.rust-lang.org/std/collections/str
 
 ```
 hypr-keybind-manager/
-├── README.md                                   # Project overview and documentation hub (833 lines)
+├── README.md                                   # Project overview and documentation hub (910 lines)
 ├── LICENSE                                     # Apache 2.0 license (201 lines)
 ├── CONTRIBUTING.md                             # Contribution guidelines (307 lines)
 ├── SECURITY.md                                 # Security policy and threat model (484 lines)
@@ -485,7 +485,8 @@ hypr-keybind-manager/
 │   └── runner.sh                               # Output filter script (5 lines)
 ├── scripts/                                    # Development and release scripts
 │   ├── sync-version.sh                         # Sync version numbers across docs (33 lines)
-│   └── tag-release.sh                          # Automated release tagging (79 lines)
+│   ├── tag-release.sh                          # Automated release tagging (79 lines)
+│   └── test-escape-key.sh                      # Escape key implementation verification (109 lines)
 ├── docs/                                       # Technical documentation
 │   ├── ARCHITECTURE.md                         # System design and data flow (762 lines)
 │   ├── DESIGN_DECISIONS.md                     # Rationale for architectural choices (1082 lines)
@@ -544,30 +545,30 @@ hypr-keybind-manager/
     │       ├── conflict_tests.rs               # Conflict detection tests (141 lines)
     │       ├── validator_tests.rs              # Validation tests (152 lines)
     │       └── types_tests.rs                  # Type system tests (79 lines)
-    ├── ui/                                     # GTK4 GUI (MVC pattern) (~3,983 lines)
-    │   ├── app.rs                              # Main window coordination (262 lines)
-    │   ├── actions.rs                          # GTK action setup (261 lines)
-    │   ├── builders/                           # UI builder modules (556 lines total)
+    ├── ui/                                     # GTK4 GUI (MVC pattern) (~4,134 lines)
+    │   ├── app.rs                              # Main window coordination (258 lines)
+    │   ├── actions.rs                          # GTK action setup (278 lines)
+    │   ├── builders/                           # UI builder modules (612 lines total)
     │   │   ├── mod.rs                          # Module exports (28 lines)
     │   │   ├── header.rs                       # Header bar with menu (57 lines)
-    │   │   ├── layout.rs                       # Main layout construction (118 lines)
-    │   │   └── handlers.rs                     # Event handler wiring (353 lines)
-    │   ├── controller.rs                       # MVC Controller (mediates Model ↔ View) (590 lines)
+    │   │   ├── layout.rs                       # Main layout construction (122 lines)
+    │   │   └── handlers.rs                     # Event handler wiring (334 lines)
+    │   ├── controller.rs                       # MVC Controller (mediates Model ↔ View) (636 lines)
     │   ├── file_watcher.rs                     # Live config file monitoring (57 lines)
     │   ├── style.css                           # GTK CSS styling (95 lines)
     │   ├── mod.rs                              # UI module exports (45 lines)
-    │   ├── components/                         # Reusable UI widgets (1,967 lines)
+    │   ├── components/                         # Reusable UI widgets (2,028 lines)
     │   │   ├── keybind_list.rs                 # Scrollable list (216 lines)
     │   │   ├── search_bar.rs                   # Real-time search (69 lines)
     │   │   ├── conflict_panel.rs               # Warning banner (257 lines)
-    │   │   ├── conflict_resolution_dialog.rs   # Merge/replace conflict resolver (146 lines)
+    │   │   ├── conflict_resolution_dialog.rs   # Conflict resolver with Escape support (165 lines)
     │   │   ├── details_panel.rs                # Shows selected binding (450 lines)
-    │   │   ├── edit_dialog.rs                  # Edit/Add dialog (411 lines)
-    │   │   ├── backup_dialog.rs                # Backup management (378 lines)
+    │   │   ├── edit_dialog.rs                  # Edit/Add dialog with Escape support (435 lines)
+    │   │   ├── backup_dialog.rs                # Backup management with Escape support (340 lines)
     │   │   └── mod.rs                          # Component exports (40 lines)
-    │   └── tests/                              # UI component tests (extracted) (150 lines)
+    │   └── tests/                              # UI component tests (extracted) (315 lines)
     │       ├── mod.rs                          # Test module organization (21 lines)
-    │       └── controller_tests.rs             # Controller unit tests (129 lines)
+    │       └── controller_tests.rs             # Controller tests + search persistence (294 lines)
     └── ipc/                                    # Hyprland IPC integration (~590 lines)
         ├── mod.rs                              # HyprlandClient (add/remove/reload bindings) (389 lines)
         └── tests/                              # IPC tests (extracted) (201 lines)
@@ -746,7 +747,7 @@ Potential features being considered for future releases:
 ### Accessibility
 
 **Current Features**:
-- **Keyboard Navigation**: Full application control via Tab, Arrow keys, Enter
+- **Keyboard Navigation**: Full application control via Tab, Arrow keys, Enter, and Escape (closes all dialogs)
 - **GTK Accessibility**: Inherits GTK4's built-in accessibility support (screen readers, high contrast)
 - **Clear Visual Feedback**: Conflict warnings, validation errors with colour coding
 
@@ -774,19 +775,19 @@ This project maintains comprehensive technical documentation for developers, con
 
 ### Core Documentation
 
-| Document | Description | Audience |
-|----------|-------------|----------|
-| **[README.md](README.md)** | Project overview, installation, usage, and quick start | Users & Contributors |
-| **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** | System design, component interaction, data flow diagrams | Developers |
-| **[DESIGN_DECISIONS.md](docs/DESIGN_DECISIONS.md)** | Rationale for major architectural choices and trade-offs | Developers & Architects |
-| **[SECURITY.md](SECURITY.md)** | Security architecture, threat model, vulnerability reporting | Security Researchers |
-| **[CONTRIBUTING.md](CONTRIBUTING.md)** | How to report bugs, request features, and give feedback | Contributors |
+| Document                                            | Description                                                  | Audience                |
+|-----------------------------------------------------|--------------------------------------------------------------|-------------------------|
+| **[README.md](README.md)**                          | Project overview, installation, usage, and quick start       | Users & Contributors    |
+| **[ARCHITECTURE.md](docs/ARCHITECTURE.md)**         | System design, component interaction, data flow diagrams     | Developers              |
+| **[DESIGN_DECISIONS.md](docs/DESIGN_DECISIONS.md)** | Rationale for major architectural choices and trade-offs     | Developers & Architects |
+| **[SECURITY.md](SECURITY.md)**                      | Security architecture, threat model, vulnerability reporting | Security Researchers    |
+| **[CONTRIBUTING.md](CONTRIBUTING.md)**              | How to report bugs, request features, and give feedback      | Contributors            |
 
 ### Deep Dives
 
-| Document | Description | Lines | Status |
-|----------|-------------|-------|--------|
-| **[ENTROPY_DETECTION.md](docs/ENTROPY_DETECTION.md)** | Shannon entropy theory, implementation, empirical validation|
+| Document                                              | Description                                                  |
+|-------------------------------------------------------|--------------------------------------------------------------|
+| **[ENTROPY_DETECTION.md](docs/ENTROPY_DETECTION.md)** | Shannon entropy theory, implementation, empirical validation |
 
 **ENTROPY_DETECTION.md** provides a comprehensive technical analysis of using Shannon entropy for detecting obfuscated malicious commands (base64/hex encoding). It covers:
 - Shannon entropy fundamentals and mathematical foundation
@@ -872,23 +873,23 @@ This project stands on the shoulders of giants. Special thanks to:
 
 ### Codebase
 - **Primary Language**: Rust 1.83+
-- **Total Project Files**: 51 Rust files + 6 Markdown files + 6 shell scripts + 4 config files + 13 screenshots
-- **Total Lines of Code**: 16,493 lines across entire project
-  - Rust source code: 10,564 lines (51 .rs files: 36 production + 15 test modules)
-  - Documentation: 4,613 lines (6 .md files: README, CONTRIBUTING, SECURITY, ARCHITECTURE, DESIGN_DECISIONS, ENTROPY_DETECTION)
-  - Shell scripts: 1,134 lines (6 .sh files: 3 test scripts + 2 automation scripts + 1 utility script)
-  - Configuration: 182 lines (.toml, .css, .conf files)
+- **Total Project Files**: 64 Rust files + 6 Markdown files + 7 shell scripts + 4 config files + 13 screenshots
+- **Total Lines of Code**: 17,071 lines across entire project
+  - Rust source code: 11,249 lines (64 .rs files: 49 production + 15 test modules)
+  - Documentation: 4,388 lines (6 .md files: README, CONTRIBUTING, SECURITY, ARCHITECTURE, DESIGN_DECISIONS, ENTROPY_DETECTION)
+  - Shell scripts: 1,243 lines (7 .sh files: 4 test scripts + 2 automation scripts + 1 utility script)
+  - Configuration: 191 lines (.toml, .css, .conf files)
   - Screenshots: 13 images (~700 KB total, organized by workflow: interface, search, CRUD operations, conflicts with button close-up, backups, import/export)
-- **Production Code**: 7,795 lines (Rust code excluding tests)
-- **Test Code**: 2,769 lines (26% of Rust code, 15 test modules)
+- **Production Code**: 8,175 lines (Rust code excluding tests)
+- **Test Code**: 3,074 lines (27% of Rust code, 15 test modules)
 - **Documentation Coverage**: 100% of public APIs with examples
 
 ### Quality Metrics
 - **Test Coverage**:
-  - Rust tests: 166 passing (124 unit + 42 doc tests)
+  - Rust tests: 171 passing (129 unit + 42 doc tests)
     - 7 edge cases marked as ignored
     - 0 failures
-  - Shell script tests: 68 passing (3 test scripts covering automation and file monitoring)
+  - Shell script tests: 68 passing (4 test scripts covering automation, file monitoring, and Escape key verification)
     - 100% pass rate
     - 0 failures
 - **Security**: 3-layer validation system (injection prevention, danger detection, entropy analysis)

@@ -13,7 +13,8 @@
 // limitations under the License.
 
 use gtk4::{
-    prelude::*, Align, Box as GtkBox, Button, Label, ListBox, Orientation, ScrolledWindow, Window,
+    gdk, prelude::*, Align, Box as GtkBox, Button, EventControllerKey, Label, ListBox, Orientation,
+    ScrolledWindow, Window,
 };
 use std::{
     cell::Cell,
@@ -104,6 +105,20 @@ impl BackupDialog {
             .default_width(450)
             .default_height(300)
             .build();
+
+        // Escape key handler
+        let key_controller = EventControllerKey::new();
+        let bd_window_for_escape = bd_window.clone();
+        key_controller.connect_key_pressed(move |_, key, _, _| {
+            if key == gdk::Key::Escape {
+                bd_window_for_escape.close();
+                glib::Propagation::Stop
+            } else {
+                glib::Propagation::Proceed
+            }
+        });
+
+        bd_window.add_controller(key_controller);
 
         // Initialise selection state
         let selected_backup = Rc::new(Cell::new(None));

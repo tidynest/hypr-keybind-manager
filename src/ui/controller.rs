@@ -61,6 +61,8 @@ pub struct Controller {
     keybindings: RefCell<Vec<Keybinding>>,
     /// Conflict detector (rebuild when keybindings change)
     conflict_detector: RefCell<ConflictDetector>,
+    /// Current search query (for preserving filters state)
+    current_search_query: RefCell<String>,
 }
 
 impl Controller {
@@ -96,6 +98,7 @@ impl Controller {
             config_manager,
             keybindings: RefCell::new(Vec::new()),
             conflict_detector: RefCell::new(ConflictDetector::new()),
+            current_search_query: RefCell::new(String::new()),
         })
     }
 
@@ -219,6 +222,40 @@ impl Controller {
             })
             .cloned()
             .collect()
+    }
+
+    /// Updates the current search query
+    ///
+    /// This method stores the search query in the Controller's state.
+    /// Call this whenever the user types in the search box.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - The new search query text
+    pub fn set_search_query(&self, query: String) {
+        *self.current_search_query.borrow_mut() = query;
+    }
+
+    /// Gets the current search query
+    ///
+    /// # Returns
+    ///
+    /// The currently active search query string
+    pub fn get_search_query(&self) -> String {
+        self.current_search_query.borrow().clone()
+    }
+
+    /// Returns the current view of keybindings (respecting active search filter)
+    ///
+    /// If a search query is active, returns filtered results.
+    /// If no search query, returns all keybindings.
+    ///
+    /// # Returns
+    ///
+    /// The keybindings that should currently be displayed in the UI
+    pub fn get_current_view(&self) -> Vec<Keybinding> {
+        let query = self.current_search_query.borrow().clone();
+        self.filter_keybindings(&query)
     }
 
     /// Returns all detected conflicts

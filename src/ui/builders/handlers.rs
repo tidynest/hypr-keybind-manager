@@ -154,7 +154,7 @@ pub fn wire_up_handlers(
             move |response| match response {
                 Ok(1) => match controller_clone.delete_keybinding(&binding_clone) {
                     Ok(()) => {
-                        let updated = controller_clone.get_keybindings();
+                        let updated = controller_clone.get_current_view();
                         keybind_list_clone.update_with_bindings(updated);
                         details_panel_clone.update_binding(None);
                         conflict_panel_clone.refresh();
@@ -209,7 +209,7 @@ pub fn wire_up_handlers(
             match controller_clone.update_keybinding(&binding_clone, new_binding) {
                 Ok(()) => {
                     details_panel_clone.update_binding(None);
-                    let updated_bindings = controller_clone.get_keybindings();
+                    let updated_bindings = controller_clone.get_current_view();
                     keybind_list_clone.update_with_bindings(updated_bindings);
                     conflict_panel_clone.refresh();
                     eprintln!("✅ Keybinding updated successfully");
@@ -265,7 +265,7 @@ pub fn wire_up_handlers(
             match controller_clone.add_keybinding(new_binding) {
                 Ok(()) => {
                     details_panel_clone.update_binding(None);
-                    let updated_bindings = controller_clone.get_keybindings();
+                    let updated_bindings = controller_clone.get_current_view();
                     keybind_list_clone.update_with_bindings(updated_bindings);
                     conflict_panel_clone.refresh();
                     eprintln!("✅ Keybinding added successfully");
@@ -318,7 +318,7 @@ pub fn wire_up_handlers(
             backups,
             move |backup_path| match controller_clone.restore_backup(backup_path) {
                 Ok(()) => {
-                    let updated_bindings = controller_clone.get_keybindings();
+                    let updated_bindings = controller_clone.get_current_view();
 
                     keybind_list_clone.update_with_bindings(updated_bindings);
                     details_panel_clone.update_binding(None);

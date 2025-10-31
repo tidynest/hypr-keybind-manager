@@ -18,11 +18,13 @@
 //! and their setup functions
 
 use gtk4::{
+    gdk,
     gio::{Cancellable, SimpleAction},
     prelude::*,
-    Application, ApplicationWindow, FileDialog,
+    Application, ApplicationWindow, Box as GtkBox, Button, CheckButton, EventControllerKey,
+    FileDialog, Label, Orientation, Window,
 };
-use std::rc::Rc;
+use std::{cell::Cell, rc::Rc};
 
 use crate::ui::{controller::ImportMode, Controller};
 
@@ -140,7 +142,7 @@ pub fn setup_import_action(
                     match controller_clone.import_from(&path, chosen_mode) {
                         Ok(()) => {
                             eprintln!("✅ Import successful!");
-                            let updated_bindings = controller_clone.get_keybindings();
+                            let updated_bindings = controller_clone.get_current_view();
                             keybind_list_clone.update_with_bindings(updated_bindings);
                             details_panel_clone.update_binding(None);
                             conflict_panel_clone.refresh();
@@ -159,12 +161,7 @@ pub fn setup_import_action(
     ///
     /// Returns the chosen ImportMode wrapped in Rc<std::cell::Cell<Option<ImportMode>>>
     /// so it can be shared across GTK callbacks
-    fn show_import_mode_dialog(
-        parent: &ApplicationWindow,
-    ) -> Rc<std::cell::Cell<Option<ImportMode>>> {
-        use gtk4::{Box as GtkBox, Button, CheckButton, Label, Orientation, Window};
-        use std::cell::Cell;
-
+    fn show_import_mode_dialog(parent: &ApplicationWindow) -> Rc<Cell<Option<ImportMode>>> {
         let response = Rc::new(Cell::new(None));
 
         // Create dialog window
@@ -175,6 +172,20 @@ pub fn setup_import_action(
             .default_width(400)
             .default_height(200)
             .build();
+
+        let key_controller = EventControllerKey::new();
+        let dialog_for_escape = dialog.clone();
+        let response_for_escape = response.clone();
+        key_controller.connect_key_pressed(move |_, key, _, _| {
+            if key == gdk::Key::Escape {
+                response_for_escape.set(None);
+                dialog_for_escape.close();
+                glib::Propagation::Stop
+            } else {
+                glib::Propagation::Proceed
+            }
+        });
+        dialog.add_controller(key_controller);
 
         // Main container
         let vbox = GtkBox::new(Orientation::Vertical, 12);
@@ -240,7 +251,7 @@ pub fn setup_import_action(
     }
 }
 
-/// Sets up the apply to Hyprland action
+/// Sets up the "apply to Hyprland action"
 ///
 /// Creates a GTK action that triggers Hyprland to reload its configuration,
 /// applying all pending changes immediately without restart.
