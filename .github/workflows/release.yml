@@ -34,5 +34,4 @@ jobs:
           files: target/release/hypr-keybind-manager-x86_64-linux.tar.gz
           generate_release_notes: true
         env:
-          GITHUB-TOKEN: ${{ secrets.GITHUB_TOKEN
-        }}
+          GITHUB-TOKEN: ${{ secrets.GITHUB_TOKEN }}
