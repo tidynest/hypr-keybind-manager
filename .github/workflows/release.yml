@@ -15,7 +15,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install GTK4 dependencies
-        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev meson ninja-build libwayland-dev wayland-protocols
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev meson ninja-build libwayland-dev wayland-protocols libgirepository1.0-dev
 
       - name: Build gtk4-layer-shell from source
         run: |
