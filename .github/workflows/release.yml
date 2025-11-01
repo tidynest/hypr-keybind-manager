@@ -10,6 +10,13 @@ permissions:
 
 jobs:
   build-and-release:
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            arch: x86_64
+          - target: aarch64-unknown-linux-gnu
+            arch: aarch64
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,8 +24,24 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install cross-compilation tools
+        if: matrix.arch == 'aarch64'
+        run: |
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          rustup target add aarch64-unknown-linux-gnu
+
       - name: Install GTK4 dependencies
-        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev meson ninja-build libwayland-dev wayland-protocols libgirepository1.0-dev valac
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev meson 
+          ninja-build libwayland-dev wayland-protocols
+          libgirepository1.0-dev valac
+          if [ "${{ matrix.arch }}" = "aarch64" ]; then
+            sudo dpkg --add-architecture arm64
+            sudo apt-get update
+            sudo apt-get install -y libgtk-4-dev:arm64
+            libwayland-dev:arm64
+          fi
 
       - name: Build gtk4-layer-shell from source
         run: |
@@ -29,15 +52,28 @@ jobs:
           sudo meson install -C build
 
       - name: Build release binary
-        run: cargo build --release
+        run: |
+          if [ "${{ matrix.arch }}" = "aarch64" ]; then
+            export PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig
+            export PKG_CONFIG_ALLOW_CROSS=1
+            cargo build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
 
       - name: Strip binary
-        run: strip target/release/hypr-keybind-manager
+        run: |
+          if [ "${{ matrix.arch }}" = "aarch64" ]; then
+            aarch64-linux-gnu-strip target/${{ 
+            matrix.target }}/release/hypr-keybind-manager
+          else
+            strip target/${{ matrix.target }}/release/hypr-keybind-manager
+          fi
 
       - name: Create archive
         run: |
-          cd target/release
-          tar -czf hypr-keybind-manager-x86_64-linux.tar.gz hypr-keybind-manager
+          cd target/${{ matrix.target }}/release
+          tar -czf hypr-keybind-manager-${{ matrix.arch }}-linux.tar.gz hypr-keybind-manager
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
