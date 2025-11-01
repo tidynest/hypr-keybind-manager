@@ -795,41 +795,41 @@ git push origin main && git push origin v1.1.0
 
 ## Roadmap
 
-### Current Status: v1.1.1 - Phase 9.0 In Progress 🚧
+### Current Status: v1.2.0 Released ✅
 
-All planned features are implemented and production-ready. Quality audit (Phases 7.1-7.5) and UX enhancements (Phase 8.0) are complete. Currently working on documentation polish and release preparation (Phase 9.0):
+All planned features are implemented and production-ready. The project has completed:
 
-**Features:**
+**Core Features:**
+- ✅ **Full CRUD Operations**: Create, read, update, delete keybindings
+- ✅ **Real-Time Conflict Detection**: O(1) HashMap-based detection
+- ✅ **Three-Layer Security**: Injection prevention, danger detection, entropy analysis
+- ✅ **Automatic Backups**: Timestamped backups with atomic writes
 - ✅ **Export/Import**: Replace and Merge modes for sharing configs
-- ✅ **Conflict Resolution UI**: Advanced visual conflict resolution
-- ✅ **Live Hyprland IPC**: automated `hyprctl reload` integration (no restart needed)
+- ✅ **Conflict Resolution UI**: Visual conflict resolution dialog
+- ✅ **Live Hyprland IPC**: Automated `hyprctl reload` integration
 - ✅ **Live File Monitoring**: Automatic UI refresh on external config changes
-- ✅ **Three-Layer Security**: Complete validation system
+- ✅ **Search Persistence**: Filters maintained across all operations
+- ✅ **Escape Key Support**: All dialogs closable with Escape
 
-**Quality Audit (Phases 7.1-7.5):**
-- ✅ **Phase 7.1**: Code comments quality audit (100% documentation coverage)
+**Quality Assurance (Phases 7.1-9.0):**
+- ✅ **Phase 7.1**: Code comments audit (100% documentation coverage)
 - ✅ **Phase 7.2**: Documentation files audit (98 issues fixed, 100% accurate)
-- ✅ **Phase 7.3**: Project organisation cleanup (5 files deleted, 11 .gitignore patterns added)
-- ✅ **Phase 7.4**: Test coverage audit (2 scripts identified requiring tests)
+- ✅ **Phase 7.3**: Project organisation cleanup (100% clean structure)
+- ✅ **Phase 7.4**: Test coverage audit (all scripts inventoried)
 - ✅ **Phase 7.5**: Modular test creation (26 shell tests, 100% pass rate)
+- ✅ **Phase 8.0**: UX enhancements (search persistence + Escape key support)
+- ✅ **Phase 9.0**: Documentation polish & release preparation (v1.2.0 published)
 
-**UX Enhancements (Phase 8.0):**
-- ✅ **Search Persistence**: Search filters maintained across all operations
-- ✅ **Escape Key Support**: All dialogs closable with Escape key
-
-**Release Preparation (Phase 9.0 - In Progress):**
-- ✅ Installation methods (install.sh, AUR PKGBUILD, GitHub Actions)
-- ✅ Documentation audit (placeholders removed, all counts verified)
-- 🔄 Final verification and release preparation
-
-### Future Enhancements (Post v1.1.1+)
+### Future Enhancements (Post v1.2.0)
 
 Potential features being considered for future releases:
 
-- Undo/redo system for keybinding changes
-- Multi-monitor awareness and per-monitor bindings
-- Plugin architecture for custom validators
-- Keybinding suggestion system (show available key combinations)
+- **Keycombo Suggestion & Availability Checker**: Help users discover free key combinations and avoid conflicts
+- **Column Alignment in Left Panel**: Improve visual consistency with GTK4 grid layout
+- **Right Panel Width Constraints**: Limit initial position and maximum leftward extension to improve layout (start at minimum width, max extend to 1/3 of window width)
+- **Undo/Redo System**: Transaction-based undo/redo for keybinding changes
+- **Multi-Monitor Awareness**: Per-monitor keybinding support
+- **Plugin Architecture**: Custom validators and extensions
 - Community feedback and suggestions are welcomed!
 
 ---
@@ -865,7 +865,7 @@ Potential features being considered for future releases:
 - Keyboard shortcut customisation
 - Improved screen reader support with ARIA-like labeling
 
-### Internationalization (i18n)
+### Internationalisation (i18n)
 
 **Current Status**: English only
 
@@ -874,7 +874,7 @@ Potential features being considered for future releases:
 - **UI Strings**: All user-facing text will be extracted to translation files
 - **Priority Languages**: Based on community demand (likely German, French, Spanish first)
 
-**Contributions Welcome**: If you're interested in translating the application, please open an issue to discuss.
+**Contributions Welcome**: If you're interested in helping with translations, please open an issue or pull request to discuss implementation approach.
 
 ---
 
@@ -894,8 +894,8 @@ This project maintains comprehensive technical documentation for developers, con
 
 ### Deep Dives
 
-| Document                                              | Description                                                  |
-|-------------------------------------------------------|--------------------------------------------------------------|
+| Document | Description |
+|----------|-------------|
 | **[ENTROPY_DETECTION.md](docs/ENTROPY_DETECTION.md)** | Shannon entropy theory, implementation, empirical validation |
 
 **ENTROPY_DETECTION.md** provides a comprehensive technical analysis of using Shannon entropy for detecting obfuscated malicious commands (base64/hex encoding). It covers:
@@ -919,13 +919,15 @@ This document demonstrates rigorous engineering methodology: theory-guided, empi
 
 ## Contributing
 
-This project is **open to suggestions and feedback**. While direct contributions are not yet being accepted, the author welcomes:
+**Contributions are welcome!** This project is open to community contributions. We welcome:
 
-- **Bug reports**: Please open an issue with reproduction steps
-- **Feature requests**: Describe your use case and desired behaviour
-- **Security reports**: See [SECURITY.md](SECURITY.md) for responsible disclosure
+- **Code Contributions**: Bug fixes, new features, performance improvements
+- **Bug Reports**: Please open an issue with reproduction steps
+- **Feature Requests**: Describe your use case and desired behaviour
+- **Documentation**: Improvements to guides, examples, and clarity
+- **Security Reports**: See [SECURITY.md](SECURITY.md) for responsible disclosure
 
-The project may open to contributions in the future. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Please see [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines on how to contribute, including code quality standards, testing requirements, and the pull request process.
 
 ---
 

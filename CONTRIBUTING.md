@@ -17,7 +17,7 @@ Thank you for your interest in contributing to Hyprland Keybinding Manager! This
   - [Expected Behaviour](#expected-behaviour)
   - [Unacceptable Behaviour](#unacceptable-behaviour)
 - [Questions?](#questions)
-- [Future Contribution Guidelines (When Accepting Contributions)](#future-contribution-guidelines-when-accepting-contributions)
+- [Contribution Guidelines](#contribution-guidelines)
   - [Code Quality Standards](#code-quality-standards)
   - [Testing Requirements](#testing-requirements)
   - [Commit Message Format](#commit-message-format)
@@ -31,15 +31,16 @@ Thank you for your interest in contributing to Hyprland Keybinding Manager! This
 
 ## Current Contribution Status
 
-**The project is currently NOT accepting direct code contributions**, but the author welcomes:
+**Contributions are now welcome!** The project is open to community contributions:
 
+✅ **Code Contributions** - Bug fixes, features, performance improvements, refactoring
 ✅ **Bug Reports** - Help identify issues and edge cases
 ✅ **Feature Suggestions** - Propose new functionality or improvements
 ✅ **Security Reports** - Responsible disclosure of vulnerabilities
-✅ **Documentation Feedback** - Suggest improvements to docs
-✅ **General Feedback** - Share your experience using the application
+✅ **Documentation** - Improvements to guides, examples, and clarity
+✅ **Testing** - Additional test cases and coverage improvements
 
-**Future Plans**: The project may open to community contributions after reaching version 1.0 and establishing clear contribution guidelines.
+All contributions should follow the guidelines in this document to ensure code quality and consistency.
 
 ---
 
@@ -129,9 +130,9 @@ See [SECURITY.md](SECURITY.md) for the full responsible disclosure process.
 
 ---
 
-## Development Setup (For Future Contributors)
+## Development Setup
 
-If you're interested in exploring the codebase or preparing for future contributions:
+To get started with contributing:
 
 ### Prerequisites
 
@@ -199,9 +200,9 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for complete project structure and d
 
 ---
 
-## Future Contribution Guidelines (When Accepting Contributions)
+## Contribution Guidelines
 
-*This section is a preview of planned contribution requirements for when the project opens to contributors.*
+Please follow these standards when contributing code to the project:
 
 ### Code Quality Standards
 
@@ -297,11 +298,11 @@ By contributing, you agree that your contributions will be licensed under the sa
 
 Thank you for taking the time to read this document and for your interest in improving Hyprland Keybinding Manager!
 
-Even though direct contributions aren't being accepted yet, your **feedback, bug reports, and feature suggestions** are incredibly valuable and help shape the project's future direction.
+Your **contributions, feedback, bug reports, and feature suggestions** are incredibly valuable and help shape the project's direction.
 
-**Every issue, suggestion, and security report makes this project better for everyone.** ✅
+**Every contribution, issue, suggestion, and security report makes this project better for everyone.** ✅
 
 ---
 
 **Last Updated**: 2025-11-01
-**Version**: 1.1.1
+**Version**: 1.2.1
