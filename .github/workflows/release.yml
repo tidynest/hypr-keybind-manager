@@ -31,25 +31,7 @@ jobs:
           rustup target add aarch64-unknown-linux-gnu
 
       - name: Install GTK4 dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev meson 
-          ninja-build libwayland-dev wayland-protocols
-          libgirepository1.0-dev valac
-          if [ "${{ matrix.arch }}" = "aarch64" ]; then
-            sudo dpkg --add-architecture arm64
-            sudo apt-get update
-            sudo apt-get install -y libgtk-4-dev:arm64
-            libwayland-dev:arm64
-          fi
-
-      - name: Build gtk4-layer-shell from source
-        run: |
-          git clone https://github.com/wmww/gtk4-layer-shell.git
-          cd gtk4-layer-shell
-          meson setup build -Dprefix=/usr
-          meson compile -C build
-          sudo meson install -C build
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev
 
       - name: Build release binary
         run: |
