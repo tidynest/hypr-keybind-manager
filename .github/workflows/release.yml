@@ -9,77 +9,32 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release:
-    strategy:
-      matrix:
-        include:
-          - target: x86_64-unknown-linux-gnu
-            arch: x86_64
-          - target: aarch64-unknown-linux-gnu
-            arch: aarch64
-    runs-on: ubuntu-latest
+  build-release:
+    runs-on: ubuntu-24.04
+
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install GTK4 dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev pkg-config
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install cross-compilation tools
-        if: matrix.arch == 'aarch64'
-        run: cargo install cross --git https://github.com/cross-rs/cross
-
       - name: Build release binary
-        run: |
-          if [ "${{ matrix.arch }}" = "aarch64" ]; then
-            cross build --release --target ${{ matrix.target }}
-          else
-            cargo build --release
-          fi
-
-      - name: Install GTK4 dependencies
-        run: sudo apt-get update && sudo apt-get install -y pkg-config libgtk-4-dev
-
-      - name: Build release binary
-        run: |
-          if [ "${{ matrix.arch }}" = "aarch64" ]; then
-            export PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig
-            export PKG_CONFIG_ALLOW_CROSS=1
-            cargo build --release --target ${{ matrix.target }}
-          else
-            cargo build --release --target ${{ matrix.target }}
-          fi
-
-      - name: Strip binary
-        run: |
-          if [ "${{ matrix.arch }}" = "aarch64" ]; then
-            aarch64-linux-gnu-strip target/${{ matrix.target }}/release/hypr-keybind-manager
-          else
-            strip target/release/hypr-keybind-manager
-          fi
+        run: cargo build --release
 
       - name: Create archive
         run: |
-          if [ "${{ matrix.arch }}" = "aarch64" ]; then
-            cd target/${{ matrix.target }}/release
-          else
-            cd target/release
-          fi
-          tar -czf hypr-keybind-manager-${{ matrix.arch }}-linux.tar.gz hypr-keybind-manager
+          cd target/release
+          tar -czf hypr-keybind-manager-x86_64-linux.tar.gz hypr-keybind-manager
 
-      - name: Upload x86_64 binary
-        if: matrix.arch == 'x86_64'
+      - name: Upload release binary
         uses: softprops/action-gh-release@v1
         with:
           files: target/release/hypr-keybind-manager-x86_64-linux.tar.gz
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload aarch64 binary
-        if: matrix.arch == 'aarch64'
-        uses: softprops/action-gh-release@v1
-        with:
-          files: target/${{ matrix.target }}/release/hypr-keybind-manager-aarch64-linux.tar.gz
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
