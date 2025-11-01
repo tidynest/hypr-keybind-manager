@@ -252,23 +252,117 @@ For detailed security information, see [SECURITY.md](SECURITY.md).
 
 ### Prerequisites
 
-- **Rust 1.83+** (with [Cargo](https://doc.rust-lang.org/cargo/))
-- **GTK4 4.0+** development libraries
+- **GTK4 4.0+** libraries (runtime dependency)
 - **Hyprland** [Wayland](https://wayland.freedesktop.org/) compositor (for runtime use)
+- **Rust 1.83+** (with [Cargo](https://doc.rust-lang.org/cargo/)) - only required for building from source
 
-### Building from Source
+### Installation Methods
+
+#### Method 1: Pre-built Binaries (Recommended)
+
+Download the latest release binary for your architecture:
+
+```bash
+# Download the latest x86_64 release
+wget https://github.com/tidynest/hypr-keybind-manager/releases/latest/download/hypr-keybind-manager-x86_64-linux.tar.gz
+
+# Extract the binary
+tar -xzf hypr-keybind-manager-x86_64-linux.tar.gz
+
+# Install to user bin directory (no sudo required)
+mkdir -p ~/.local/bin
+mv hypr-keybind-manager ~/.local/bin/
+
+# Ensure ~/.local/bin is in your PATH (add to ~/.bashrc or ~/.zshrc if not present)
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+**Available architectures:**
+- `x86_64-linux` - 64-bit Intel/AMD processors
+
+**Note:** ARM64 (aarch64) support is planned for future releases.
+
+#### Method 2: Installation Script (Arch Linux)
+
+Automated installation using the provided script:
 
 ```bash
 # Clone the repository
 git clone https://github.com/tidynest/hypr-keybind-manager.git
 cd hypr-keybind-manager
 
+# Run the installation script
+./install.sh
+```
+
+The script will:
+- Build the release binary using Cargo
+- Install to `~/.local/bin/` (no sudo required)
+- Check if `~/.local/bin` is in your PATH
+- Print instructions for adding a Hyprland keybinding
+
+#### Method 3: AUR Package (Arch Linux)
+
+Install from the Arch User Repository:
+
+```bash
+# Using your preferred AUR helper (e.g., yay, paru)
+yay -S hypr-keybind-manager
+
+# Or build manually
+git clone https://aur.archlinux.org/hypr-keybind-manager.git
+cd hypr-keybind-manager
+makepkg -si
+```
+
+**Note:** AUR package will be published after v1.2.0 release.
+
+#### Method 4: Building from Source
+
+For development or if pre-built binaries aren't available for your system:
+
+```bash
+# Clone the repository
+git clone https://github.com/tidynest/hypr-keybind-manager.git
+cd hypr-keybind-manager
+
+# Install GTK4 development libraries (required for building)
+# Arch Linux:
+sudo pacman -S gtk4
+
+# Ubuntu/Debian:
+sudo apt install libgtk-4-dev pkg-config
+
+# Fedora:
+sudo dnf install gtk4-devel
+
 # Build release binary
 cargo build --release
 
-# Install to system (optional)
+# Install to user bin directory
+mkdir -p ~/.local/bin
+cp target/release/hypr-keybind-manager ~/.local/bin/
+
+# Or install system-wide (requires sudo)
 sudo cp target/release/hypr-keybind-manager /usr/local/bin/
 ```
+
+### Adding a Hyprland Keybinding
+
+After installation, add a keybinding to launch the application:
+
+```bash
+# Open your Hyprland config
+nano ~/.config/hypr/hyprland.conf
+
+# Add this line in the keybindings section:
+bind = SUPER, M, exec, hypr-keybind-manager gui
+
+# Reload Hyprland to apply
+hyprctl reload
+```
+
+Now press `SUPER+M` to launch the keybinding manager.
 
 ### Development Workflow
 
@@ -292,10 +386,6 @@ The `.cargo/config.toml` configures a custom runner that:
 - Uses `grep --line-buffered` for real-time log display
 
 All user actions are logged to stderr for debugging and visibility.
-
-### Distribution Packages
-
-> **Future Packages**: AUR package, Nix flake, and prebuilt binaries for Arch, Fedora, and Ubuntu.
 
 ---
 
