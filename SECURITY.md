@@ -480,4 +480,4 @@ The author thanks:
 ---
 
 **Last Updated**: 2025-11-01
-**Version**: 1.2.0
+**Version**: 1.2.1
