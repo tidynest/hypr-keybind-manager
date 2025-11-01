@@ -476,9 +476,8 @@ The author thanks:
 ## Contact
 
 **Security Email**: tidynest@proton.me
-**PGP Key**: Coming soon
 
 ---
 
-**Last Updated**: 2025-10-27
+**Last Updated**: 2025-11-01
 **Version**: 1.1.1

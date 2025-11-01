@@ -555,14 +555,14 @@ pub struct ValidationReport {
 
 **Responsibility**: Detect dangerous commands using multiple techniques.
 
-**Modular Structure** (878 lines across 4 modules):
+**Modular Structure** (927 lines across 4 modules):
 ```
 src/config/danger/
-├── mod.rs (395 lines)         - DangerDetector core, assess_command()
-├── types.rs (27 lines)        - DangerLevel, DangerAssessment
-├── patterns.rs (171 lines)    - Pattern builders (critical/dangerous/suspicious/safe)
-├── entropy.rs (285 lines)     - Shannon entropy calculation and detection
-└── tests/ (696 lines)         - Comprehensive test suite (27 tests)
+├── mod.rs (412 lines)         - DangerDetector core, assess_command()
+├── types.rs (41 lines)        - DangerLevel, DangerAssessment
+├── patterns.rs (183 lines)    - Pattern builders (critical/dangerous/suspicious/safe)
+├── entropy.rs (291 lines)     - Shannon entropy calculation and detection
+└── tests/ (786 lines)         - Comprehensive test suite (27 tests)
 ```
 
 **Detection Techniques**:
@@ -758,5 +758,5 @@ For implementation details, see [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md).
 
 ---
 
-**Last Updated**: 2025-10-27
+**Last Updated**: 2025-11-01
 **Version**: 1.1.1
