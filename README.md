@@ -795,7 +795,7 @@ git push origin main && git push origin v1.1.0
 
 ## Roadmap
 
-### Current Status: v1.2.0 Released ✅
+### Current Status: v1.2.1 Released ✅
 
 All planned features are implemented and production-ready. The project has completed:
 
