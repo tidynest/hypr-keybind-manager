@@ -33,7 +33,7 @@ jobs:
           if [ "${{ matrix.arch }}" = "aarch64" ]; then
             cross build --release --target ${{ matrix.target }}
           else
-            cargo build --release --target ${{ matrix.target }}
+            cargo build --release
           fi
 
       - name: Install GTK4 dependencies
@@ -52,21 +52,34 @@ jobs:
       - name: Strip binary
         run: |
           if [ "${{ matrix.arch }}" = "aarch64" ]; then
-            aarch64-linux-gnu-strip target/${{ 
-            matrix.target }}/release/hypr-keybind-manager
+            aarch64-linux-gnu-strip target/${{ matrix.target }}/release/hypr-keybind-manager
           else
-            strip target/${{ matrix.target }}/release/hypr-keybind-manager
+            strip target/release/hypr-keybind-manager
           fi
 
       - name: Create archive
         run: |
-          cd target/${{ matrix.target }}/release
+          if [ "${{ matrix.arch }}" = "aarch64" ]; then
+            cd target/${{ matrix.target }}/release
+          else
+            cd target/release
+          fi
           tar -czf hypr-keybind-manager-${{ matrix.arch }}-linux.tar.gz hypr-keybind-manager
 
-      - name: Create Release
+      - name: Upload x86_64 binary
+        if: matrix.arch == 'x86_64'
         uses: softprops/action-gh-release@v1
         with:
           files: target/release/hypr-keybind-manager-x86_64-linux.tar.gz
           generate_release_notes: true
         env:
-          GITHUB-TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload aarch64 binary
+        if: matrix.arch == 'aarch64'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: target/${{ matrix.target }}/release/hypr-keybind-manager-aarch64-linux.tar.gz
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
