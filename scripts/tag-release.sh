@@ -55,7 +55,7 @@ echo "  ✅ Cargo.lock updated"
 echo ""
 
 echo "📝 Step 4/6: Committing version bump"
-git add Cargo.toml Cargo.lock README.md SECURITY.md docs/ARCHITECTURE.md docs/DESIGN_DECISIONS.md
+git add Cargo.toml Cargo.lock README.md SECURITY.md docs/ARCHITECTURE.md docs/DESIGN_DECISIONS.md PKGBUILD
 git commit -m "Bump version to $NEW_VERSION"
 echo "  ✅ Changes committed"
 echo ""

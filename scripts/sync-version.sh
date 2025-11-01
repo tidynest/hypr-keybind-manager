@@ -30,4 +30,8 @@ echo "  ✅ Updated docs/ARCHITECTURE.md"
 sed -i "s/^\*\*Version\*\*: [0-9]\+\.[0-9]\+\.[0-9]\+/**Version**: $VERSION/" docs/DESIGN_DECISIONS.md
 echo "  ✅ Updated docs/DESIGN_DECISIONS.md"
 
+# Uodate PKGBUILD
+sed -i "s/^pkgver=[0-9]\+\.[0-9]\+\.[0-9]\+/pkgver=$VERSION/" PKGBUILD
+echo "  ✅ Updated PKGBUILD"
+
 echo "✨ Version synchronisation complete! All files now at v$VERSION"

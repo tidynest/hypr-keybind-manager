@@ -127,6 +127,16 @@ echo -e "# Architecture\n\n**Version**: 1.0.0" > docs/ARCHITECTURE.md
 echo -e "# Design\n\n**Version**: 1.0.0" > docs/DESIGN_DECISIONS.md
 print_pass "Documentation files created"
 
+# Create minimal PKGBUILD
+cat > PKGBUILD <<'EOF'
+# Maintainer: Test User <test@example.com>
+
+pkgname=test-project
+pkgver=1.0.0
+pkgrel=1
+EOF
+print_pass "PKGBUILD created"
+
 # Initial commit
 git add .
 git commit -q -m "Initial commit"
@@ -167,6 +177,12 @@ else
     print_fail "SECURITY.md version NOT updated"
 fi
 
+if grep -q "^pkgver=1.0.1" PKGBUILD; then
+    print_pass "PKGBUILD version updated to 1.0.1"
+else
+    print_fail "PKGBUILD version NOT updated"
+fi
+
 #==============================================================================
 # TEST 3: Commit Verification
 #==============================================================================
@@ -192,6 +208,12 @@ if echo "$COMMITTED_FILES" | grep -q "README.md"; then
     print_pass "README.md included in commit"
 else
     print_fail "README.md NOT in commit"
+fi
+
+if echo "$COMMITTED_FILES" | grep -q "PKGBUILD"; then
+    print_pass "PKGBUILD included in commit"
+else
+    print_fail "PKGBUILD NOT in commit"
 fi
 
 #==============================================================================

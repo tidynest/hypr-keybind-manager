@@ -118,6 +118,16 @@ Some design decisions.
 EOF
 print_pass "Test docs/DESIGN_DECISIONS.md created"
 
+# Create test PKGBUILD
+cat > "$TEST_DIR/PKGBUILD" <<'EOF'
+# Maintainer: Test User <test@example.com>
+
+pkgname=test-package
+pkgver=1.0.0
+pkgrel=1
+EOF
+print_pass "Test PKGBUILD created."
+
 #==============================================================================
 # TEST 1: Basic Version Synchronization
 #==============================================================================
@@ -216,9 +226,29 @@ else
 fi
 
 #==============================================================================
-# TEST 6: All Versions Consistent
+# TEST 6: PKGBUILD Version Update
 #==============================================================================
-print_header "Test 6: Version Consistency Check"
+print_header "Test 6: PKGBUILD Version Update"
+
+print_test "Checking PKGBUILD version..."
+if grep -q "^pkgver=1.2.3" "$TEST_DIR/PKGBUILD"; then
+    print_pass "PKGBUILD version updated to 1.2.3"
+else
+    print_fail "PKGBUILD version NOT updated"
+    grep "pkgver" "$TEST_DIR/PKGBUILD" || echo "No pkgver found"
+fi
+
+# Verify pkgrel unchanged
+if grep -q "^pkgrel=1" "$TEST_DIR/PKGBUILD"; then
+    print_pass "PKGBUILD pkgrel unchanged"
+else
+    print_fail "PKGBUILD pkgrel was modified"
+fi
+
+#==============================================================================
+# TEST 7: All Versions Consistent
+#==============================================================================
+print_header "Test 7: Version Consistency Check"
 
 print_test "Verifying all files have same version (1.2.3)..."
 README_VER=$(grep -oP 'badge/version-\K[0-9]+\.[0-9]+\.[0-9]+' "$TEST_DIR/README.md" | head -1)
@@ -226,17 +256,19 @@ SECURITY_VER=$(grep -oP '^\*\*Version\*\*: \K[0-9]+\.[0-9]+\.[0-9]+' "$TEST_DIR/
 ARCH_VER=$(grep -oP '^\*\*Version\*\*: \K[0-9]+\.[0-9]+\.[0-9]+' "$TEST_DIR/docs/ARCHITECTURE.md" | head -1)
 DESIGN_VER=$(grep -oP '^\*\*Version\*\*: \K[0-9]+\.[0-9]+\.[0-9]+' "$TEST_DIR/docs/DESIGN_DECISIONS.md" | head -1)
 
-if [ "$README_VER" = "1.2.3" ] && [ "$SECURITY_VER" = "1.2.3" ] && [ "$ARCH_VER" = "1.2.3" ] && [ "$DESIGN_VER" = "1.2.3" ]; then
+PKGBUILD_VER=$(grep -oP '^pkgver=\K[0-9]+\.[0-9]+\.[0-9]+' "$TEST_DIR/PKGBUILD" | head -1)
+
+if [ "$README_VER" = "1.2.3" ] && [ "$SECURITY_VER" = "1.2.3" ] && [ "$ARCH_VER" = "1.2.3" ] && [ "$DESIGN_VER" = "1.2.3" ] && [ "$PKGBUILD_VER" = "1.2.3" ]; then
     print_pass "All versions consistent (1.2.3)"
 else
     print_fail "Version mismatch detected"
-    print_info "README: $README_VER, SECURITY: $SECURITY_VER, ARCH: $ARCH_VER, DESIGN: $DESIGN_VER"
+    print_info "README: $README_VER, SECURITY: $SECURITY_VER, ARCH: $ARCH_VER, DESIGN: $DESIGN_VER, PKGBUILD: $PKGBUILD_VER"
 fi
 
 #==============================================================================
-# TEST 7: Edge Case - Invalid Cargo.toml (Missing Version)
+# TEST 8: Edge Case - Invalid Cargo.toml (Missing Version)
 #==============================================================================
-print_header "Test 7: Edge Case - Missing Version in Cargo.toml"
+print_header "Test 8: Edge Case - Missing Version in Cargo.toml"
 
 # Create invalid Cargo.toml (no version field)
 cat > "$TEST_DIR/Cargo.toml" <<'EOF'
@@ -261,9 +293,9 @@ fi
 cd "$OLDPWD"
 
 #==============================================================================
-# TEST 8: Edge Case - Different Version Format
+# TEST 9: Edge Case - Different Version Format
 #==============================================================================
-print_header "Test 8: Different Version Format"
+print_header "Test 9: Different Version Format"
 
 # Create Cargo.toml with different version
 cat > "$TEST_DIR/Cargo.toml" <<'EOF'

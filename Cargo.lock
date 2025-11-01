@@ -802,7 +802,6 @@ dependencies = [
  "hyprland",
  "nom",
  "notify",
- "pkg-config",
  "regex",
  "serde",
  "shellexpand",
