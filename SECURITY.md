@@ -382,8 +382,8 @@ fn shannon_entropy(data: &str) -> f64 {
 
 | Date | Auditor | Scope | Findings |
 |------|---------|-------|----------|
-| 2025-01-15 | Internal | Full codebase | 0 critical, 0 high |
-| 2025-01-01 | Clippy | Rust best practices | 0 warnings |
+| 2025-10-15 | Internal | Full codebase | 0 critical, 0 high |
+| 2025-11-01 | Clippy | Rust best practices | 0 warnings |
 
 ---
 
