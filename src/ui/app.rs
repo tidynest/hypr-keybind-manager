@@ -26,7 +26,7 @@
 //!   └─ Connects components to Controller
 //! ```
 
-use gtk4::{gdk, prelude::*, Application, ApplicationWindow, CssProvider, Paned};
+use gtk4::{gdk, prelude::*, Application, ApplicationWindow, CssProvider};
 use std::{path::PathBuf, rc::Rc};
 
 use crate::ui::{actions, builders, file_watcher::FileWatcher, Controller};
@@ -155,7 +155,7 @@ impl App {
         Self::load_css();
 
         // Create header bar with menu
-        let header_bar = builders::build_header_bar();
+        let (header_bar, _undo_button, _redo_button) = builders::build_header_bar();
 
         let window = ApplicationWindow::builder()
             .application(app)
@@ -171,6 +171,7 @@ impl App {
         // Build main layout
         let (
             main_vbox,
+            paned,
             keybind_list,
             details_panel,
             conflict_panel,
@@ -178,13 +179,7 @@ impl App {
             backup_button,
         ) = builders::build_main_layout(controller.clone());
 
-        // Adjust paned position when window size changes
-        let paned = main_vbox.last_child().unwrap().downcast::<Paned>().unwrap();
-        let paned_clone = paned.clone();
-        window.connect_default_width_notify(move |window| {
-            let width = window.default_width();
-            paned_clone.set_position(width - 280);
-        });
+        Self::setup_paned_constraints(&window, &paned);
 
         // Set window content
         window.set_child(Some(&main_vbox));
@@ -198,6 +193,15 @@ impl App {
 
         // Setup import action (needs widgets to refresh UI after import)
         actions::setup_import_action(
+            app,
+            &window,
+            controller.clone(),
+            keybind_list.clone(),
+            details_panel.clone(),
+            conflict_panel.clone(),
+        );
+
+        actions::setup_history_actions(
             app,
             &window,
             controller.clone(),
@@ -223,12 +227,14 @@ impl App {
         // Initial display
         let all_bindings = controller.get_current_view();
         keybind_list.update_with_bindings(all_bindings);
+        actions::sync_history_actions(app, &controller);
 
         // Update conflict panel
         conflict_panel.refresh();
 
         // Setup file watcher polling (if available)
         if let Some(file_watcher) = file_watcher {
+            let app_for_watcher = app.clone();
             let controller_clone = controller.clone();
             let keybind_list_clone = keybind_list.clone();
             let details_panel_clone = details_panel.clone();
@@ -241,10 +247,12 @@ impl App {
                     if let Err(e) = controller_clone.load_keybindings() {
                         eprintln!("❌ Failed to reload: {}", e);
                     } else {
+                        controller_clone.clear_history();
                         let all_bindings = controller_clone.get_keybindings();
                         keybind_list_clone.update_with_bindings(all_bindings);
                         details_panel_clone.update_binding(None);
                         conflict_panel_clone.refresh();
+                        actions::sync_history_actions(&app_for_watcher, &controller_clone);
                         eprintln!("✅ Config reloaded successfully");
                     }
                 }
@@ -254,5 +262,31 @@ impl App {
 
         // Show window
         window.present();
+    }
+
+    fn setup_paned_constraints(window: &ApplicationWindow, paned: &gtk4::Paned) {
+        let window_for_tick = window.clone();
+        let paned_for_tick = paned.clone();
+
+        paned.add_tick_callback(move |_, _| {
+            let width = window_for_tick.width();
+            if width > 0 {
+                let current_position = paned_for_tick.position();
+                let clamped = builders::layout::clamp_paned_position(width, current_position);
+                if clamped != current_position {
+                    paned_for_tick.set_position(clamped);
+                }
+            }
+
+            glib::ControlFlow::Continue
+        });
+
+        let paned_for_startup = paned.clone();
+        let window_for_startup = window.clone();
+        glib::idle_add_local_once(move || {
+            let width = window_for_startup.width().max(window_for_startup.default_width());
+            let startup_position = builders::layout::clamp_paned_position(width, width);
+            paned_for_startup.set_position(startup_position);
+        });
     }
 }

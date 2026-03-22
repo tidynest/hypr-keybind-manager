@@ -182,6 +182,7 @@ impl DetailsPanel {
             .label("✏️ Edit Keybinding")
             .sensitive(false) // Disabled until a binding is selected
             .build();
+        edit_button.set_tooltip_text(Some("Edit the selected keybinding"));
         vbox.append(&edit_button);
 
         // Add delete button
@@ -190,6 +191,7 @@ impl DetailsPanel {
             .sensitive(false) // Disabled until a binding is selected
             .build();
         delete_button.add_css_class("destructive-action");
+        delete_button.set_tooltip_text(Some("Delete the selected keybinding"));
         vbox.append(&delete_button);
 
         // Add vbox to frame

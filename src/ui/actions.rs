@@ -40,6 +40,86 @@ pub fn setup_quit_action(app: &Application) {
     });
 
     app.add_action(&quit_action);
+    app.set_accels_for_action("app.quit", &["<Primary>q"]);
+}
+
+pub fn setup_history_actions(
+    app: &Application,
+    window: &ApplicationWindow,
+    controller: Rc<Controller>,
+    keybind_list: Rc<crate::ui::components::KeybindList>,
+    details_panel: Rc<crate::ui::components::DetailsPanel>,
+    conflict_panel: Rc<crate::ui::components::ConflictPanel>,
+) {
+    let undo_action = SimpleAction::new("undo", None);
+    undo_action.set_enabled(controller.can_undo());
+
+    let redo_action = SimpleAction::new("redo", None);
+    redo_action.set_enabled(controller.can_redo());
+
+    let controller_for_undo = controller.clone();
+    let keybind_list_for_undo = keybind_list.clone();
+    let details_panel_for_undo = details_panel.clone();
+    let conflict_panel_for_undo = conflict_panel.clone();
+    let window_for_undo = window.clone();
+    let redo_action_for_undo = redo_action.clone();
+    let undo_action_for_undo = undo_action.clone();
+
+    undo_action.connect_activate(move |_, _| {
+        match controller_for_undo.undo() {
+            Ok(()) => {
+                refresh_main_view(
+                    &controller_for_undo,
+                    &keybind_list_for_undo,
+                    &details_panel_for_undo,
+                    &conflict_panel_for_undo,
+                );
+                update_history_action_state(&undo_action_for_undo, &redo_action_for_undo, &controller_for_undo);
+            }
+            Err(e) => show_action_error(&window_for_undo, "Undo Failed", &e),
+        }
+    });
+
+    let controller_for_redo = controller.clone();
+    let keybind_list_for_redo = keybind_list.clone();
+    let details_panel_for_redo = details_panel.clone();
+    let conflict_panel_for_redo = conflict_panel.clone();
+    let window_for_redo = window.clone();
+    let redo_action_for_redo = redo_action.clone();
+    let undo_action_for_redo = undo_action.clone();
+
+    redo_action.connect_activate(move |_, _| {
+        match controller_for_redo.redo() {
+            Ok(()) => {
+                refresh_main_view(
+                    &controller_for_redo,
+                    &keybind_list_for_redo,
+                    &details_panel_for_redo,
+                    &conflict_panel_for_redo,
+                );
+                update_history_action_state(&undo_action_for_redo, &redo_action_for_redo, &controller_for_redo);
+            }
+            Err(e) => show_action_error(&window_for_redo, "Redo Failed", &e),
+        }
+    });
+
+    app.add_action(&undo_action);
+    app.add_action(&redo_action);
+    app.set_accels_for_action("app.undo", &["<Primary>z"]);
+    app.set_accels_for_action("app.redo", &["<Primary><Shift>z", "<Primary>y"]);
+}
+
+pub fn sync_history_actions(app: &Application, controller: &Controller) {
+    let undo = app
+        .lookup_action("undo")
+        .and_then(|action| action.downcast::<SimpleAction>().ok());
+    let redo = app
+        .lookup_action("redo")
+        .and_then(|action| action.downcast::<SimpleAction>().ok());
+
+    if let (Some(undo), Some(redo)) = (undo, redo) {
+        update_history_action_state(&undo, &redo, controller);
+    }
 }
 
 /// Sets up the export action
@@ -85,6 +165,7 @@ pub fn setup_export_action(
     });
 
     app.add_action(&export_action);
+    app.set_accels_for_action("app.export", &["<Primary>e"]);
 }
 
 /// Sets up the import action
@@ -130,6 +211,7 @@ pub fn setup_import_action(
         let details_panel_clone = details_panel_for_import.clone();
         let conflict_panel_clone = conflict_panel_for_import.clone();
         let window_clone = window_for_import.clone();
+        let window_for_state_sync = window_for_import.clone();
 
         file_dialog.open(
             Some(&window_clone),
@@ -142,10 +224,15 @@ pub fn setup_import_action(
                     match controller_clone.import_from(&path, chosen_mode) {
                         Ok(()) => {
                             eprintln!("✅ Import successful!");
-                            let updated_bindings = controller_clone.get_current_view();
-                            keybind_list_clone.update_with_bindings(updated_bindings);
-                            details_panel_clone.update_binding(None);
-                            conflict_panel_clone.refresh();
+                            refresh_main_view(
+                                &controller_clone,
+                                &keybind_list_clone,
+                                &details_panel_clone,
+                                &conflict_panel_clone,
+                            );
+                            if let Some(app) = window_for_state_sync.application() {
+                                sync_history_actions(&app, &controller_clone);
+                            }
                         }
                         Err(e) => eprintln!("❌ Import failed: {}", e),
                     }
@@ -156,6 +243,7 @@ pub fn setup_import_action(
     });
 
     app.add_action(&import_action);
+    app.set_accels_for_action("app.import", &["<Primary>o"]);
 
     /// Shows a dialog asking user to choose import mode
     ///
@@ -196,16 +284,19 @@ pub fn setup_import_action(
 
         // Instruction label
         let label = Label::new(Some("How would you like to import keybindings?"));
+        label.set_wrap(true);
         vbox.append(&label);
 
         // Radio button: Replace
         let replace_radio = CheckButton::with_label("Replace - Delete all existing bindings");
+        replace_radio.set_tooltip_text(Some("Replace all current keybindings with the imported file"));
         vbox.append(&replace_radio);
 
         // Radio button: Merge
         let merge_radio =
             CheckButton::with_label("Merge - Keep existing, add imported (skip duplicates)");
         merge_radio.set_group(Some(&replace_radio));
+        merge_radio.set_tooltip_text(Some("Keep existing keybindings and only add new ones from the import"));
         vbox.append(&merge_radio);
 
         // Button container
@@ -224,6 +315,7 @@ pub fn setup_import_action(
         // Import button
         let import_button = Button::with_label("Continue");
         import_button.add_css_class("suggested-action");
+        import_button.set_receives_default(true);
         let dialog_for_import = dialog.clone();
         let response_clone = response.clone();
         let replace_clone = replace_radio.clone();
@@ -239,6 +331,7 @@ pub fn setup_import_action(
         button_box.append(&import_button);
         vbox.append(&button_box);
         dialog.set_child(Some(&vbox));
+        dialog.set_default_widget(Some(&import_button));
         dialog.present();
 
         // Run modal loop
@@ -275,4 +368,32 @@ pub fn setup_apply_action(app: &Application, controller: Rc<Controller>) {
     });
 
     app.add_action(&apply_action);
+    app.set_accels_for_action("app.apply-to-hyprland", &["<Primary>r"]);
+}
+
+pub fn refresh_main_view(
+    controller: &Controller,
+    keybind_list: &crate::ui::components::KeybindList,
+    details_panel: &crate::ui::components::DetailsPanel,
+    conflict_panel: &crate::ui::components::ConflictPanel,
+) {
+    let updated_bindings = controller.get_current_view();
+    keybind_list.update_with_bindings(updated_bindings);
+    details_panel.update_binding(None);
+    conflict_panel.refresh();
+}
+
+fn update_history_action_state(undo_action: &SimpleAction, redo_action: &SimpleAction, controller: &Controller) {
+    undo_action.set_enabled(controller.can_undo());
+    redo_action.set_enabled(controller.can_redo());
+}
+
+fn show_action_error(window: &ApplicationWindow, title: &str, message: &str) {
+    let error_dialog = gtk4::AlertDialog::builder()
+        .modal(true)
+        .message(title)
+        .detail(message)
+        .buttons(vec!["OK"])
+        .build();
+    error_dialog.show(Some(window));
 }

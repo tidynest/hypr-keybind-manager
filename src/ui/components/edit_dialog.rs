@@ -14,41 +14,18 @@
 
 //! Edit dialog component for adding and editing keybindings.
 //!
-//! Provides a modern GTK4 Window-based dialog for creating new keybindings
-//! or editing existing ones. The dialog includes:
-//!
-//! - Pre-filled form fields for editing
-//! - Real-time validation with error feedback
-//! - Recursive error handling (user can fix and retry)
-//! - Modal dialog pattern with Save/Cancel buttons
-//!
-//! # Architecture
-//!
-//! Uses GTK4 Window instead of deprecated Dialog API, with manual button
-//! layout and response tracking via `Rc<Cell<Option<DialogResponse>>>`.
-//!
-//! # Example
-//!
-//! ```no_run
-//! use hypr_keybind_manager::{core::types::{Keybinding, KeyCombo, Modifier, BindType}, ui::components::EditDialog};
-//! use gtk4::ApplicationWindow;
-//!
-//! # fn example(parent: &ApplicationWindow) {
-//! let binding = Keybinding {
-//!     key_combo: KeyCombo::new(vec![Modifier::Super], "K"),
-//!     bind_type: BindType::Bind,
-//!     dispatcher: "exec".to_string(),
-//!     args: Some("firefox".to_string()),
-//! };
-//!
-//! let dialog = EditDialog::new(parent, &binding);
-//! if let Some(updated_binding) = dialog.show_and_wait() {
-//!     println!("User saved: {}", updated_binding.key_combo);
-//! }
-//! # }
-//! ```
+//! Provides a GTK4 window-based dialog for creating and updating keybindings.
+//! The dialog includes:
+//! - pre-filled form fields for editing
+//! - inline key-combo availability feedback
+//! - clickable replacement suggestions for busy combos
+//! - modal save/cancel flow with validation
 
-use crate::core::types::{BindType, KeyCombo, Keybinding, Modifier};
+use crate::{
+    core::types::{BindType, KeyCombo, Keybinding, Modifier},
+    ui::controller::KeyComboAvailability,
+    ui::Controller,
+};
 use gtk4::{
     gdk, prelude::*, ApplicationWindow, Box as GtkBox, Button, Entry, EventControllerKey, Grid,
     Label, Orientation, Window,
@@ -62,7 +39,11 @@ pub struct EditDialog {
     dispatcher_entry: Entry,
     args_entry: Entry,
     bind_type_entry: Entry,
+    availability_label: Label,
+    suggestion_box: GtkBox,
     response: Rc<Cell<Option<DialogResponse>>>,
+    controller: Rc<Controller>,
+    original_binding: Option<Keybinding>,
 }
 
 #[derive(Clone, Debug, Copy, PartialEq)]
@@ -72,19 +53,28 @@ enum DialogResponse {
 }
 
 impl EditDialog {
-    /// Creates a new edit dialog pre-filled with the binding's current values
-    pub fn new(parent: &ApplicationWindow, binding: &Keybinding) -> Self {
-        // Create the window
+    /// Creates a new edit dialog pre-filled with the binding's current values.
+    pub fn new(
+        parent: &ApplicationWindow,
+        controller: Rc<Controller>,
+        binding: &Keybinding,
+        original_binding: Option<Keybinding>,
+    ) -> Self {
+        let title = if original_binding.is_some() {
+            "✏️ Edit Keybinding"
+        } else {
+            "➕ Add Keybinding"
+        };
+
         let dialog_window = Window::builder()
-            .title("✏️ Edit Keybinding")
+            .title(title)
             .modal(true)
             .transient_for(parent)
-            .default_width(450)
-            .default_height(300)
+            .default_width(480)
+            .default_height(360)
             .resizable(false)
             .build();
 
-        // Escape key handler
         let key_controller = EventControllerKey::new();
         let dialog_window_for_escape = dialog_window.clone();
         key_controller.connect_key_pressed(move |_, key, _, _| {
@@ -95,20 +85,17 @@ impl EditDialog {
                 glib::Propagation::Proceed
             }
         });
-
         dialog_window.add_controller(key_controller);
 
-        // Create a grid for the form layout
         let grid = Grid::builder()
             .row_spacing(12)
             .column_spacing(12)
             .margin_start(20)
             .margin_end(20)
             .margin_top(20)
-            .margin_bottom(20)
+            .margin_bottom(12)
             .build();
 
-        // Row 0: Key Combination
         let key_label = Label::builder()
             .label("🎹 Key Combination:")
             .halign(gtk4::Align::End)
@@ -118,10 +105,29 @@ impl EditDialog {
             .placeholder_text("e.g., SUPER+SHIFT+M")
             .hexpand(true)
             .build();
+        key_entry.set_tooltip_text(Some("Enter modifiers and key using MOD+KEY format"));
         grid.attach(&key_label, 0, 0, 1, 1);
         grid.attach(&key_entry, 1, 0, 1, 1);
 
-        // Row 1: Dispatcher
+        let availability_label = Label::builder()
+            .label("Enter a key combination to check availability.")
+            .halign(gtk4::Align::Start)
+            .xalign(0.0)
+            .wrap(true)
+            .visible(true)
+            .build();
+        availability_label.add_css_class("availability-hint");
+        grid.attach(&availability_label, 1, 1, 1, 1);
+
+        let suggestion_box = GtkBox::builder()
+            .orientation(Orientation::Horizontal)
+            .spacing(6)
+            .hexpand(true)
+            .visible(false)
+            .build();
+        suggestion_box.add_css_class("suggestion-row");
+        grid.attach(&suggestion_box, 1, 2, 1, 1);
+
         let dispatcher_label = Label::builder()
             .label("⚡ Dispatcher:")
             .halign(gtk4::Align::End)
@@ -131,10 +137,10 @@ impl EditDialog {
             .placeholder_text("e.g., exec, workspace, killactive")
             .hexpand(true)
             .build();
-        grid.attach(&dispatcher_label, 0, 1, 1, 1);
-        grid.attach(&dispatcher_entry, 1, 1, 1, 1);
+        dispatcher_entry.set_tooltip_text(Some("Enter the Hyprland dispatcher to run"));
+        grid.attach(&dispatcher_label, 0, 3, 1, 1);
+        grid.attach(&dispatcher_entry, 1, 3, 1, 1);
 
-        // Row 2: Arguments
         let args_label = Label::builder()
             .label("📝 Arguments:")
             .halign(gtk4::Align::End)
@@ -144,10 +150,10 @@ impl EditDialog {
             .placeholder_text("Optional arguments")
             .hexpand(true)
             .build();
-        grid.attach(&args_label, 0, 2, 1, 1);
-        grid.attach(&args_entry, 1, 2, 1, 1);
+        args_entry.set_tooltip_text(Some("Optional dispatcher arguments"));
+        grid.attach(&args_label, 0, 4, 1, 1);
+        grid.attach(&args_entry, 1, 4, 1, 1);
 
-        // Row 3: Bind Type
         let bind_type_label = Label::builder()
             .label("🔗 Bind Type:")
             .halign(gtk4::Align::End)
@@ -157,10 +163,10 @@ impl EditDialog {
             .placeholder_text("bind, binde, bindm, etc.")
             .hexpand(true)
             .build();
-        grid.attach(&bind_type_label, 0, 3, 1, 1);
-        grid.attach(&bind_type_entry, 1, 3, 1, 1);
+        bind_type_entry.set_tooltip_text(Some("Choose the Hyprland bind variant"));
+        grid.attach(&bind_type_label, 0, 5, 1, 1);
+        grid.attach(&bind_type_entry, 1, 5, 1, 1);
 
-        // Create button box at the bottom (replaces dialog.add_button)
         let button_box = GtkBox::builder()
             .orientation(Orientation::Horizontal)
             .spacing(12)
@@ -171,28 +177,24 @@ impl EditDialog {
             .build();
 
         let cancel_button = Button::builder().label("Cancel").build();
-
         let save_button = Button::builder().label("💾 Save").build();
         save_button.add_css_class("suggested-action");
+        save_button.set_receives_default(true);
 
         button_box.append(&cancel_button);
         button_box.append(&save_button);
 
-        // Create main vertical box
         let main_box = GtkBox::builder()
             .orientation(Orientation::Vertical)
             .spacing(0)
             .build();
-
         main_box.append(&grid);
         main_box.append(&button_box);
-
         dialog_window.set_child(Some(&main_box));
+        dialog_window.set_default_widget(Some(&save_button));
 
-        // Set up response tracking
         let response: Rc<Cell<Option<DialogResponse>>> = Rc::new(Cell::new(None));
 
-        // Connect Cancel button
         {
             let response = response.clone();
             let window = dialog_window.clone();
@@ -202,7 +204,6 @@ impl EditDialog {
             let bind_type_entry = bind_type_entry.clone();
 
             cancel_button.connect_clicked(move |_| {
-                // Clear selections
                 key_entry.select_region(0, 0);
                 dispatcher_entry.select_region(0, 0);
                 args_entry.select_region(0, 0);
@@ -213,7 +214,6 @@ impl EditDialog {
             });
         }
 
-        // Connect Save button
         {
             let response = response.clone();
             let key_entry = key_entry.clone();
@@ -222,7 +222,6 @@ impl EditDialog {
             let bind_type_entry = bind_type_entry.clone();
 
             save_button.connect_clicked(move |_| {
-                // Clear selections
                 key_entry.select_region(0, 0);
                 dispatcher_entry.select_region(0, 0);
                 args_entry.select_region(0, 0);
@@ -232,7 +231,6 @@ impl EditDialog {
             });
         }
 
-        // Handle window close (X button) as Cancel
         {
             let response = response.clone();
             dialog_window.connect_close_request(move |_| {
@@ -243,17 +241,53 @@ impl EditDialog {
             });
         }
 
-        Self {
+        let dialog = Self {
             dialog_window,
             key_entry,
             dispatcher_entry,
             args_entry,
             bind_type_entry,
+            availability_label,
+            suggestion_box,
             response,
-        }
+            controller,
+            original_binding,
+        };
+
+        dialog.connect_key_feedback();
+        dialog.refresh_key_combo_feedback();
+        dialog
     }
 
-    /// Clears text selections in all entry fields
+    fn connect_key_feedback(&self) {
+        let controller = self.controller.clone();
+        let original_binding = self.original_binding.clone();
+        let key_entry = self.key_entry.clone();
+        let availability_label = self.availability_label.clone();
+        let suggestion_box = self.suggestion_box.clone();
+
+        self.key_entry.connect_changed(move |_| {
+            refresh_key_combo_feedback_widgets(
+                &controller,
+                original_binding.as_ref(),
+                &key_entry,
+                &availability_label,
+                &suggestion_box,
+            );
+        });
+    }
+
+    fn refresh_key_combo_feedback(&self) {
+        refresh_key_combo_feedback_widgets(
+            &self.controller,
+            self.original_binding.as_ref(),
+            &self.key_entry,
+            &self.availability_label,
+            &self.suggestion_box,
+        );
+    }
+
+    /// Clears text selections in all entry fields.
     fn clear_selections(&self) {
         self.key_entry.select_region(0, 0);
         self.dispatcher_entry.select_region(0, 0);
@@ -261,18 +295,16 @@ impl EditDialog {
         self.bind_type_entry.select_region(0, 0);
     }
 
-    /// Parses the form fields and returns a new Keybinding if valid
+    /// Parses the form fields and returns a new Keybinding if valid.
     fn parse_binding(&self) -> Result<Keybinding, String> {
-        // Get values from entries
         let key_text = self.key_entry.text().to_string();
         let dispatcher = self.dispatcher_entry.text().to_string();
         let args_text = self.args_entry.text().to_string();
         let bind_type_text = self.bind_type_entry.text().to_string();
 
-        // Validate required fields
-        if key_text.trim().is_empty() {
-            return Err("Key combination cannot be empty".to_string());
-        }
+        let key_combo =
+            parse_key_combo_text(&key_text)?.ok_or_else(|| "Key combination cannot be empty".to_string())?;
+
         if dispatcher.trim().is_empty() {
             return Err("Dispatcher cannot be empty".to_string());
         }
@@ -280,47 +312,22 @@ impl EditDialog {
             return Err("Bind type cannot be empty".to_string());
         }
 
-        // Parse key combination
-        let parts: Vec<&str> = key_text.split('+').map(|s| s.trim()).collect();
-        if parts.is_empty() {
-            return Err("Invalid key combination format".to_string());
-        }
-
-        let key = parts.last().unwrap().to_string();
-        let modifier_strings = &parts[..parts.len() - 1];
-
-        let mut modifiers = Vec::new();
-        for mod_str in modifier_strings {
-            let modifier = match mod_str.to_uppercase().as_str() {
-                "SUPER" => Modifier::Super,
-                "SHIFT" => Modifier::Shift,
-                "CTRL" | "CONTROL" => Modifier::Ctrl,
-                "ALT" => Modifier::Alt,
-                other => return Err(format!("Unknown modifier: {}", other)),
-            };
-            modifiers.push(modifier);
-        }
-
-        let key_combo = KeyCombo { modifiers, key };
-
-        // Parse bind type - match the string manually
         let bind_type = match bind_type_text.to_lowercase().as_str() {
             "bind" => BindType::Bind,
             "binde" => BindType::BindE,
             "bindm" => BindType::BindM,
             "bindr" => BindType::BindR,
             "bindl" => BindType::BindL,
+            "bindel" => BindType::BindEL,
             _ => return Err(format!("Invalid bind type: {}", bind_type_text)),
         };
 
-        // Optional arguments
         let args = if args_text.trim().is_empty() {
             None
         } else {
             Some(args_text.trim().to_string())
         };
 
-        // Build the new keybinding (only include fields that exist!)
         Ok(Keybinding {
             bind_type,
             key_combo,
@@ -329,7 +336,7 @@ impl EditDialog {
         })
     }
 
-    /// Shows the dialog and waits for user response
+    /// Shows the dialog and waits for user response.
     pub fn show_and_wait(self) -> Option<Keybinding> {
         self.response.set(None);
         self.dialog_window.present();
@@ -337,28 +344,22 @@ impl EditDialog {
         let main_context = glib::MainContext::default();
         self.clear_selections();
 
-        // Keep looping until we get a valid response or user cancels
         loop {
-            // Wait for a response
             while self.response.get().is_none() && self.dialog_window.is_visible() {
                 main_context.iteration(true);
             }
 
-            // Check what the user did
             match self.response.get() {
-                Some(DialogResponse::Save) => {
-                    match self.parse_binding() {
-                        Ok(binding) => {
-                            self.dialog_window.close();
-                            return Some(binding);
-                        }
-                        Err(e) => {
-                            self.show_error(&e);
-                            // Reset response and continue the outer loop
-                            self.response.set(None);
-                        }
+                Some(DialogResponse::Save) => match self.parse_binding() {
+                    Ok(binding) => {
+                        self.dialog_window.close();
+                        return Some(binding);
                     }
-                }
+                    Err(e) => {
+                        self.show_error(&e);
+                        self.response.set(None);
+                    }
+                },
                 Some(DialogResponse::Cancel) => {
                     self.dialog_window.close();
                     return None;
@@ -371,7 +372,7 @@ impl EditDialog {
         }
     }
 
-    /// Shows an error message in a modal dialog
+    /// Shows an error message in a modal dialog.
     fn show_error(&self, message: &str) {
         let error_window = Window::builder()
             .title("❌ Invalid Input")
@@ -382,7 +383,6 @@ impl EditDialog {
             .resizable(false)
             .build();
 
-        // Escape key handler
         let key_controller = EventControllerKey::new();
         let error_window_for_escape = error_window.clone();
         key_controller.connect_key_pressed(move |_, key, _, _| {
@@ -426,10 +426,132 @@ impl EditDialog {
 
         error_window.present();
 
-        // Wait for error dialog to close
         let main_context = glib::MainContext::default();
         while error_window.is_visible() {
             main_context.iteration(true);
         }
+    }
+}
+
+fn parse_key_combo_text(input: &str) -> Result<Option<KeyCombo>, String> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    let parts: Vec<&str> = trimmed.split('+').map(str::trim).collect();
+    if parts.iter().any(|part| part.is_empty()) {
+        return Err("Use format MOD+KEY without empty segments.".to_string());
+    }
+
+    let key = parts
+        .last()
+        .ok_or_else(|| "Invalid key combination format".to_string())?;
+
+    let mut modifiers = Vec::new();
+    for modifier in &parts[..parts.len() - 1] {
+        let parsed = match modifier.to_uppercase().as_str() {
+            "SUPER" => Modifier::Super,
+            "SHIFT" => Modifier::Shift,
+            "CTRL" | "CONTROL" => Modifier::Ctrl,
+            "ALT" => Modifier::Alt,
+            other => return Err(format!("Unknown modifier: {}", other)),
+        };
+        modifiers.push(parsed);
+    }
+
+    Ok(Some(KeyCombo::new(modifiers, key)))
+}
+
+fn refresh_key_combo_feedback_widgets(
+    controller: &Rc<Controller>,
+    original_binding: Option<&Keybinding>,
+    key_entry: &Entry,
+    availability_label: &Label,
+    suggestion_box: &GtkBox,
+) {
+    clear_suggestion_box(suggestion_box);
+
+    let key_text = key_entry.text();
+    match parse_key_combo_text(&key_text) {
+        Ok(None) => set_feedback_state(
+            availability_label,
+            "Enter a key combination to check availability.",
+            "availability-hint",
+        ),
+        Err(message) => set_feedback_state(availability_label, &message, "availability-warning"),
+        Ok(Some(key_combo)) => {
+            let assistance = controller.get_key_combo_assistance(Some(&key_combo), original_binding);
+            match assistance.availability {
+                KeyComboAvailability::Incomplete => {
+                    set_feedback_state(
+                        availability_label,
+                        "Enter a key combination to check availability.",
+                        "availability-hint",
+                    );
+                }
+                KeyComboAvailability::Available => {
+                    set_feedback_state(
+                        availability_label,
+                        "This key combination is currently free.",
+                        "availability-available",
+                    );
+                }
+                KeyComboAvailability::InUse(bindings) => {
+                    let preview = bindings
+                        .iter()
+                        .take(2)
+                        .map(describe_binding)
+                        .collect::<Vec<_>>()
+                        .join(" | ");
+                    let suffix = if bindings.len() > 2 { " | ..." } else { "" };
+                    let message = format!("Already in use by {}{}", preview, suffix);
+                    set_feedback_state(availability_label, &message, "availability-warning");
+
+                    if !assistance.suggestions.is_empty() {
+                        for suggestion in assistance.suggestions {
+                            let suggestion_text = suggestion.to_string();
+                            let button = Button::builder().label(&suggestion_text).build();
+                            button.add_css_class("suggestion-button");
+
+                            let key_entry = key_entry.clone();
+                            button.connect_clicked(move |_| {
+                                key_entry.set_text(&suggestion_text);
+                            });
+
+                            suggestion_box.append(&button);
+                        }
+                        suggestion_box.set_visible(true);
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn clear_suggestion_box(suggestion_box: &GtkBox) {
+    while let Some(child) = suggestion_box.first_child() {
+        suggestion_box.remove(&child);
+    }
+    suggestion_box.set_visible(false);
+}
+
+fn set_feedback_state(label: &Label, text: &str, css_class: &str) {
+    for class in [
+        "availability-hint",
+        "availability-available",
+        "availability-warning",
+    ] {
+        label.remove_css_class(class);
+    }
+
+    label.set_label(text);
+    label.add_css_class(css_class);
+}
+
+fn describe_binding(binding: &Keybinding) -> String {
+    match &binding.args {
+        Some(args) if !args.is_empty() => format!("{} {}", binding.dispatcher, args),
+        _ => binding.dispatcher.clone(),
     }
 }

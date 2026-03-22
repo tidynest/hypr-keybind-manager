@@ -17,10 +17,22 @@
 //! Displays all keybindings in a scrollable list view.
 //! Each row shows the key combination, dispatcher, and arguments.
 
-use gtk4::{prelude::*, Box as GtkBox, Label, ListBox, Orientation, ScrolledWindow};
+use gtk4::{
+    pango::EllipsizeMode,
+    prelude::*,
+    Box as GtkBox,
+    Grid,
+    Label,
+    ListBox,
+    Orientation,
+    ScrolledWindow,
+};
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{core::types::Keybinding, ui::Controller};
+
+const KEY_COLUMN_WIDTH: i32 = 190;
+const DISPATCHER_COLUMN_WIDTH: i32 = 140;
 
 /// Displays a scrollable list of keybindings
 pub struct KeybindList {
@@ -104,48 +116,52 @@ impl KeybindList {
 
     /// Create a single row widget for a keybinding
     fn create_row(&self, binding: &Keybinding, index: usize) -> GtkBox {
-        // Horizontal box for row layout
         let row = GtkBox::builder()
-            .orientation(Orientation::Horizontal)
-            .spacing(20)
-            .margin_start(10)
-            .margin_end(10)
-            .margin_top(5)
-            .margin_bottom(5)
+            .orientation(Orientation::Vertical)
+            .margin_start(8)
+            .margin_end(8)
+            .margin_top(3)
+            .margin_bottom(3)
             .build();
 
-        // Add subtle alternating background colour for every other row
         if index % 2 == 0 {
-            // Even rows: Slightly lighter background
             row.add_css_class("even-row");
         } else {
-            // Odd rows: Slightly darker background (Default background colour)
             row.add_css_class("odd-row");
         }
 
-        // Key combination (e.g., "SUPER+K")
+        let grid = Grid::builder()
+            .column_spacing(16)
+            .margin_start(10)
+            .margin_end(10)
+            .margin_top(8)
+            .margin_bottom(8)
+            .hexpand(true)
+            .build();
+
         let key_label = Label::builder()
             .label(format!("{}", binding.key_combo))
-            .width_chars(15) // Fixed width for alignment
             .xalign(0.0)
+            .width_request(KEY_COLUMN_WIDTH)
             .build();
+        key_label.add_css_class("list-key-column");
 
-        // Dispatcher (e.g., "exec", "killactive")
         let dispatcher_label = Label::builder()
             .label(&binding.dispatcher)
-            .width_chars(15)
             .xalign(0.0)
+            .width_request(DISPATCHER_COLUMN_WIDTH)
             .build();
+        dispatcher_label.add_css_class("list-dispatcher-column");
 
-        // Arguments (e.g., "firefox") - optional
         let args_text = binding.args.as_deref().unwrap_or("");
         let args_label = Label::builder()
             .label(args_text)
             .xalign(0.0)
-            .hexpand(true) // Take remaining space
+            .hexpand(true)
+            .ellipsize(EllipsizeMode::End)
             .build();
+        args_label.add_css_class("list-args-column");
 
-        // Add tooltip to show full arguments on hover
         if let Some(full_args) = &binding.args {
             if full_args.len() > 40 {
                 args_label.set_can_target(true);
@@ -154,10 +170,10 @@ impl KeybindList {
             }
         }
 
-        // Assemble row
-        row.append(&key_label);
-        row.append(&dispatcher_label);
-        row.append(&args_label);
+        grid.attach(&key_label, 0, 0, 1, 1);
+        grid.attach(&dispatcher_label, 1, 0, 1, 1);
+        grid.attach(&args_label, 2, 0, 1, 1);
+        row.append(&grid);
 
         row
     }

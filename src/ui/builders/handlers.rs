@@ -158,6 +158,9 @@ pub fn wire_up_handlers(
                         keybind_list_clone.update_with_bindings(updated);
                         details_panel_clone.update_binding(None);
                         conflict_panel_clone.refresh();
+                        if let Some(app) = window_for_inner.application() {
+                            crate::ui::actions::sync_history_actions(&app, &controller_clone);
+                        }
                         eprintln!("✅ Keybinding deleted successfully");
                     }
                     Err(e) => {
@@ -203,7 +206,12 @@ pub fn wire_up_handlers(
         let conflict_panel_clone = conflict_panel_for_edit.clone();
         let binding_clone = binding.clone();
         let window_clone = window_for_edit.clone();
-        let edit_dialog = EditDialog::new(&window_clone, &binding_clone);
+        let edit_dialog = EditDialog::new(
+            &window_clone,
+            controller_clone.clone(),
+            &binding_clone,
+            Some(binding_clone.clone()),
+        );
 
         if let Some(new_binding) = edit_dialog.show_and_wait() {
             match controller_clone.update_keybinding(&binding_clone, new_binding) {
@@ -212,6 +220,9 @@ pub fn wire_up_handlers(
                     let updated_bindings = controller_clone.get_current_view();
                     keybind_list_clone.update_with_bindings(updated_bindings);
                     conflict_panel_clone.refresh();
+                    if let Some(app) = window_clone.application() {
+                        crate::ui::actions::sync_history_actions(&app, &controller_clone);
+                    }
                     eprintln!("✅ Keybinding updated successfully");
                 }
                 Err(e) => {
@@ -251,15 +262,12 @@ pub fn wire_up_handlers(
 
         let empty_binding = Keybinding {
             bind_type: BindType::Bind,
-            key_combo: KeyCombo {
-                modifiers: vec![],
-                key: String::new(),
-            },
+            key_combo: KeyCombo::new(vec![], ""),
             dispatcher: String::new(),
             args: None,
         };
 
-        let edit_dialog = EditDialog::new(&window_clone, &empty_binding);
+        let edit_dialog = EditDialog::new(&window_clone, controller_clone.clone(), &empty_binding, None);
 
         if let Some(new_binding) = edit_dialog.show_and_wait() {
             match controller_clone.add_keybinding(new_binding) {
@@ -268,6 +276,9 @@ pub fn wire_up_handlers(
                     let updated_bindings = controller_clone.get_current_view();
                     keybind_list_clone.update_with_bindings(updated_bindings);
                     conflict_panel_clone.refresh();
+                    if let Some(app) = window_clone.application() {
+                        crate::ui::actions::sync_history_actions(&app, &controller_clone);
+                    }
                     eprintln!("✅ Keybinding added successfully");
                 }
                 Err(e) => {
@@ -310,6 +321,7 @@ pub fn wire_up_handlers(
         let keybind_list_clone = keybind_list_for_backup.clone();
         let details_panel_clone = details_panel_for_backup.clone();
         let conflict_panel_clone = conflict_panel_for_backup.clone();
+        let window_for_history_sync = window_for_backup.clone();
 
         let controller_for_delete = controller_for_backup.clone();
 
@@ -323,6 +335,9 @@ pub fn wire_up_handlers(
                     keybind_list_clone.update_with_bindings(updated_bindings);
                     details_panel_clone.update_binding(None);
                     conflict_panel_clone.refresh();
+                    if let Some(app) = window_for_history_sync.application() {
+                        crate::ui::actions::sync_history_actions(&app, &controller_clone);
+                    }
                     Ok(())
                 }
                 Err(e) => Err(e),

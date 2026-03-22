@@ -81,6 +81,16 @@ fn test_parse_bind_line() {
 }
 
 #[test]
+fn test_parse_bind_line_normalizes_modifier_order() {
+    let (_, binding) = parse_bind_line("bind = SUPER ALT, 1, exec, firefox").unwrap();
+
+    assert_eq!(
+        binding.key_combo,
+        crate::core::types::KeyCombo::new(vec![Modifier::Super, Modifier::Alt], "1")
+    );
+}
+
+#[test]
 fn test_variable_substitution() {
     let content = "$mainMod = SUPER\nbind = $mainMod, K, exec, firefox";
     let vars = collect_variables(content);

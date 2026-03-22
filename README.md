@@ -795,7 +795,7 @@ git push origin main && git push origin v1.1.0
 
 ## Roadmap
 
-### Current Status: v1.2.0 Released ✅
+### Current Status: v1.2.1 Released ✅
 
 All planned features are implemented and production-ready. The project has completed:
 
@@ -810,8 +810,9 @@ All planned features are implemented and production-ready. The project has compl
 - ✅ **Live File Monitoring**: Automatic UI refresh on external config changes
 - ✅ **Search Persistence**: Filters maintained across all operations
 - ✅ **Escape Key Support**: All dialogs closable with Escape
+- ✅ **Keycombo Assistance**: Inline availability feedback with suggested free alternatives while editing
 
-**Quality Assurance (Phases 7.1-9.0):**
+**Quality Assurance (Phases 7.1-10.0):**
 - ✅ **Phase 7.1**: Code comments audit (100% documentation coverage)
 - ✅ **Phase 7.2**: Documentation files audit (98 issues fixed, 100% accurate)
 - ✅ **Phase 7.3**: Project organisation cleanup (100% clean structure)
@@ -819,17 +820,17 @@ All planned features are implemented and production-ready. The project has compl
 - ✅ **Phase 7.5**: Modular test creation (26 shell tests, 100% pass rate)
 - ✅ **Phase 8.0**: UX enhancements (search persistence + Escape key support)
 - ✅ **Phase 9.0**: Documentation polish & release preparation (v1.2.0 published)
+- ✅ **Phase 10.0**: Post-release UX refinements (keycombo assistance + layout polish)
 
-### Future Enhancements (Post v1.2.0)
+### Future Enhancements (Post v1.2.1)
 
 Potential features being considered for future releases:
 
-- **Keycombo Suggestion & Availability Checker**: Help users discover free key combinations and avoid conflicts
-- **Column Alignment in Left Panel**: Improve visual consistency with GTK4 grid layout
-- **Right Panel Width Constraints**: Limit initial position and maximum leftward extension to improve layout (start at minimum width, max extend to 1/3 of window width)
 - **Undo/Redo System**: Transaction-based undo/redo for keybinding changes
 - **Multi-Monitor Awareness**: Per-monitor keybinding support
 - **Plugin Architecture**: Custom validators and extensions
+- **Accessibility Review**: WCAG 2.1 AA evaluation and improved screen-reader labeling
+- **Security Sandbox**: Bubblewrap-based execution sandboxing for higher-risk bindings
 - Community feedback and suggestions are welcomed!
 
 ---
@@ -843,7 +844,7 @@ Potential features being considered for future releases:
 - **MINOR** (v1.1.0): New features, backward-compatible changes
 - **PATCH** (v1.0.1): Bug fixes, no new features
 
-**Current Status (v1.0.7)**:
+**Current Status (v1.2.1)**:
 - Config file format is **stable** - no breaking changes planned for v1.x
 - Public Rust APIs (for library use) are **unstable** - may change before v2.0.0
 - CLI interface is **stable** - commands and options will remain backward-compatible
@@ -869,7 +870,7 @@ Potential features being considered for future releases:
 
 **Current Status**: English only
 
-**Future Plans** (Post v1.1.0):
+**Future Plans** (Post v1.2.1):
 - **Planned**: Support for multiple languages using Rust `fluent` or `gettext` crates
 - **UI Strings**: All user-facing text will be extracted to translation files
 - **Priority Languages**: Based on community demand (likely German, French, Spanish first)

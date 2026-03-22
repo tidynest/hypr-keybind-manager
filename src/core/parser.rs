@@ -235,15 +235,9 @@ pub fn parse_key_combo(input: &str) -> IResult<&str, KeyCombo> {
     let (input, _) = (space0, char(','), space0).parse(input)?;
 
     let (input, key) = take_until(",")(input)?;
-    let key = key.trim().to_string();
+    let key = key.trim();
 
-    Ok((
-        input,
-        KeyCombo {
-            modifiers,
-            key: key.to_string(),
-        },
-    ))
+    Ok((input, KeyCombo::new(modifiers, key)))
 }
 
 /// Parse modifiers from a string

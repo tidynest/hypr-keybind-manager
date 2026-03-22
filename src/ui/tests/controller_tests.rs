@@ -19,7 +19,11 @@
 use std::{fs, path::PathBuf};
 use tempfile::TempDir;
 
-use crate::ui::Controller;
+use crate::{
+    core::{BindType, KeyCombo, Keybinding, Modifier},
+    ui::controller::{KeyComboAvailability, KeyComboAssistance},
+    ui::Controller,
+};
 
 /// Helper: Creates test config with known content
 fn create_test_config() -> (TempDir, PathBuf) {
@@ -35,6 +39,18 @@ bind = SUPER, F, togglefloating
 
 # Conflict: duplicate SUPER+K
 bind = SUPER, K, exec, chrome
+"#;
+
+    fs::write(&config_path, content).unwrap();
+    (temp_dir, config_path)
+}
+
+fn create_modifier_order_config() -> (TempDir, PathBuf) {
+    let temp_dir = TempDir::new().unwrap();
+    let config_path = temp_dir.path().join("hyprland.conf");
+
+    let content = r#"
+bind = SUPER ALT, 1, exec, firefox
 "#;
 
     fs::write(&config_path, content).unwrap();
@@ -232,9 +248,9 @@ fn test_search_persists_after_add() {
     controller.set_search_query("firefox".to_string());
 
     // Add a new binding (doesn't match filter)
-    let new_binding = crate::core::Keybinding {
-        bind_type: crate::core::BindType::Bind,
-        key_combo: crate::core::KeyCombo::new(vec![crate::core::Modifier::Super], "X"),
+    let new_binding = Keybinding {
+        bind_type: BindType::Bind,
+        key_combo: KeyCombo::new(vec![Modifier::Super], "X"),
         dispatcher: "exec".to_string(),
         args: Some("code".to_string()),
     };
@@ -291,4 +307,167 @@ fn test_search_persists_after_update() {
     controller.set_search_query("brave".to_string());
     let brave_filtered = controller.get_current_view();
     assert_eq!(brave_filtered.len(), 1, "Should find updated brave binding");
+}
+
+#[test]
+fn test_key_combo_assistance_marks_busy_combo_as_in_use() {
+    let (_temp_dir, config_path) = create_test_config();
+    let controller = Controller::new(config_path).unwrap();
+    controller.load_keybindings().unwrap();
+
+    let combo = KeyCombo::new(vec![Modifier::Super], "k");
+    let assistance = controller.get_key_combo_assistance(Some(&combo), None);
+
+    match assistance.availability {
+        KeyComboAvailability::InUse(bindings) => {
+            assert_eq!(bindings.len(), 2, "SUPER+K should be reported as busy");
+        }
+        other => panic!("expected busy combo, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_key_combo_assistance_marks_free_combo_as_available() {
+    let (_temp_dir, config_path) = create_test_config();
+    let controller = Controller::new(config_path).unwrap();
+    controller.load_keybindings().unwrap();
+
+    let combo = KeyCombo::new(vec![Modifier::Super], "X");
+    let assistance = controller.get_key_combo_assistance(Some(&combo), None);
+
+    assert_eq!(
+        assistance,
+        KeyComboAssistance {
+            availability: KeyComboAvailability::Available,
+            suggestions: Vec::new(),
+        }
+    );
+}
+
+#[test]
+fn test_key_combo_assistance_ignores_original_binding_when_editing() {
+    let (_temp_dir, config_path) = create_test_config();
+    let controller = Controller::new(config_path).unwrap();
+    controller.load_keybindings().unwrap();
+
+    let original = controller
+        .get_keybindings()
+        .into_iter()
+        .find(|binding| binding.args.as_deref() == Some("kitty"))
+        .unwrap();
+
+    let assistance = controller.get_key_combo_assistance(Some(&original.key_combo), Some(&original));
+
+    assert_eq!(
+        assistance.availability,
+        KeyComboAvailability::Available,
+        "Editing a binding without changing its combo should not self-conflict"
+    );
+}
+
+#[test]
+fn test_key_combo_suggestions_skip_used_combos_and_preserve_modifier_set() {
+    let (_temp_dir, config_path) = create_test_config();
+    let controller = Controller::new(config_path).unwrap();
+    controller.load_keybindings().unwrap();
+
+    let original = KeyCombo::new(vec![Modifier::Super], "K");
+    let suggestions = controller.suggest_key_combos(&original.modifiers, None, 5, &original);
+
+    assert_eq!(suggestions.len(), 5);
+    assert_eq!(suggestions[0], KeyCombo::new(vec![Modifier::Super], "A"));
+    assert!(
+        suggestions
+            .iter()
+            .all(|combo| combo.modifiers == vec![Modifier::Super]),
+        "Suggestions should keep the original modifier set"
+    );
+    assert!(
+        suggestions
+            .iter()
+            .all(|combo| controller.is_key_combo_available(combo, None)),
+        "Suggestions should only contain free combos"
+    );
+}
+
+#[test]
+fn test_key_combo_assistance_matches_loaded_binding_with_different_modifier_order() {
+    let (_temp_dir, config_path) = create_modifier_order_config();
+    let controller = Controller::new(config_path).unwrap();
+    controller.load_keybindings().unwrap();
+
+    let typed_combo = KeyCombo::new(vec![Modifier::Alt, Modifier::Super], "1");
+    let assistance = controller.get_key_combo_assistance(Some(&typed_combo), None);
+
+    match assistance.availability {
+        KeyComboAvailability::InUse(bindings) => {
+            assert_eq!(bindings.len(), 1);
+            assert_eq!(bindings[0].args.as_deref(), Some("firefox"));
+        }
+        other => panic!("expected in-use combo, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_undo_reverts_added_binding() {
+    let (_temp_dir, config_path) = create_test_config();
+    let controller = Controller::new(config_path).unwrap();
+    controller.load_keybindings().unwrap();
+
+    let new_binding = Keybinding {
+        bind_type: BindType::Bind,
+        key_combo: KeyCombo::new(vec![Modifier::Super], "X"),
+        dispatcher: "exec".to_string(),
+        args: Some("code".to_string()),
+    };
+
+    controller.add_keybinding(new_binding).unwrap();
+    assert_eq!(controller.keybinding_count(), 6);
+    assert!(controller.can_undo());
+
+    controller.undo().unwrap();
+
+    assert_eq!(controller.keybinding_count(), 5);
+    assert!(!controller.filter_keybindings("code").iter().any(|b| b.args.as_deref() == Some("code")));
+    assert!(controller.can_redo());
+}
+
+#[test]
+fn test_redo_reapplies_undone_change() {
+    let (_temp_dir, config_path) = create_test_config();
+    let controller = Controller::new(config_path).unwrap();
+    controller.load_keybindings().unwrap();
+
+    let new_binding = Keybinding {
+        bind_type: BindType::Bind,
+        key_combo: KeyCombo::new(vec![Modifier::Super], "X"),
+        dispatcher: "exec".to_string(),
+        args: Some("code".to_string()),
+    };
+
+    controller.add_keybinding(new_binding).unwrap();
+    controller.undo().unwrap();
+    controller.redo().unwrap();
+
+    assert_eq!(controller.keybinding_count(), 6);
+    assert_eq!(controller.filter_keybindings("code").len(), 1);
+}
+
+#[test]
+fn test_undo_reverts_updated_binding() {
+    let (_temp_dir, config_path) = create_test_config();
+    let controller = Controller::new(config_path).unwrap();
+    controller.load_keybindings().unwrap();
+
+    let original = controller.filter_keybindings("firefox")[0].clone();
+    let mut updated = original.clone();
+    updated.args = Some("brave".to_string());
+
+    controller.update_keybinding(&original, updated).unwrap();
+    assert_eq!(controller.filter_keybindings("brave").len(), 1);
+
+    controller.undo().unwrap();
+
+    assert_eq!(controller.filter_keybindings("brave").len(), 0);
+    assert_eq!(controller.filter_keybindings("firefox").len(), 1);
 }

@@ -28,7 +28,7 @@ use gtk4::{gio::Menu, prelude::WidgetExt, Button, HeaderBar, MenuButton};
 /// # Returns
 ///
 /// The configured HeaderBar widget
-pub fn build_header_bar() -> HeaderBar {
+pub fn build_header_bar() -> (HeaderBar, Button, Button) {
     let header_bar = HeaderBar::new();
 
     // Menu options
@@ -41,6 +41,8 @@ pub fn build_header_bar() -> HeaderBar {
     let menu_button = MenuButton::new();
     menu_button.set_icon_name("open-menu-symbolic");
     menu_button.set_menu_model(Some(&menu));
+    menu_button.set_tooltip_text(Some("Open the application menu"));
+    menu_button.set_can_focus(true);
 
     // Apply Hyprland button (left side)
     let apply_button = Button::builder()
@@ -48,10 +50,30 @@ pub fn build_header_bar() -> HeaderBar {
         .action_name("app.apply-to-hyprland")
         .tooltip_text("Reload Hyprland with current changes")
         .build();
+    apply_button.set_focus_on_click(false);
+    apply_button.set_can_focus(true);
+
+    let undo_button = Button::builder()
+        .label("Undo")
+        .action_name("app.undo")
+        .tooltip_text("Undo the last keybinding change (Ctrl+Z)")
+        .build();
+    undo_button.set_focus_on_click(false);
+    undo_button.set_can_focus(true);
+
+    let redo_button = Button::builder()
+        .label("Redo")
+        .action_name("app.redo")
+        .tooltip_text("Redo the last undone change (Ctrl+Shift+Z)")
+        .build();
+    redo_button.set_focus_on_click(false);
+    redo_button.set_can_focus(true);
 
     apply_button.add_css_class("suggested-action"); // <- Blue highlight!
+    header_bar.pack_start(&undo_button);
+    header_bar.pack_start(&redo_button);
     header_bar.pack_start(&apply_button); // <- Left side
     header_bar.pack_end(&menu_button); // <- Right side
 
-    header_bar
+    (header_bar, undo_button, redo_button)
 }

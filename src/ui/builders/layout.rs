@@ -23,6 +23,10 @@ use crate::ui::{
 use gtk4::{prelude::*, Box as GtkBox, Button, Orientation, Paned};
 use std::rc::Rc;
 
+pub const DEFAULT_WINDOW_WIDTH: i32 = 1000;
+pub const IDEAL_RIGHT_PANEL_WIDTH: i32 = 280;
+pub const MIN_LEFT_PANEL_WIDTH: i32 = 520;
+
 /// Builds the main application layout
 ///
 /// Creates a vertical box containing:
@@ -38,6 +42,7 @@ pub fn build_main_layout(
     controller: Rc<Controller>,
 ) -> (
     GtkBox,
+    Paned,
     Rc<KeybindList>,
     Rc<DetailsPanel>,
     Rc<ConflictPanel>,
@@ -51,14 +56,15 @@ pub fn build_main_layout(
     let conflict_panel = Rc::new(ConflictPanel::new(controller.clone()));
     main_vbox.append(conflict_panel.widget());
 
-    // Use PANED for fixed right panel
     let paned = Paned::new(Orientation::Horizontal);
+    paned.set_wide_handle(true);
 
-    // LEFT SIDE: Search + List (resizable)
     let left_vbox = GtkBox::new(Orientation::Vertical, 10);
     left_vbox.set_margin_start(10);
     left_vbox.set_margin_end(10);
+    left_vbox.set_margin_top(10);
     left_vbox.set_margin_bottom(10);
+    left_vbox.set_size_request(MIN_LEFT_PANEL_WIDTH, -1);
 
     // Create SINGLE keybind list instance
     let keybind_list = Rc::new(KeybindList::new(controller.clone()));
@@ -69,9 +75,13 @@ pub fn build_main_layout(
 
     let add_keybinding_button = Button::builder().label("➕ Add Keybinding").build();
     add_keybinding_button.add_css_class("suggested-action");
+    add_keybinding_button.set_tooltip_text(Some("Create a new keybinding"));
+    add_keybinding_button.set_can_focus(true);
     left_vbox.append(&add_keybinding_button);
 
     let backup_button = Button::builder().label("📦 Manage Backups").build();
+    backup_button.set_tooltip_text(Some("Browse, restore, or delete automatic backups"));
+    backup_button.set_can_focus(true);
     left_vbox.append(&backup_button);
 
     // Add keybind list to left side
@@ -93,30 +103,41 @@ pub fn build_main_layout(
         keybind_list_for_search.update_with_bindings(filtered);
     });
 
-    // RIGHT SIDE: Details Panel (FIXED 280px)
     let details_panel = Rc::new(DetailsPanel::new(controller.clone()));
 
-    // KEY: Configure Paned to keep right side fixed at 280px
     paned.set_start_child(Some(&left_vbox));
-    paned.set_resize_start_child(true); // Left side resizes with window
-    paned.set_shrink_start_child(true); // Left side can shrink
+    paned.set_resize_start_child(true);
+    paned.set_shrink_start_child(false);
 
     paned.set_end_child(Some(details_panel.widget()));
-    paned.set_resize_end_child(false); // Right side DOES NOT resize!
-    paned.set_shrink_end_child(false); // Right side CANNOT shrink!
+    paned.set_resize_end_child(false);
+    paned.set_shrink_end_child(false);
 
-    // Set divider position (window width - panel width)
-    paned.set_position(720); // 1000px default width - 280px panel = 720px
+    paned.set_position(clamp_paned_position(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_WIDTH));
 
-    // Add paned to main
     main_vbox.append(&paned);
 
     (
         main_vbox,
+        paned,
         keybind_list,
         details_panel,
         conflict_panel,
         add_keybinding_button,
         backup_button,
     )
+}
+
+pub fn clamp_paned_position(window_width: i32, requested_position: i32) -> i32 {
+    let effective_width = window_width.max(MIN_LEFT_PANEL_WIDTH + 120);
+    let max_right_width = (effective_width / 3).max(180);
+    let startup_right_width = IDEAL_RIGHT_PANEL_WIDTH.min(max_right_width);
+    let requested_right_width = (effective_width - requested_position)
+        .max(startup_right_width)
+        .min(max_right_width);
+
+    let max_position = effective_width - startup_right_width;
+    let min_position = MIN_LEFT_PANEL_WIDTH.min(max_position);
+
+    (effective_width - requested_right_width).clamp(min_position, max_position)
 }

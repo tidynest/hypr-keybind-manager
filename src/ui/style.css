@@ -1,6 +1,6 @@
 /* Base row styling - ensures consistent height for ALL rows */
 row {
-    min-height: 40px;
+    min-height: 44px;
     padding: 0;
     margin: 0;
 }
@@ -35,6 +35,10 @@ frame {
     padding: 8px;
 }
 
+frame > box {
+    border-spacing: 0;
+}
+
 /* Bold labels for field headers */
 .field-header {
     font-weight: bold;
@@ -55,6 +59,37 @@ frame > label {
 /* Search bar styling */
 entry.search {
     border-radius: 8px;
+}
+
+.list-key-column,
+.list-dispatcher-column {
+    font-weight: 500;
+}
+
+.list-args-column {
+    color: alpha(@theme_fg_color, 0.88);
+}
+
+.availability-hint {
+    color: alpha(@theme_fg_color, 0.7);
+}
+
+.availability-available {
+    color: #1f7a3e;
+    font-weight: 600;
+}
+
+.availability-warning {
+    color: #b45309;
+    font-weight: 600;
+}
+
+.suggestion-row {
+    margin-bottom: 6px;
+}
+
+.suggestion-button {
+    padding: 4px 8px;
 }
 
 /* Warning banner styling (replaces deprecated InfoBar) */

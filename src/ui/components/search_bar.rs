@@ -54,6 +54,8 @@ impl SearchBar {
         let widget = SearchEntry::builder()
             .placeholder_text("Search keybindings...")
             .build();
+        widget.set_tooltip_text(Some("Filter keybindings by combo, dispatcher, or arguments"));
+        widget.set_can_focus(true);
 
         Self { widget }
     }

@@ -39,7 +39,7 @@ use std::{
 use crate::config::{validator::ConfigValidator, ConfigError, ConfigManager};
 use crate::core::{
     parser::parse_config_file, validator as injection_validator, Conflict, ConflictDetector,
-    Keybinding,
+    KeyCombo, Keybinding, Modifier,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -48,6 +48,19 @@ pub enum ImportMode {
     Replace,
     /// Merge imported bindings with existing (skip duplicates)
     Merge,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum KeyComboAvailability {
+    Incomplete,
+    Available,
+    InUse(Vec<Keybinding>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct KeyComboAssistance {
+    pub availability: KeyComboAvailability,
+    pub suggestions: Vec<KeyCombo>,
 }
 
 /// MVC Controller coordinating Model and View
@@ -63,7 +76,13 @@ pub struct Controller {
     conflict_detector: RefCell<ConflictDetector>,
     /// Current search query (for preserving filters state)
     current_search_query: RefCell<String>,
+    /// Undo history of complete binding snapshots
+    undo_stack: RefCell<Vec<Vec<Keybinding>>>,
+    /// Redo history of complete binding snapshots
+    redo_stack: RefCell<Vec<Vec<Keybinding>>>,
 }
+
+const HISTORY_LIMIT: usize = 20;
 
 impl Controller {
     /// Creates a new Controller with the given config file path
@@ -99,6 +118,8 @@ impl Controller {
             keybindings: RefCell::new(Vec::new()),
             conflict_detector: RefCell::new(ConflictDetector::new()),
             current_search_query: RefCell::new(String::new()),
+            undo_stack: RefCell::new(Vec::new()),
+            redo_stack: RefCell::new(Vec::new()),
         })
     }
 
@@ -149,6 +170,42 @@ impl Controller {
         *self.conflict_detector.borrow_mut() = detector;
 
         Ok(count)
+    }
+
+    fn record_undo_snapshot(&self) {
+        let snapshot = self.keybindings.borrow().clone();
+        let mut undo_stack = self.undo_stack.borrow_mut();
+        undo_stack.push(snapshot);
+        if undo_stack.len() > HISTORY_LIMIT {
+            undo_stack.remove(0);
+        }
+        self.redo_stack.borrow_mut().clear();
+    }
+
+    fn rebuild_conflict_detector_from_bindings(bindings: &[Keybinding]) -> ConflictDetector {
+        let mut detector = ConflictDetector::new();
+        for binding in bindings {
+            detector.add_binding(binding.clone());
+        }
+        detector
+    }
+
+    fn write_snapshot(&self, bindings: &[Keybinding]) -> Result<(), String> {
+        self.config_manager
+            .borrow_mut()
+            .write_bindings(bindings)
+            .map_err(|e| format!("Failed to write changes to config: {}", e))
+    }
+
+    fn replace_bindings(&self, new_bindings: Vec<Keybinding>) {
+        let detector = Self::rebuild_conflict_detector_from_bindings(&new_bindings);
+        *self.keybindings.borrow_mut() = new_bindings;
+        *self.conflict_detector.borrow_mut() = detector;
+    }
+
+    pub fn clear_history(&self) {
+        self.undo_stack.borrow_mut().clear();
+        self.redo_stack.borrow_mut().clear();
     }
 
     /// Returns all loaded keybindings
@@ -258,6 +315,87 @@ impl Controller {
         self.filter_keybindings(&query)
     }
 
+    pub fn can_undo(&self) -> bool {
+        !self.undo_stack.borrow().is_empty()
+    }
+
+    pub fn can_redo(&self) -> bool {
+        !self.redo_stack.borrow().is_empty()
+    }
+
+    /// Returns bindings currently using the provided key combo.
+    ///
+    /// When `exclude` is set, that exact binding is ignored. This is used by the
+    /// edit dialog so a binding does not report itself as a conflict.
+    pub fn get_bindings_for_key_combo(
+        &self,
+        key_combo: &KeyCombo,
+        exclude: Option<&Keybinding>,
+    ) -> Vec<Keybinding> {
+        self.keybindings
+            .borrow()
+            .iter()
+            .filter(|binding| binding.key_combo == *key_combo)
+            .filter(|binding| exclude != Some(*binding))
+            .cloned()
+            .collect()
+    }
+
+    /// Returns whether the given combo is free to use.
+    pub fn is_key_combo_available(
+        &self,
+        key_combo: &KeyCombo,
+        exclude: Option<&Keybinding>,
+    ) -> bool {
+        self.get_bindings_for_key_combo(key_combo, exclude).is_empty()
+    }
+
+    /// Builds inline assistance data for the edit dialog.
+    pub fn get_key_combo_assistance(
+        &self,
+        key_combo: Option<&KeyCombo>,
+        exclude: Option<&Keybinding>,
+    ) -> KeyComboAssistance {
+        let Some(key_combo) = key_combo else {
+            return KeyComboAssistance {
+                availability: KeyComboAvailability::Incomplete,
+                suggestions: Vec::new(),
+            };
+        };
+
+        let in_use = self.get_bindings_for_key_combo(key_combo, exclude);
+        if in_use.is_empty() {
+            KeyComboAssistance {
+                availability: KeyComboAvailability::Available,
+                suggestions: Vec::new(),
+            }
+        } else {
+            KeyComboAssistance {
+                availability: KeyComboAvailability::InUse(in_use),
+                suggestions: self.suggest_key_combos(&key_combo.modifiers, exclude, 5, key_combo),
+            }
+        }
+    }
+
+    /// Suggests nearby free combos using the same modifier set.
+    pub fn suggest_key_combos(
+        &self,
+        modifiers: &[Modifier],
+        exclude: Option<&Keybinding>,
+        limit: usize,
+        original: &KeyCombo,
+    ) -> Vec<KeyCombo> {
+        let modifiers = modifiers.to_vec();
+
+        candidate_keys()
+            .into_iter()
+            .map(|key| KeyCombo::new(modifiers.clone(), key))
+            .filter(|candidate| candidate != original)
+            .filter(|candidate| self.is_key_combo_available(candidate, exclude))
+            .take(limit)
+            .collect()
+    }
+
     /// Returns all detected conflicts
     ///
     /// A conflict occurs when multiple keybindings use the same
@@ -365,24 +503,21 @@ impl Controller {
     /// # }
     /// ```
     pub fn delete_keybinding(&self, binding: &Keybinding) -> Result<(), String> {
-        // Remove binding from in-memory list
+        self.record_undo_snapshot();
         let mut bindings = self.keybindings.borrow_mut();
-
-        // Find and remove the binding (uses derived PartialEq)
         bindings.retain(|b| b != binding);
+        let updated_bindings = bindings.clone();
+        drop(bindings);
 
-        // Write updated list to disk
-        let mut config_manager = self.config_manager.borrow_mut();
-        config_manager
-            .write_bindings(&bindings)
-            .map_err(|e| format!("Failed to write changes: {}", e))?;
-
-        // Rebuild conflict detector with new list
-        let mut detector = ConflictDetector::new();
-        for b in bindings.iter() {
-            detector.add_binding(b.clone());
+        if let Err(e) = self.write_snapshot(&updated_bindings) {
+            let previous = self.undo_stack.borrow_mut().pop();
+            if let Some(previous) = previous {
+                self.replace_bindings(previous);
+            }
+            return Err(e);
         }
-        *self.conflict_detector.borrow_mut() = detector;
+
+        self.replace_bindings(updated_bindings);
 
         Ok(())
     }
@@ -409,22 +544,21 @@ impl Controller {
     /// }
     /// ```
     pub fn add_keybinding(&self, binding: Keybinding) -> Result<(), String> {
-        // 1. Add the binding to the list
+        self.record_undo_snapshot();
         let mut bindings = self.keybindings.borrow_mut();
         bindings.push(binding.clone());
+        let updated_bindings = bindings.clone();
+        drop(bindings);
 
-        // 2. Write changes to disk (creates automatic backup via Transaction)
-        let mut config_manager = self.config_manager.borrow_mut();
-        config_manager
-            .write_bindings(&bindings)
-            .map_err(|e| format!("Failed to write changes to config: {}", e))?;
-
-        // 3. Rebuild conflict detector with updated bindings
-        let mut detector = ConflictDetector::new();
-        for binding in bindings.iter() {
-            detector.add_binding(binding.clone());
+        if let Err(e) = self.write_snapshot(&updated_bindings) {
+            let previous = self.undo_stack.borrow_mut().pop();
+            if let Some(previous) = previous {
+                self.replace_bindings(previous);
+            }
+            return Err(e);
         }
-        *self.conflict_detector.borrow_mut() = detector;
+
+        self.replace_bindings(updated_bindings);
 
         Ok(())
     }
@@ -459,6 +593,7 @@ impl Controller {
         // Reload keybindings from the restored config
         self.load_keybindings()
             .map_err(|e| format!("Failed to reload keybindings: {}", e))?;
+        self.clear_history();
 
         Ok(())
     }
@@ -503,6 +638,8 @@ impl Controller {
     }
 
     pub fn import_from(&self, import_path: &Path, mode: ImportMode) -> Result<(), String> {
+        self.record_undo_snapshot();
+
         // Read the import file
         let content = read_to_string(import_path)
             .map_err(|e| format!("Failed to read import file: {}", e))?;
@@ -533,19 +670,21 @@ impl Controller {
             }
         }
 
-        // Write to config file
         let bindings: Vec<_> = self.keybindings.borrow().clone();
-        self.config_manager
+        if let Err(e) = self
+            .config_manager
             .borrow_mut()
             .write_bindings(&bindings)
-            .map_err(|e| format!("Failed to write imported bindings: {}", e))?;
-
-        // Rebuild conflict detector
-        let mut detector = ConflictDetector::new();
-        for binding in &imported_bindings {
-            detector.add_binding(binding.clone());
+            .map_err(|e| format!("Failed to write imported bindings: {}", e))
+        {
+            let previous = self.undo_stack.borrow_mut().pop();
+            if let Some(previous) = previous {
+                self.replace_bindings(previous);
+            }
+            return Err(e);
         }
-        *self.conflict_detector.borrow_mut() = detector;
+
+        self.replace_bindings(bindings);
 
         Ok(())
     }
@@ -574,10 +713,8 @@ impl Controller {
     /// }
     /// ```
     pub fn update_keybinding(&self, old: &Keybinding, new: Keybinding) -> Result<(), String> {
-        // 1. Find and replace the binding in the list
+        self.record_undo_snapshot();
         let mut bindings = self.keybindings.borrow_mut();
-
-        // Find the position of the old binding
         let position = bindings.iter().position(|b| b == old);
 
         match position {
@@ -588,20 +725,59 @@ impl Controller {
                 return Err("Binding not found in the keybinding list".to_string());
             }
         }
+        let updated_bindings = bindings.clone();
+        drop(bindings);
 
-        // 2. Write changes to disk (creates automatic backup via Transaction)
-        let mut config_manager = self.config_manager.borrow_mut();
-        config_manager
-            .write_bindings(&bindings)
-            .map_err(|e| format!("Failed to write changes to config: {}", e))?;
-
-        // 3. Rebuild conflict detector with updated bindings
-        let mut detector = ConflictDetector::new();
-        for binding in bindings.iter() {
-            detector.add_binding(binding.clone());
+        if let Err(e) = self.write_snapshot(&updated_bindings) {
+            let previous = self.undo_stack.borrow_mut().pop();
+            if let Some(previous) = previous {
+                self.replace_bindings(previous);
+            }
+            return Err(e);
         }
-        *self.conflict_detector.borrow_mut() = detector;
 
+        self.replace_bindings(updated_bindings);
+
+        Ok(())
+    }
+
+    pub fn undo(&self) -> Result<(), String> {
+        let Some(previous) = self.undo_stack.borrow_mut().pop() else {
+            return Err("Nothing to undo".to_string());
+        };
+
+        let current = self.keybindings.borrow().clone();
+        self.redo_stack.borrow_mut().push(current);
+
+        if let Err(e) = self.write_snapshot(&previous) {
+            let redo = self.redo_stack.borrow_mut().pop();
+            if let Some(redo) = redo {
+                self.undo_stack.borrow_mut().push(redo);
+            }
+            return Err(e);
+        }
+
+        self.replace_bindings(previous);
+        Ok(())
+    }
+
+    pub fn redo(&self) -> Result<(), String> {
+        let Some(next) = self.redo_stack.borrow_mut().pop() else {
+            return Err("Nothing to redo".to_string());
+        };
+
+        let current = self.keybindings.borrow().clone();
+        self.undo_stack.borrow_mut().push(current);
+
+        if let Err(e) = self.write_snapshot(&next) {
+            let undo = self.undo_stack.borrow_mut().pop();
+            if let Some(undo) = undo {
+                self.redo_stack.borrow_mut().push(undo);
+            }
+            return Err(e);
+        }
+
+        self.replace_bindings(next);
         Ok(())
     }
 
@@ -633,4 +809,19 @@ impl Controller {
 
         Ok(())
     }
+}
+
+fn candidate_keys() -> Vec<&'static str> {
+    let mut keys = Vec::with_capacity(48);
+    keys.extend([
+        "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q",
+        "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
+    ]);
+    keys.extend(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]);
+    const FUNCTION_KEYS: [&str; 12] = [
+        "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
+    ];
+    keys.extend(FUNCTION_KEYS);
+
+    keys
 }

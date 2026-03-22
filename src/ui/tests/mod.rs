@@ -22,3 +22,6 @@ mod controller_tests;
 
 #[cfg(test)]
 mod backup_dialog_tests;
+
+#[cfg(test)]
+mod layout_tests;
