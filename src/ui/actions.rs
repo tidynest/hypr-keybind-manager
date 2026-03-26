@@ -65,19 +65,21 @@ pub fn setup_history_actions(
     let redo_action_for_undo = redo_action.clone();
     let undo_action_for_undo = undo_action.clone();
 
-    undo_action.connect_activate(move |_, _| {
-        match controller_for_undo.undo() {
-            Ok(()) => {
-                refresh_main_view(
-                    &controller_for_undo,
-                    &keybind_list_for_undo,
-                    &details_panel_for_undo,
-                    &conflict_panel_for_undo,
-                );
-                update_history_action_state(&undo_action_for_undo, &redo_action_for_undo, &controller_for_undo);
-            }
-            Err(e) => show_action_error(&window_for_undo, "Undo Failed", &e),
+    undo_action.connect_activate(move |_, _| match controller_for_undo.undo() {
+        Ok(()) => {
+            refresh_main_view(
+                &controller_for_undo,
+                &keybind_list_for_undo,
+                &details_panel_for_undo,
+                &conflict_panel_for_undo,
+            );
+            update_history_action_state(
+                &undo_action_for_undo,
+                &redo_action_for_undo,
+                &controller_for_undo,
+            );
         }
+        Err(e) => show_action_error(&window_for_undo, "Undo Failed", &e),
     });
 
     let controller_for_redo = controller.clone();
@@ -88,19 +90,21 @@ pub fn setup_history_actions(
     let redo_action_for_redo = redo_action.clone();
     let undo_action_for_redo = undo_action.clone();
 
-    redo_action.connect_activate(move |_, _| {
-        match controller_for_redo.redo() {
-            Ok(()) => {
-                refresh_main_view(
-                    &controller_for_redo,
-                    &keybind_list_for_redo,
-                    &details_panel_for_redo,
-                    &conflict_panel_for_redo,
-                );
-                update_history_action_state(&undo_action_for_redo, &redo_action_for_redo, &controller_for_redo);
-            }
-            Err(e) => show_action_error(&window_for_redo, "Redo Failed", &e),
+    redo_action.connect_activate(move |_, _| match controller_for_redo.redo() {
+        Ok(()) => {
+            refresh_main_view(
+                &controller_for_redo,
+                &keybind_list_for_redo,
+                &details_panel_for_redo,
+                &conflict_panel_for_redo,
+            );
+            update_history_action_state(
+                &undo_action_for_redo,
+                &redo_action_for_redo,
+                &controller_for_redo,
+            );
         }
+        Err(e) => show_action_error(&window_for_redo, "Redo Failed", &e),
     });
 
     app.add_action(&undo_action);
@@ -289,14 +293,18 @@ pub fn setup_import_action(
 
         // Radio button: Replace
         let replace_radio = CheckButton::with_label("Replace - Delete all existing bindings");
-        replace_radio.set_tooltip_text(Some("Replace all current keybindings with the imported file"));
+        replace_radio.set_tooltip_text(Some(
+            "Replace all current keybindings with the imported file",
+        ));
         vbox.append(&replace_radio);
 
         // Radio button: Merge
         let merge_radio =
             CheckButton::with_label("Merge - Keep existing, add imported (skip duplicates)");
         merge_radio.set_group(Some(&replace_radio));
-        merge_radio.set_tooltip_text(Some("Keep existing keybindings and only add new ones from the import"));
+        merge_radio.set_tooltip_text(Some(
+            "Keep existing keybindings and only add new ones from the import",
+        ));
         vbox.append(&merge_radio);
 
         // Button container
@@ -383,7 +391,11 @@ pub fn refresh_main_view(
     conflict_panel.refresh();
 }
 
-fn update_history_action_state(undo_action: &SimpleAction, redo_action: &SimpleAction, controller: &Controller) {
+fn update_history_action_state(
+    undo_action: &SimpleAction,
+    redo_action: &SimpleAction,
+    controller: &Controller,
+) {
     undo_action.set_enabled(controller.can_undo());
     redo_action.set_enabled(controller.can_redo());
 }

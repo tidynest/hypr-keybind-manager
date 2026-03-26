@@ -22,13 +22,16 @@
 //! - modal save/cancel flow with validation
 
 use crate::{
-    core::types::{BindType, KeyCombo, Keybinding, Modifier},
+    core::{
+        sandbox,
+        types::{BindType, KeyCombo, Keybinding, Modifier},
+    },
     ui::controller::KeyComboAvailability,
     ui::Controller,
 };
 use gtk4::{
     gdk, prelude::*, ApplicationWindow, Box as GtkBox, Button, Entry, EventControllerKey, Grid,
-    Label, Orientation, Window,
+    Label, Orientation, Switch, Window,
 };
 use std::{cell::Cell, rc::Rc};
 
@@ -39,6 +42,8 @@ pub struct EditDialog {
     dispatcher_entry: Entry,
     args_entry: Entry,
     bind_type_entry: Entry,
+    sandbox_switch: Switch,
+    sandbox_label: Label,
     availability_label: Label,
     suggestion_box: GtkBox,
     response: Rc<Cell<Option<DialogResponse>>>,
@@ -167,6 +172,20 @@ impl EditDialog {
         grid.attach(&bind_type_label, 0, 5, 1, 1);
         grid.attach(&bind_type_entry, 1, 5, 1, 1);
 
+        let sandbox_label = Label::builder()
+            .label("🛡️ Bubblewrap Sandbox:")
+            .halign(gtk4::Align::End)
+            .build();
+        let sandbox_switch = Switch::builder()
+            .halign(gtk4::Align::Start)
+            .tooltip_text("Wrap exec commands in a Bubblewrap sandbox with no network access")
+            .build();
+        let sandbox_active = binding.args.as_deref().is_some_and(sandbox::is_wrapped)
+            && binding.dispatcher == "exec";
+        sandbox_switch.set_active(sandbox_active);
+        grid.attach(&sandbox_label, 0, 6, 1, 1);
+        grid.attach(&sandbox_switch, 1, 6, 1, 1);
+
         let button_box = GtkBox::builder()
             .orientation(Orientation::Horizontal)
             .spacing(12)
@@ -241,12 +260,22 @@ impl EditDialog {
             });
         }
 
+        let visible_args = binding
+            .args
+            .as_deref()
+            .and_then(sandbox::unwrap_command)
+            .or_else(|| binding.args.clone())
+            .unwrap_or_default();
+        args_entry.set_text(&visible_args);
+
         let dialog = Self {
             dialog_window,
             key_entry,
             dispatcher_entry,
             args_entry,
             bind_type_entry,
+            sandbox_switch,
+            sandbox_label,
             availability_label,
             suggestion_box,
             response,
@@ -255,6 +284,8 @@ impl EditDialog {
         };
 
         dialog.connect_key_feedback();
+        dialog.connect_sandbox_feedback();
+        dialog.refresh_sandbox_controls();
         dialog.refresh_key_combo_feedback();
         dialog
     }
@@ -287,6 +318,24 @@ impl EditDialog {
         );
     }
 
+    fn connect_sandbox_feedback(&self) {
+        let dispatcher_entry = self.dispatcher_entry.clone();
+        let sandbox_switch = self.sandbox_switch.clone();
+        let sandbox_label = self.sandbox_label.clone();
+
+        self.dispatcher_entry.connect_changed(move |_| {
+            refresh_sandbox_controls_widgets(&dispatcher_entry, &sandbox_switch, &sandbox_label);
+        });
+    }
+
+    fn refresh_sandbox_controls(&self) {
+        refresh_sandbox_controls_widgets(
+            &self.dispatcher_entry,
+            &self.sandbox_switch,
+            &self.sandbox_label,
+        );
+    }
+
     /// Clears text selections in all entry fields.
     fn clear_selections(&self) {
         self.key_entry.select_region(0, 0);
@@ -302,8 +351,8 @@ impl EditDialog {
         let args_text = self.args_entry.text().to_string();
         let bind_type_text = self.bind_type_entry.text().to_string();
 
-        let key_combo =
-            parse_key_combo_text(&key_text)?.ok_or_else(|| "Key combination cannot be empty".to_string())?;
+        let key_combo = parse_key_combo_text(&key_text)?
+            .ok_or_else(|| "Key combination cannot be empty".to_string())?;
 
         if dispatcher.trim().is_empty() {
             return Err("Dispatcher cannot be empty".to_string());
@@ -325,7 +374,12 @@ impl EditDialog {
         let args = if args_text.trim().is_empty() {
             None
         } else {
-            Some(args_text.trim().to_string())
+            let trimmed = args_text.trim();
+            if self.sandbox_switch.is_active() && dispatcher.trim().eq_ignore_ascii_case("exec") {
+                Some(sandbox::wrap_command(trimmed)?)
+            } else {
+                Some(trimmed.to_string())
+            }
         };
 
         Ok(Keybinding {
@@ -481,7 +535,8 @@ fn refresh_key_combo_feedback_widgets(
         ),
         Err(message) => set_feedback_state(availability_label, &message, "availability-warning"),
         Ok(Some(key_combo)) => {
-            let assistance = controller.get_key_combo_assistance(Some(&key_combo), original_binding);
+            let assistance =
+                controller.get_key_combo_assistance(Some(&key_combo), original_binding);
             match assistance.availability {
                 KeyComboAvailability::Incomplete => {
                     set_feedback_state(
@@ -553,5 +608,26 @@ fn describe_binding(binding: &Keybinding) -> String {
     match &binding.args {
         Some(args) if !args.is_empty() => format!("{} {}", binding.dispatcher, args),
         _ => binding.dispatcher.clone(),
+    }
+}
+
+fn refresh_sandbox_controls_widgets(
+    dispatcher_entry: &Entry,
+    sandbox_switch: &Switch,
+    sandbox_label: &Label,
+) {
+    let enabled = dispatcher_entry.text().trim().eq_ignore_ascii_case("exec");
+    sandbox_switch.set_sensitive(enabled);
+    sandbox_label.set_sensitive(enabled);
+
+    if enabled {
+        sandbox_switch.set_tooltip_text(Some(
+            "Wrap this exec command with Bubblewrap using a read-only system view and no network",
+        ));
+    } else {
+        sandbox_switch.set_active(false);
+        sandbox_switch.set_tooltip_text(Some(
+            "Bubblewrap sandboxing is only available for exec bindings",
+        ));
     }
 }

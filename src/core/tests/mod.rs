@@ -30,3 +30,6 @@ mod types_tests;
 
 #[cfg(test)]
 mod parser_tests;
+
+#[cfg(test)]
+mod sandbox_tests;

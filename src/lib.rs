@@ -23,7 +23,7 @@
 //! - **CRUD Operations:** Create, read, update, and delete keybindings
 //! - **Automatic Backups:** Timestamped backups before every config change
 //! - **GTK4 Interface:** Modern, responsive graphical interface
-//! - **Three-Layer Security:** Injection prevention, danger detection, validation
+//! - **Defence-in-Depth Security:** Injection prevention, danger detection, validation, and optional Bubblewrap sandboxing
 //! - **Atomic Operations:** Safe file writes with rollback on failure
 //!
 //! # Architecture
@@ -40,6 +40,7 @@
 //! - **Layer 1:** Input validation (core/validator.rs)
 //! - **Layer 2:** Dangerous command detection (config/danger)
 //! - **Layer 3:** Config validation (config/validator.rs)
+//! - **Layer 4:** Optional Bubblewrap sandboxing for `exec` bindings (core/sandbox.rs + UI)
 //! - **Atomic file operations:** No partial writes
 //! - **No arbitrary code execution:** Whitelist-based validation
 //! - **Memory-safe:** 100% safe Rust (no unsafe blocks)

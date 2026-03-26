@@ -40,7 +40,7 @@ graph TB
 
     subgraph Infrastructure [Infrastructure Layer - External Services]
         ConfigMgr[Config Manager<br/>File I/O + Atomic Writes]
-        Validator[Security Validator<br/>3 Layers]
+        Validator[Security Validator<br/>4 Layers]
     end
 
     subgraph Persistence [Persistence Layer - Filesystem<br/>&nbsp;]

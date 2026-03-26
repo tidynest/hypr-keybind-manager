@@ -113,7 +113,10 @@ pub fn build_main_layout(
     paned.set_resize_end_child(false);
     paned.set_shrink_end_child(false);
 
-    paned.set_position(clamp_paned_position(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_WIDTH));
+    paned.set_position(clamp_paned_position(
+        DEFAULT_WINDOW_WIDTH,
+        DEFAULT_WINDOW_WIDTH,
+    ));
 
     main_vbox.append(&paned);
 

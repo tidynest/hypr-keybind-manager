@@ -47,6 +47,25 @@ echo ""
 
 echo "📝 Step 2/6: Synchronising version to documentation files"
 ./scripts/sync-version.sh
+if [ -f CHANGELOG.md ] && ! grep -q "^## \[$NEW_VERSION\]" CHANGELOG.md; then
+    RELEASE_DATE=$(date +%F)
+    awk -v version="$NEW_VERSION" -v release_date="$RELEASE_DATE" '
+        BEGIN { inserted = 0 }
+        {
+            print
+            if (!inserted && $0 == "## [Unreleased]") {
+                print ""
+                print "## [" version "] - " release_date
+                print ""
+                print "### Changed"
+                print "- Release preparation for v" version "."
+                inserted = 1
+            }
+        }
+    ' CHANGELOG.md > CHANGELOG.md.tmp
+    mv CHANGELOG.md.tmp CHANGELOG.md
+    echo "  ✅ Added CHANGELOG.md release stub for v$NEW_VERSION"
+fi
 echo ""
 
 echo "📝 Step 3/6: Updating Cargo.lock"
@@ -55,7 +74,7 @@ echo "  ✅ Cargo.lock updated"
 echo ""
 
 echo "📝 Step 4/6: Committing version bump"
-git add Cargo.toml Cargo.lock README.md SECURITY.md docs/ARCHITECTURE.md docs/DESIGN_DECISIONS.md PKGBUILD
+git add Cargo.toml Cargo.lock README.md SECURITY.md docs/ARCHITECTURE.md docs/DESIGN_DECISIONS.md PKGBUILD CHANGELOG.md
 git commit -m "Bump version to $NEW_VERSION"
 echo "  ✅ Changes committed"
 echo ""

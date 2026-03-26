@@ -28,6 +28,7 @@
 
 pub mod conflict;
 pub mod parser;
+pub mod sandbox;
 pub mod types;
 pub mod validator;
 

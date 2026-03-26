@@ -21,7 +21,7 @@ use tempfile::TempDir;
 
 use crate::{
     core::{BindType, KeyCombo, Keybinding, Modifier},
-    ui::controller::{KeyComboAvailability, KeyComboAssistance},
+    ui::controller::{KeyComboAssistance, KeyComboAvailability},
     ui::Controller,
 };
 
@@ -356,7 +356,8 @@ fn test_key_combo_assistance_ignores_original_binding_when_editing() {
         .find(|binding| binding.args.as_deref() == Some("kitty"))
         .unwrap();
 
-    let assistance = controller.get_key_combo_assistance(Some(&original.key_combo), Some(&original));
+    let assistance =
+        controller.get_key_combo_assistance(Some(&original.key_combo), Some(&original));
 
     assert_eq!(
         assistance.availability,
@@ -428,7 +429,10 @@ fn test_undo_reverts_added_binding() {
     controller.undo().unwrap();
 
     assert_eq!(controller.keybinding_count(), 5);
-    assert!(!controller.filter_keybindings("code").iter().any(|b| b.args.as_deref() == Some("code")));
+    assert!(!controller
+        .filter_keybindings("code")
+        .iter()
+        .any(|b| b.args.as_deref() == Some("code")));
     assert!(controller.can_redo());
 }
 

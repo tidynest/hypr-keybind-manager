@@ -267,7 +267,12 @@ pub fn wire_up_handlers(
             args: None,
         };
 
-        let edit_dialog = EditDialog::new(&window_clone, controller_clone.clone(), &empty_binding, None);
+        let edit_dialog = EditDialog::new(
+            &window_clone,
+            controller_clone.clone(),
+            &empty_binding,
+            None,
+        );
 
         if let Some(new_binding) = edit_dialog.show_and_wait() {
             match controller_clone.add_keybinding(new_binding) {

@@ -10,7 +10,15 @@ permissions:
 
 jobs:
   build-release:
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            archive_suffix: x86_64-linux
+          - runner: ubuntu-24.04-arm
+            archive_suffix: aarch64-linux
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - uses: actions/checkout@v4
@@ -29,12 +37,12 @@ jobs:
       - name: Create archive
         run: |
           cd target/release
-          tar -czf hypr-keybind-manager-x86_64-linux.tar.gz hypr-keybind-manager
+          tar -czf "hypr-keybind-manager-${{ matrix.archive_suffix }}.tar.gz" hypr-keybind-manager
 
       - name: Upload release binary
         uses: softprops/action-gh-release@v1
         with:
-          files: target/release/hypr-keybind-manager-x86_64-linux.tar.gz
+          files: target/release/hypr-keybind-manager-${{ matrix.archive_suffix }}.tar.gz
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

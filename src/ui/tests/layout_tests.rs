@@ -25,7 +25,10 @@ fn test_clamp_paned_position_limits_right_panel_growth() {
     let position = clamp_paned_position(1200, 700);
     let right_width = 1200 - position;
 
-    assert_eq!(right_width, 400, "Right panel should cap at one third of the window");
+    assert_eq!(
+        right_width, 400,
+        "Right panel should cap at one third of the window"
+    );
 }
 
 #[test]

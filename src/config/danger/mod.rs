@@ -21,7 +21,7 @@
 //! - **Layer 1** (`core/validator.rs`): Blocks shell injection syntax
 //! - **Layer 2** (this module): Blocks dangerous command semantics
 //! - **Layer 3** (`config/validator.rs`): Validates entire config
-//! - **Layer 4** (`execution/sandbox.rs`): Sandboxed execution (Phase 3 Step 6)
+//! - **Layer 4** (`core/sandbox.rs` + UI toggle): Optional Bubblewrap sandboxing for exec bindings
 //!
 //! # Detection Techniques (All Rounds Complete ✅)
 //! 1. **Round 1 - Critical Pattern Matching**: Regex for system-destroying commands

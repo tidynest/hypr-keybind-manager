@@ -48,6 +48,8 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
 };
+#[cfg(unix)]
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
 use crate::{core::types::Keybinding, Modifier::*};
 
@@ -106,6 +108,10 @@ impl ConfigManager {
             eprintln!("  This is allowed, but be aware of what it points to.");
         }
 
+        for warning in Self::permission_warnings(&config_path) {
+            eprintln!("⚠ Warning: {warning}");
+        }
+
         // Create backup directory next to config file
         // e.g., ~/.config/hypr/hyprland.conf → ~/.config/hypr/backups/
         let backup_dir = config_path
@@ -132,6 +138,64 @@ impl ConfigManager {
             config_path,
             backup_dir,
         })
+    }
+
+    fn permission_warnings(config_path: &Path) -> Vec<String> {
+        #[cfg(unix)]
+        {
+            let metadata = match fs::metadata(config_path) {
+                Ok(metadata) => metadata,
+                Err(_) => return Vec::new(),
+            };
+
+            Self::permission_warnings_for_metadata(config_path, &metadata, current_uid())
+        }
+
+        #[cfg(not(unix))]
+        {
+            let _ = config_path;
+            Vec::new()
+        }
+    }
+
+    #[cfg(unix)]
+    fn permission_warnings_for_metadata(
+        config_path: &Path,
+        metadata: &fs::Metadata,
+        expected_uid: Option<u32>,
+    ) -> Vec<String> {
+        let mut warnings = Vec::new();
+        let mode = metadata.permissions().mode();
+
+        if mode & 0o004 != 0 {
+            warnings.push(format!(
+                "Config file is world-readable: {} (mode {:o})",
+                config_path.display(),
+                mode & 0o777
+            ));
+        }
+
+        if mode & 0o002 != 0 {
+            warnings.push(format!(
+                "Config file is world-writable: {} (mode {:o})",
+                config_path.display(),
+                mode & 0o777
+            ));
+        }
+
+        if let Some(expected_uid) = expected_uid {
+            let actual_uid = metadata.uid();
+            if actual_uid != expected_uid {
+                warnings.push(format!(
+                    "Config file is owned by uid {} instead of current uid {}: {}",
+                    actual_uid,
+                    expected_uid,
+                    config_path.display()
+                ));
+            }
+        }
+
+        warnings
     }
 
     /// Reads the current configuration file content.
@@ -575,6 +639,11 @@ impl ConfigManager {
         // Example: bind = SUPER, K, exec, firefox
         format!("{} = {}", binding.bind_type, parts.join(", "))
     }
+}
+
+#[cfg(unix)]
+fn current_uid() -> Option<u32> {
+    fs::metadata("/proc/self").ok().map(|metadata| metadata.uid())
 }
 
 #[cfg(test)]

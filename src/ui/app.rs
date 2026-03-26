@@ -284,7 +284,9 @@ impl App {
         let paned_for_startup = paned.clone();
         let window_for_startup = window.clone();
         glib::idle_add_local_once(move || {
-            let width = window_for_startup.width().max(window_for_startup.default_width());
+            let width = window_for_startup
+                .width()
+                .max(window_for_startup.default_width());
             let startup_position = builders::layout::clamp_paned_position(width, width);
             paned_for_startup.set_position(startup_position);
         });

@@ -17,7 +17,7 @@
 //! Contains test suites for configuration management:
 //! - ConfigManager tests (file operations, backups, restoration)
 //! - Transaction tests (atomic writes, rollback, ACID guarantees)
-//! - Validator tests (three-layer security validation)
+//! - Validator tests (defence-in-depth security validation)
 
 #[cfg(test)]
 mod config_manager_tests;

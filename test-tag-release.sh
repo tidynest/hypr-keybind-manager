@@ -125,6 +125,14 @@ echo -e "# README\n\n![Version](https://img.shields.io/badge/version-1.0.0-blue)
 echo -e "# Security\n\n**Version**: 1.0.0" > SECURITY.md
 echo -e "# Architecture\n\n**Version**: 1.0.0" > docs/ARCHITECTURE.md
 echo -e "# Design\n\n**Version**: 1.0.0" > docs/DESIGN_DECISIONS.md
+cat > CHANGELOG.md <<'EOF'
+# Changelog
+
+## [Unreleased]
+
+## [1.0.0] - 2025-01-01
+- Initial test release.
+EOF
 print_pass "Documentation files created"
 
 # Create minimal PKGBUILD
@@ -183,6 +191,12 @@ else
     print_fail "PKGBUILD version NOT updated"
 fi
 
+if grep -q "^## \\[1.0.1\\] - " CHANGELOG.md; then
+    print_pass "CHANGELOG.md release entry added for 1.0.1"
+else
+    print_fail "CHANGELOG.md release entry NOT added"
+fi
+
 #==============================================================================
 # TEST 3: Commit Verification
 #==============================================================================
@@ -214,6 +228,12 @@ if echo "$COMMITTED_FILES" | grep -q "PKGBUILD"; then
     print_pass "PKGBUILD included in commit"
 else
     print_fail "PKGBUILD NOT in commit"
+fi
+
+if echo "$COMMITTED_FILES" | grep -q "CHANGELOG.md"; then
+    print_pass "CHANGELOG.md included in commit"
+else
+    print_fail "CHANGELOG.md NOT in commit"
 fi
 
 #==============================================================================

@@ -274,7 +274,7 @@ test(conflict): add test for normalised key combo equality
 ## Recognition
 
 Contributors will be recognised in:
-- `CONTRIBUTORS.md` file (future)
+- `CONTRIBUTORS.md` file
 - Release notes for significant contributions
 - Special thanks in README for major features
 

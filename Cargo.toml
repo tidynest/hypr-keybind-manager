@@ -15,7 +15,7 @@ gtk4 = { version = "0.10.1", features = ["v4_12"] }
 glib = "0.21.3"
 
 # Hyprland integration
-hyprland = "0.3.13"
+hyprland = { version = "0.3.13", default-features = false, features = ["dispatch", "keyword"] }
 
 # Parsing and serialisation
 nom = "8.0.0"
@@ -38,6 +38,9 @@ regex = "1.12.1"
 
 [dev-dependencies]
 tempfile = "3.23.0"
+
+[patch.crates-io]
+hyprland = { path = "vendor/hyprland" }
 
 [profile.release]
 codegen-units = 1    # Better optimisation

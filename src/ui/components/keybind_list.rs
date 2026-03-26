@@ -18,13 +18,7 @@
 //! Each row shows the key combination, dispatcher, and arguments.
 
 use gtk4::{
-    pango::EllipsizeMode,
-    prelude::*,
-    Box as GtkBox,
-    Grid,
-    Label,
-    ListBox,
-    Orientation,
+    pango::EllipsizeMode, prelude::*, Box as GtkBox, Grid, Label, ListBox, Orientation,
     ScrolledWindow,
 };
 use std::{cell::RefCell, rc::Rc};

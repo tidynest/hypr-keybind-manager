@@ -347,7 +347,8 @@ impl Controller {
         key_combo: &KeyCombo,
         exclude: Option<&Keybinding>,
     ) -> bool {
-        self.get_bindings_for_key_combo(key_combo, exclude).is_empty()
+        self.get_bindings_for_key_combo(key_combo, exclude)
+            .is_empty()
     }
 
     /// Builds inline assistance data for the edit dialog.
@@ -814,8 +815,8 @@ impl Controller {
 fn candidate_keys() -> Vec<&'static str> {
     let mut keys = Vec::with_capacity(48);
     keys.extend([
-        "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q",
-        "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
+        "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R",
+        "S", "T", "U", "V", "W", "X", "Y", "Z",
     ]);
     keys.extend(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]);
     const FUNCTION_KEYS: [&str; 12] = [

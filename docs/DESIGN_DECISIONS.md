@@ -320,16 +320,17 @@ pub struct Conflict {
 
 ## Security Validation Architecture
 
-### Three-Layer Defence in Depth
+### Four-Layer Defence in Depth
 
-**Files**: `src/core/validator.rs`, `src/config/danger.rs`, `src/config/validator.rs`
+**Files**: `src/core/validator.rs`, `src/config/danger.rs`, `src/config/validator.rs`, `src/core/sandbox.rs`, `src/ui/components/edit_dialog.rs`
 
-**Decision**: Three independent validation layers with different techniques.
+**Decision**: Four complementary protection layers with different techniques.
 
 ```
 Layer 1 (core/validator.rs):  Whitelist-based injection prevention
 Layer 2 (config/danger.rs):   Pattern/entropy-based danger detection
 Layer 3 (config/validator.rs): Unified report coordinator
+Layer 4 (core/sandbox.rs + UI): Optional Bubblewrap sandbox for exec bindings
 ```
 
 **Rationale**:
@@ -337,6 +338,7 @@ Layer 3 (config/validator.rs): Unified report coordinator
 - **Separation of Concerns**: Each layer has single responsibility
 - **Testability**: Each layer tested independently
 - **Fail-Safe**: Deny by default, allow explicitly
+- **Pragmatic Isolation**: Higher-risk `exec` bindings can be sandboxed without changing other dispatchers
 
 **Example Attack Caught by Multiple Layers**:
 ```bash
@@ -346,6 +348,7 @@ bind = SUPER, K, exec, echo 'cm0gLXJmIC8=' | base64 -d | sh
 # Layer 1: Blocks pipe character "|"  ✅
 # Layer 2: Detects high entropy in 'cm0gLXJmIC8='  ✅
 # Layer 3: Aggregates both errors  ✅
+# Layer 4: Can remove network access for exec bindings  ✅
 # Result: Attack blocked by multiple independent checks
 ```
 

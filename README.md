@@ -57,7 +57,7 @@
 
 - **Full [CRUD](https://en.wikipedia.org/wiki/Create,_read,_update_and_delete) Operations**: Create, read, update, and delete keybindings through an intuitive GUI
 - **Real-Time Conflict Detection**: Instantly identifies duplicate key combinations with [O(1)](https://en.wikipedia.org/wiki/Time_complexity#Constant_time) performance
-- **Three-Layer Security Validation**: Prevents [shell injection](https://en.wikipedia.org/wiki/Code_injection#Shell_injection), dangerous commands, and encoded payloads
+- **Defence-in-Depth Security Validation**: Prevents shell injection, dangerous commands, encoded payloads, and optionally sandboxes `exec` bindings
 - **Automatic Backup System**: Every change creates timestamped backups with [atomic write operations](https://en.wikipedia.org/wiki/Atomicity_(database_systems))
 - **Search & Filter**: Real-time search across key combinations, dispatchers, and arguments with persistent filtering
 - **Keyboard Navigation**: Arrow keys, Enter, Tab, and Escape for efficient workflow
@@ -163,7 +163,7 @@ graph TB
     ConfigMgr[ConfigManager<br/>File I/O + Backups]
     Parser[Parser<br/>Nom Combinators]
     Conflict[ConflictDetector<br/>HashMap O1]
-    Validator[Security Validator<br/>3 Layers]
+    Validator[Security Validator<br/>4 Layers]
 
     User -->|User Actions| Controller
     Controller -->|Load/Save| ConfigMgr
@@ -279,8 +279,7 @@ export PATH="$HOME/.local/bin:$PATH"
 
 **Available architectures:**
 - `x86_64-linux` - 64-bit Intel/AMD processors
-
-**Note:** ARM64 (aarch64) support is planned for future releases.
+- `aarch64-linux` - 64-bit ARM processors
 
 #### Method 2: Installation Script (Arch Linux)
 
@@ -315,7 +314,7 @@ cd hypr-keybind-manager
 makepkg -si
 ```
 
-**Note:** AUR package will be published after v1.2.0 release.
+**Note:** If the AUR package is not yet available, use the installation script or build from source.
 
 #### Method 4: Building from Source
 
@@ -802,7 +801,7 @@ All planned features are implemented and production-ready. The project has compl
 **Core Features:**
 - ✅ **Full CRUD Operations**: Create, read, update, delete keybindings
 - ✅ **Real-Time Conflict Detection**: O(1) HashMap-based detection
-- ✅ **Three-Layer Security**: Injection prevention, danger detection, entropy analysis
+- ✅ **Defence-in-Depth Security**: Injection prevention, danger detection, config validation, and optional Bubblewrap sandboxing
 - ✅ **Automatic Backups**: Timestamped backups with atomic writes
 - ✅ **Export/Import**: Replace and Merge modes for sharing configs
 - ✅ **Conflict Resolution UI**: Visual conflict resolution dialog
@@ -811,6 +810,7 @@ All planned features are implemented and production-ready. The project has compl
 - ✅ **Search Persistence**: Filters maintained across all operations
 - ✅ **Escape Key Support**: All dialogs closable with Escape
 - ✅ **Keycombo Assistance**: Inline availability feedback with suggested free alternatives while editing
+- ✅ **Bubblewrap Sandbox Toggle**: Optional sandboxing for `exec` bindings with no network access
 
 **Quality Assurance (Phases 7.1-10.0):**
 - ✅ **Phase 7.1**: Code comments audit (100% documentation coverage)
@@ -830,7 +830,6 @@ Potential features being considered for future releases:
 - **Multi-Monitor Awareness**: Per-monitor keybinding support
 - **Plugin Architecture**: Custom validators and extensions
 - **Accessibility Review**: WCAG 2.1 AA evaluation and improved screen-reader labeling
-- **Security Sandbox**: Bubblewrap-based execution sandboxing for higher-risk bindings
 - Community feedback and suggestions are welcomed!
 
 ---
@@ -852,7 +851,7 @@ Potential features being considered for future releases:
 **Deprecation Policy**:
 - Deprecated features will be supported for at least one MINOR version
 - Warnings will be shown in CLI output before removal
-- **Migration Guides**: Detailed upgrade guides will be provided for all major/minor releases in release notes and `CHANGELOG.md` (to be created)
+- **Migration Guides**: Detailed upgrade guides are provided in release notes and `CHANGELOG.md`
 
 ### Accessibility
 
