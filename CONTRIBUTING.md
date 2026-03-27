@@ -304,5 +304,5 @@ Your **contributions, feedback, bug reports, and feature suggestions** are incre
 
 ---
 
-**Last Updated**: 2025-11-01
-**Version**: 1.2.1
+**Last Updated**: 2026-03-27
+**Version**: 1.3.0

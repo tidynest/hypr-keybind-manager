@@ -6,7 +6,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.83+-orange.svg)](https://www.rust-lang.org/)
 [![GTK4](https://img.shields.io/badge/GTK-4.0-blue.svg)](https://www.gtk.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-171%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-188%20passing-brightgreen.svg)](#testing)
 
 ---
 
@@ -223,23 +223,26 @@ graph TB
 
 ### Security Architecture
 
-The application implements **[defence in depth](https://en.wikipedia.org/wiki/Defense_in_depth_(computing))** with three independent validation layers:
+The application implements **[defence in depth](https://en.wikipedia.org/wiki/Defense_in_depth_(computing))** with four independent validation layers:
 
 ```mermaid
 graph LR
     Input[User Input] --> L1[Layer 1<br/>Injection Prevention]
     L1 --> L2[Layer 2<br/>Danger Detection]
     L2 --> L3[Layer 3<br/>Config Validation]
-    L3 --> Accept[✅ Accept]
-    L3 --> Reject[❌ Reject]
+    L3 --> L4[Layer 4<br/>Execution Sandbox]
+    L4 --> Accept[✅ Accept]
+    L4 --> Reject[❌ Reject]
 
 L1 -.->|Blocks| Inject[Shell Metacharacters<br/>$, ;, pipe, &, backticks]
     L2 -.->|Detects| Danger[Critical Patterns<br/>rm -rf /, dd, fork bombs]
     L3 -.->|Validates| Config[Dispatcher Whitelist<br/>Argument Length<br/>Encoding Detection]
+    L4 -.->|Wraps| Sandbox[Bubblewrap Isolation<br/>Read-only FS, No Network]
 
     style L1 fill:#ffe1e1,color:#000
     style L2 fill:#fff4e1,color:#000
     style L3 fill:#e1ffe1,color:#000
+    style L4 fill:#e1e1ff,color:#000
     style Accept fill:#d4f1d4,color:#000
     style Reject fill:#ffd4d4,color:#000
 ```
@@ -570,11 +573,13 @@ The application uses a **[HashMap](https://doc.rust-lang.org/std/collections/str
 
 ```
 hypr-keybind-manager/
-├── README.md                                   # Project overview and documentation hub (1024 lines)
+├── README.md                                   # Project overview and documentation hub (1026 lines)
 ├── LICENSE                                     # Apache 2.0 license (201 lines)
-├── CONTRIBUTING.md                             # Contribution guidelines (307 lines)
-├── SECURITY.md                                 # Security policy and threat model (483 lines)
-├── Cargo.toml                                  # Rust dependencies and metadata (55 lines)
+├── CONTRIBUTING.md                             # Contribution guidelines (308 lines)
+├── SECURITY.md                                 # Security policy and threat model (503 lines)
+├── CHANGELOG.md                                # Release history (52 lines)
+├── CONTRIBUTORS.md                             # Contributor recognition (15 lines)
+├── Cargo.toml                                  # Rust dependencies and metadata (58 lines)
 ├── PKGBUILD                                    # Arch Linux package build script (39 lines)
 ├── install.sh                                  # Installation script for manual builds (96 lines)
 ├── .cargo/                                     # Project-specific cargo configuration
@@ -582,11 +587,11 @@ hypr-keybind-manager/
 │   └── runner.sh                               # Output filter script (5 lines)
 ├── scripts/                                    # Development and release scripts
 │   ├── sync-version.sh                         # Sync version numbers across docs (37 lines)
-│   ├── tag-release.sh                          # Automated release tagging (79 lines)
+│   ├── tag-release.sh                          # Automated release tagging (98 lines)
 │   └── test-escape-key.sh                      # Escape key implementation verification (109 lines)
 ├── docs/                                       # Technical documentation
 │   ├── ARCHITECTURE.md                         # System design and data flow (762 lines)
-│   ├── DESIGN_DECISIONS.md                     # Rationale for architectural choices (1082 lines)
+│   ├── DESIGN_DECISIONS.md                     # Rationale for architectural choices (1085 lines)
 │   ├── ENTROPY_DETECTION.md                    # Shannon entropy deep-dive (944 lines)
 │   ├── GTK_INSPECTOR_GUIDE.md                  # GTK debugging guide (215 lines)
 │   └── screenshots/                            # Application screenshots (13 images, ~700 KB)
@@ -608,66 +613,69 @@ hypr-keybind-manager/
 │   └── backups/                                # Test backup files
 ├── test-file-watcher.sh                        # File watcher test script (315 lines)
 ├── test-sync-version.sh                        # Version sync test script (340 lines)
-├── test-tag-release.sh                         # Release automation test script (416 lines)
-└── src/                                        # Source code (~5,500 lines total)
+├── test-tag-release.sh                         # Release automation test script (436 lines)
+└── src/                                        # Source code (~12,100 lines total)
     ├── bin/                                    # Binary utilities
     │   ├── measure_entropy.rs                  # Entropy measurement tool (57 lines)
     │   └── test_manual.rs                      # Manual testing utility (86 lines)
     ├── main.rs                                 # CLI entry point (281 lines)
-    ├── lib.rs                                  # Library root (99 lines)
-    ├── config/                                 # Config file I/O (~4,240 lines)
-    │   ├── mod.rs                              # ConfigManager (reads/writes with backups) (581 lines)
+    ├── lib.rs                                  # Library root (100 lines)
+    ├── config/                                 # Config file I/O (~4,512 lines)
+    │   ├── mod.rs                              # ConfigManager (reads/writes with backups) (650 lines)
     │   ├── error.rs                            # ConfigError types (62 lines)
     │   ├── transaction.rs                      # Atomic write transactions (353 lines)
     │   ├── validator.rs                        # Config validation (Layer 3) (298 lines)
-    │   ├── danger/                             # Dangerous command detection (Layer 2) (~935 lines)
+    │   ├── danger/                             # Dangerous command detection (Layer 2) (~927 lines)
     │   │   ├── mod.rs                          # DangerDetector core (412 lines)
     │   │   ├── types.rs                        # DangerLevel, DangerAssessment (41 lines)
     │   │   ├── patterns.rs                     # Pattern builders (183 lines)
     │   │   ├── entropy.rs                      # Shannon entropy detection (291 lines)
     │   │   └── tests/                          # Modular test suite (786 lines)
-    │   └── tests/                              # Config tests (1,377 lines)
-    │       ├── mod.rs                          # Test module organization (29 lines)
-    │       ├── config_manager_tests.rs         # ConfigManager tests (581 lines)
+    │   └── tests/                              # Config tests (1,436 lines)
+    │       ├── mod.rs                          # Test module organisation (29 lines)
+    │       ├── config_manager_tests.rs         # ConfigManager tests (640 lines)
     │       ├── transaction_tests.rs            # Transaction tests (617 lines)
     │       └── validator_tests.rs              # Validator unit tests (150 lines)
-    ├── core/                                   # Business logic (~1,363 lines)
+    ├── core/                                   # Business logic (~898 lines)
     │   ├── types.rs                            # Keybinding, KeyCombo, Modifier, BindType (212 lines)
-    │   ├── parser.rs                           # Parse Hyprland config syntax (nom) (298 lines)
+    │   ├── parser.rs                           # Parse Hyprland config syntax (nom) (292 lines)
     │   ├── conflict.rs                         # ConflictDetector engine (HashMap) (104 lines)
     │   ├── validator.rs                        # Injection prevention (Layer 1) (185 lines)
-    │   ├── mod.rs                              # Core module exports (41 lines)
-    │   └── tests/                              # Core tests (extracted) (523 lines)
-    │       ├── mod.rs                          # Test module organization (32 lines)
+    │   ├── sandbox.rs                          # Bubblewrap sandbox helpers (63 lines)
+    │   ├── mod.rs                              # Core module exports (42 lines)
+    │   └── tests/                              # Core tests (extracted) (571 lines)
+    │       ├── mod.rs                          # Test module organisation (35 lines)
     │       ├── conflict_tests.rs               # Conflict detection tests (147 lines)
-    │       ├── parser_tests.rs                 # Parser tests (107 lines)
+    │       ├── parser_tests.rs                 # Parser tests (117 lines)
     │       ├── validator_tests.rs              # Validation tests (159 lines)
-    │       └── types_tests.rs                  # Type system tests (78 lines)
-    ├── ui/                                     # GTK4 GUI (MVC pattern) (~4,229 lines)
-    │   ├── app.rs                              # Main window coordination (258 lines)
-    │   ├── actions.rs                          # GTK action setup (278 lines)
-    │   ├── builders/                           # UI builder modules (539 lines total)
+    │       ├── types_tests.rs                  # Type system tests (78 lines)
+    │       └── sandbox_tests.rs                # Sandbox wrap/unwrap tests (35 lines)
+    ├── ui/                                     # GTK4 GUI (MVC pattern) (~4,896 lines)
+    │   ├── app.rs                              # Main window coordination (294 lines)
+    │   ├── actions.rs                          # GTK action setup + undo/redo wiring (411 lines)
+    │   ├── builders/                           # UI builder modules (605 lines total)
     │   │   ├── mod.rs                          # Module exports (26 lines)
-    │   │   ├── header.rs                       # Header bar with menu (57 lines)
-    │   │   ├── layout.rs                       # Main layout construction (122 lines)
-    │   │   └── handlers.rs                     # Event handler wiring (334 lines)
-    │   ├── controller.rs                       # MVC Controller (mediates Model ↔ View) (636 lines)
+    │   │   ├── header.rs                       # Header bar with undo/redo buttons (79 lines)
+    │   │   ├── layout.rs                       # Main layout construction (146 lines)
+    │   │   └── handlers.rs                     # Event handler wiring (354 lines)
+    │   ├── controller.rs                       # MVC Controller (mediates Model ↔ View) (828 lines)
     │   ├── file_watcher.rs                     # Live config file monitoring (62 lines)
-    │   ├── style.css                           # GTK CSS styling (95 lines)
+    │   ├── style.css                           # GTK CSS styling (130 lines)
     │   ├── mod.rs                              # UI module exports (45 lines)
-    │   ├── components/                         # Reusable UI widgets (1,916 lines)
-    │   │   ├── keybind_list.rs                 # Scrollable list (211 lines)
-    │   │   ├── search_bar.rs                   # Real-time search (69 lines)
+    │   ├── components/                         # Reusable UI widgets (2,130 lines)
+    │   │   ├── keybind_list.rs                 # Scrollable list (221 lines)
+    │   │   ├── search_bar.rs                   # Real-time search (73 lines)
     │   │   ├── conflict_panel.rs               # Warning banner (245 lines)
     │   │   ├── conflict_resolution_dialog.rs   # Conflict resolver with Escape support (165 lines)
-    │   │   ├── details_panel.rs                # Shows selected binding (410 lines)
-    │   │   ├── edit_dialog.rs                  # Edit/Add dialog with Escape support (435 lines)
+    │   │   ├── details_panel.rs                # Shows selected binding (412 lines)
+    │   │   ├── edit_dialog.rs                  # Edit/Add dialog with sandbox toggle (633 lines)
     │   │   ├── backup_dialog.rs                # Backup management with Escape support (340 lines)
     │   │   └── mod.rs                          # Component exports (41 lines)
-    │   └── tests/                              # UI component tests (extracted) (400 lines)
-    │       ├── mod.rs                          # Test module organization (24 lines)
+    │   └── tests/                              # UI component tests (extracted) (627 lines)
+    │       ├── mod.rs                          # Test module organisation (27 lines)
     │       ├── backup_dialog_tests.rs          # Backup dialog tests (82 lines)
-    │       └── controller_tests.rs             # Controller tests + search persistence (294 lines)
+    │       ├── controller_tests.rs             # Controller + undo/redo tests (477 lines)
+    │       └── layout_tests.rs                 # Layout tests (41 lines)
     └── ipc/                                    # Hyprland IPC integration (~598 lines)
         ├── mod.rs                              # HyprlandClient (add/remove/reload bindings) (376 lines)
         └── tests/                              # IPC tests (extracted) (222 lines)
@@ -678,7 +686,7 @@ For detailed architecture documentation, see [ARCHITECTURE.md](docs/ARCHITECTURE
 
 ### Testing
 
-**Rust Tests (171 passing, 7 ignored):**
+**Rust Tests (188 passing, 7 ignored):**
 ```bash
 # Run all Rust tests
 cargo test
@@ -696,16 +704,19 @@ cargo clippy
 cargo fmt
 ```
 
-**Shell Script Tests (26 passing, 100% pass rate):**
+**Shell Script Tests (4 scripts):**
 ```bash
-# Test file watcher functionality (7 test cases)
+# Test file watcher functionality
 ./test-file-watcher.sh
 
-# Test version synchronization (9 test cases)
+# Test version synchronisation
 ./test-sync-version.sh
 
-# Test release automation (10 test cases)
+# Test release automation
 ./test-tag-release.sh
+
+# Test escape key behaviour
+./scripts/test-escape-key.sh
 ```
 
 ### Version Management
@@ -763,7 +774,7 @@ git push origin main && git push origin v1.1.0
 
 1. **[MVC](https://en.wikipedia.org/wiki/Model%E2%80%93view%E2%80%93controller) Architecture**: Clean separation of concerns (Model, View, Controller)
 2. **[Builder Pattern](https://en.wikipedia.org/wiki/Builder_pattern)**: GTK4 widget construction with fluent API
-3. **[Command Pattern](https://en.wikipedia.org/wiki/Command_pattern)**: Future undo/redo system
+3. **[Command Pattern](https://en.wikipedia.org/wiki/Command_pattern)**: Undo/redo system (Ctrl+Z / Ctrl+Shift+Z, 20-level snapshot history)
 4. **[Transaction Pattern](https://en.wikipedia.org/wiki/Database_transaction)**: [ACID](https://en.wikipedia.org/wiki/ACID) properties for config file operations
 5. **[Observer Pattern](https://en.wikipedia.org/wiki/Observer_pattern)**: GTK signal handlers for reactive UI updates
 
@@ -794,7 +805,7 @@ git push origin main && git push origin v1.1.0
 
 ## Roadmap
 
-### Current Status: v1.2.1 Released ✅
+### Current Status: v1.3.0 Released ✅
 
 All planned features are implemented and production-ready. The project has completed:
 
@@ -802,6 +813,7 @@ All planned features are implemented and production-ready. The project has compl
 - ✅ **Full CRUD Operations**: Create, read, update, delete keybindings
 - ✅ **Real-Time Conflict Detection**: O(1) HashMap-based detection
 - ✅ **Defence-in-Depth Security**: Injection prevention, danger detection, config validation, and optional Bubblewrap sandboxing
+- ✅ **Undo/Redo**: Full snapshot-based history with Ctrl+Z / Ctrl+Shift+Z (20-level depth)
 - ✅ **Automatic Backups**: Timestamped backups with atomic writes
 - ✅ **Export/Import**: Replace and Merge modes for sharing configs
 - ✅ **Conflict Resolution UI**: Visual conflict resolution dialog
@@ -811,25 +823,26 @@ All planned features are implemented and production-ready. The project has compl
 - ✅ **Escape Key Support**: All dialogs closable with Escape
 - ✅ **Keycombo Assistance**: Inline availability feedback with suggested free alternatives while editing
 - ✅ **Bubblewrap Sandbox Toggle**: Optional sandboxing for `exec` bindings with no network access
+- ✅ **Config Permission Warnings**: Detects world-readable, world-writable, and wrong-owner config files
+- ✅ **ARM64 Builds**: GitHub Actions produces both x86_64 and aarch64 binaries
 
 **Quality Assurance (Phases 7.1-10.0):**
 - ✅ **Phase 7.1**: Code comments audit (100% documentation coverage)
 - ✅ **Phase 7.2**: Documentation files audit (98 issues fixed, 100% accurate)
 - ✅ **Phase 7.3**: Project organisation cleanup (100% clean structure)
 - ✅ **Phase 7.4**: Test coverage audit (all scripts inventoried)
-- ✅ **Phase 7.5**: Modular test creation (26 shell tests, 100% pass rate)
+- ✅ **Phase 7.5**: Modular test creation (shell test scripts, 100% pass rate)
 - ✅ **Phase 8.0**: UX enhancements (search persistence + Escape key support)
 - ✅ **Phase 9.0**: Documentation polish & release preparation (v1.2.0 published)
 - ✅ **Phase 10.0**: Post-release UX refinements (keycombo assistance + layout polish)
 
-### Future Enhancements (Post v1.2.1)
+### Future Enhancements (Post v1.3.0)
 
 Potential features being considered for future releases:
 
-- **Undo/Redo System**: Transaction-based undo/redo for keybinding changes
 - **Multi-Monitor Awareness**: Per-monitor keybinding support
 - **Plugin Architecture**: Custom validators and extensions
-- **Accessibility Review**: WCAG 2.1 AA evaluation and improved screen-reader labeling
+- **Accessibility Review**: WCAG 2.1 AA evaluation and improved screen-reader labelling
 - Community feedback and suggestions are welcomed!
 
 ---
@@ -843,7 +856,7 @@ Potential features being considered for future releases:
 - **MINOR** (v1.1.0): New features, backward-compatible changes
 - **PATCH** (v1.0.1): Bug fixes, no new features
 
-**Current Status (v1.2.1)**:
+**Current Status (v1.3.0)**:
 - Config file format is **stable** - no breaking changes planned for v1.x
 - Public Rust APIs (for library use) are **unstable** - may change before v2.0.0
 - CLI interface is **stable** - commands and options will remain backward-compatible
@@ -869,7 +882,7 @@ Potential features being considered for future releases:
 
 **Current Status**: English only
 
-**Future Plans** (Post v1.2.1):
+**Future Plans** (Post v1.3.0):
 - **Planned**: Support for multiple languages using Rust `fluent` or `gettext` crates
 - **UI Strings**: All user-facing text will be extracted to translation files
 - **Priority Languages**: Based on community demand (likely German, French, Spanish first)

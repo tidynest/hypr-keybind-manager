@@ -142,10 +142,13 @@ graph LR
     Core --> Parser[parser.rs]
     Core --> ConflictCore[conflict.rs]
     Core --> CoreVal[validator.rs]
+    Core --> Sandbox[sandbox.rs]
 
     Controller -.->|uses| ConfigMgr
     Controller -.->|uses| ConflictCore
     Controller -.->|uses| ConfigVal
+
+    Edit -.->|uses| Sandbox
 
     ConfigMgr -.->|uses| Parser
     ConfigMgr -.->|uses| ConfigVal
@@ -417,6 +420,8 @@ pub struct Controller {
     config_manager: Rc<RefCell<ConfigManager>>,
     keybindings: RefCell<Vec<Keybinding>>,
     conflict_detector: RefCell<ConflictDetector>,
+    undo_stack: RefCell<Vec<Vec<Keybinding>>>,
+    redo_stack: RefCell<Vec<Vec<Keybinding>>>,
 }
 ```
 
@@ -429,8 +434,19 @@ pub struct Controller {
 - `add_keybinding(binding)` → `Result<(), String>`
 - `update_keybinding(old, new)` → `Result<(), String>`
 - `delete_keybinding(binding)` → `Result<(), String>`
+- `undo()` → `Result<(), String>`
+- `redo()` → `Result<(), String>`
+- `can_undo()` → `bool`
+- `can_redo()` → `bool`
 - `list_backups()` → `Result<Vec<PathBuf>, String>`
 - `restore_backup(path)` → `Result<(), String>`
+
+**Undo/Redo Design**:
+- Full-snapshot model: each mutation stores the entire keybindings list before modification
+- `HISTORY_LIMIT = 20` snapshots (oldest pruned automatically)
+- Redo stack cleared on any new mutation (standard behaviour)
+- History cleared on backup restore and external file changes to prevent confusing chains
+- Rollback on write failure: if disk write fails, the snapshot is restored in-memory
 
 ---
 
@@ -631,6 +647,26 @@ src/config/danger/
 
 ---
 
+### `src/core/sandbox.rs` - Bubblewrap Sandbox (Layer 4)
+
+**Responsibility**: Wrap `exec` binding commands in a Bubblewrap sandbox with no network access and a read-only filesystem view.
+
+**Key Functions**:
+- `wrap_command(command_line)` → `Result<String, String>` — prepends Bubblewrap flags
+- `unwrap_command(command_line)` → `Option<String>` — recovers the original command
+- `is_wrapped(command_line)` → `bool` — checks if already sandboxed
+
+**Sandbox Flags**:
+- `--die-with-parent` — terminate if parent process dies
+- `--new-session` — new session ID
+- `--unshare-net` — no network access
+- `--ro-bind /usr /usr`, `--ro-bind /bin /bin` — read-only system paths
+- `--proc /proc`, `--dev /dev`, `--tmpfs /tmp` — minimal mounts
+
+**UI Integration**: The edit dialog includes a Switch widget (enabled only when dispatcher is `exec`) that toggles sandboxing. Args are transparently wrapped/unwrapped so the user sees only the original command.
+
+---
+
 ## Design Patterns
 
 ### 1. Model-View-Controller (MVC)
@@ -758,5 +794,5 @@ For implementation details, see [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md).
 
 ---
 
-**Last Updated**: 2025-11-01
+**Last Updated**: 2026-03-27
 **Version**: 1.3.0

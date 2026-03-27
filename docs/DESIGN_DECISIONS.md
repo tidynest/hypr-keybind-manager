@@ -1081,5 +1081,5 @@ For questions or discussions about design decisions, please open an issue on Git
 
 ---
 
-**Last Updated**: 2025-10-19
+**Last Updated**: 2026-03-27
 **Version**: 1.3.0
