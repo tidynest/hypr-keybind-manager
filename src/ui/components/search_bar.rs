@@ -16,7 +16,7 @@
 //!
 //! Provides real-time filtering of keybindings as the user types.
 
-use gtk4::{prelude::*, SearchEntry};
+use gtk4::{SearchEntry, prelude::*};
 
 /// Search bar for filtering keybindings
 pub struct SearchBar {

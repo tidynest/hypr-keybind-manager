@@ -20,12 +20,11 @@ use atomic_write_file::AtomicWriteFile;
 use std::{fs, io::Write, path::PathBuf};
 
 use crate::config::{
-    danger,
+    ConfigError, ConfigManager, danger,
     validator::{
         ConfigValidator,
         ValidationLevel::{Error, Warning},
     },
-    ConfigError, ConfigManager,
 };
 
 /// Atomic configuration transaction with automatic backup.

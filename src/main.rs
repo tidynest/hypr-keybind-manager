@@ -90,8 +90,11 @@ enum Commands {
 /// * `Err(_)` - Command failed with error details
 fn main() -> anyhow::Result<(), Box<dyn std::error::Error>> {
     // Suppress GTK warnings and debug messages
-    std::env::set_var("G_MESSAGES_DEBUG", "");
-    std::env::set_var("GTK_DEBUG", "");
+    // SAFETY: called before any threads are spawned
+    unsafe {
+        std::env::set_var("G_MESSAGES_DEBUG", "");
+        std::env::set_var("GTK_DEBUG", "");
+    }
 
     let cli = Cli::parse();
 

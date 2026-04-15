@@ -20,7 +20,7 @@
 use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use std::{
     path::PathBuf,
-    sync::mpsc::{channel, Receiver},
+    sync::mpsc::{Receiver, channel},
 };
 
 /// Watches Hyprland.conf file for modifications and notifies via callback

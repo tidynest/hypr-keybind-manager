@@ -16,7 +16,7 @@
 //!
 //! Creates the application header bar with menu
 
-use gtk4::{gio::Menu, prelude::WidgetExt, Button, HeaderBar, MenuButton};
+use gtk4::{Button, HeaderBar, MenuButton, gio::Menu, prelude::WidgetExt};
 
 /// Builds the application header bar with File menu
 ///

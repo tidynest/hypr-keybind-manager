@@ -26,12 +26,12 @@ use crate::{
         sandbox,
         types::{BindType, KeyCombo, Keybinding, Modifier},
     },
-    ui::controller::KeyComboAvailability,
     ui::Controller,
+    ui::controller::KeyComboAvailability,
 };
 use gtk4::{
-    gdk, prelude::*, ApplicationWindow, Box as GtkBox, Button, Entry, EventControllerKey, Grid,
-    Label, Orientation, Switch, Window,
+    ApplicationWindow, Box as GtkBox, Button, Entry, EventControllerKey, Grid, Label, Orientation,
+    Switch, Window, gdk, prelude::*,
 };
 use std::{cell::Cell, rc::Rc};
 

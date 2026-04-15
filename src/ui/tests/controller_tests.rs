@@ -21,8 +21,8 @@ use tempfile::TempDir;
 
 use crate::{
     core::{BindType, KeyCombo, Keybinding, Modifier},
-    ui::controller::{KeyComboAssistance, KeyComboAvailability},
     ui::Controller,
+    ui::controller::{KeyComboAssistance, KeyComboAvailability},
 };
 
 /// Helper: Creates test config with known content
@@ -429,10 +429,12 @@ fn test_undo_reverts_added_binding() {
     controller.undo().unwrap();
 
     assert_eq!(controller.keybinding_count(), 5);
-    assert!(!controller
-        .filter_keybindings("code")
-        .iter()
-        .any(|b| b.args.as_deref() == Some("code")));
+    assert!(
+        !controller
+            .filter_keybindings("code")
+            .iter()
+            .any(|b| b.args.as_deref() == Some("code"))
+    );
     assert!(controller.can_redo());
 }
 

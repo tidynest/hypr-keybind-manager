@@ -18,15 +18,14 @@
 //! and their setup functions
 
 use gtk4::{
-    gdk,
+    Application, ApplicationWindow, Box as GtkBox, Button, CheckButton, EventControllerKey,
+    FileDialog, Label, Orientation, Window, gdk,
     gio::{Cancellable, SimpleAction},
     prelude::*,
-    Application, ApplicationWindow, Box as GtkBox, Button, CheckButton, EventControllerKey,
-    FileDialog, Label, Orientation, Window,
 };
 use std::{cell::Cell, rc::Rc};
 
-use crate::ui::{controller::ImportMode, Controller};
+use crate::ui::{Controller, controller::ImportMode};
 
 /// Sets up the quit action
 ///

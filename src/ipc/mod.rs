@@ -45,7 +45,7 @@
 use hyprland::dispatch::{Dispatch, DispatchType};
 
 use crate::config::ConfigError;
-use crate::core::{validator as injection_validator, Keybinding, Modifier};
+use crate::core::{Keybinding, Modifier, validator as injection_validator};
 
 /// IPC client operation mode
 ///

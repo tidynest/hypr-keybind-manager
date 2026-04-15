@@ -19,8 +19,8 @@
 //! conflict status.
 
 use gtk4::{
-    pango::WrapMode::WordChar, prelude::*, Align, Box as GtkBox, Button, Frame, Grid, Label,
-    Orientation, Separator,
+    Align, Box as GtkBox, Button, Frame, Grid, Label, Orientation, Separator,
+    pango::WrapMode::WordChar, prelude::*,
 };
 use std::{cell::RefCell, rc::Rc};
 

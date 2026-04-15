@@ -17,10 +17,10 @@
 //! Creates the main application layout structure.
 
 use crate::ui::{
-    components::{ConflictPanel, DetailsPanel, KeybindList, SearchBar},
     Controller,
+    components::{ConflictPanel, DetailsPanel, KeybindList, SearchBar},
 };
-use gtk4::{prelude::*, Box as GtkBox, Button, Orientation, Paned};
+use gtk4::{Box as GtkBox, Button, Orientation, Paned, prelude::*};
 use std::rc::Rc;
 
 pub const DEFAULT_WINDOW_WIDTH: i32 = 1000;

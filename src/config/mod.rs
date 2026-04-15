@@ -43,15 +43,15 @@ pub use {error::ConfigError, transaction::ConfigTransaction};
 
 use atomic_write_file::AtomicWriteFile;
 use chrono::Local;
+#[cfg(unix)]
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::{
     fs,
     io::Write,
     path::{Path, PathBuf},
 };
-#[cfg(unix)]
-use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
-use crate::{core::types::Keybinding, Modifier::*};
+use crate::{Modifier::*, core::types::Keybinding};
 
 /// Manages Hyprland configuration files with safe atomic operations.
 /// The ConfigManager provides read-only access and transactional writes
@@ -643,7 +643,9 @@ impl ConfigManager {
 
 #[cfg(unix)]
 fn current_uid() -> Option<u32> {
-    fs::metadata("/proc/self").ok().map(|metadata| metadata.uid())
+    fs::metadata("/proc/self")
+        .ok()
+        .map(|metadata| metadata.uid())
 }
 
 #[cfg(test)]

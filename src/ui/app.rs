@@ -26,10 +26,10 @@
 //!   └─ Connects components to Controller
 //! ```
 
-use gtk4::{gdk, prelude::*, Application, ApplicationWindow, CssProvider};
+use gtk4::{Application, ApplicationWindow, CssProvider, gdk, prelude::*};
 use std::{path::PathBuf, rc::Rc};
 
-use crate::ui::{actions, builders, file_watcher::FileWatcher, Controller};
+use crate::ui::{Controller, actions, builders, file_watcher::FileWatcher};
 
 /// GTK4 Application for keybinding management
 pub struct App {

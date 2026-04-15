@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use crate::core::{
-    types::{BindType, Modifier},
     ConflictDetector, KeyCombo, Keybinding,
+    types::{BindType, Modifier},
 };
 
 /// Helper to create test bindings

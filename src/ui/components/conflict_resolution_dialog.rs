@@ -20,14 +20,14 @@
 //! deletions and closes when all conflicts in view are resolved.
 
 use gtk4::{
-    gdk, prelude::*, Align, Box as GtkBox, Button, EventControllerKey, Label, Orientation,
-    ScrolledWindow, Window,
+    Align, Box as GtkBox, Button, EventControllerKey, Label, Orientation, ScrolledWindow, Window,
+    gdk, prelude::*,
 };
 use std::rc::Rc;
 
 use crate::ui::{
-    components::{ConflictPanel, KeybindList},
     Controller,
+    components::{ConflictPanel, KeybindList},
 };
 
 pub struct ConflictResolutionDialog {

@@ -23,11 +23,11 @@
 use crate::{
     core::types::{BindType, KeyCombo, Keybinding},
     ui::{
-        components::{BackupDialog, ConflictPanel, DetailsPanel, EditDialog, KeybindList},
         Controller,
+        components::{BackupDialog, ConflictPanel, DetailsPanel, EditDialog, KeybindList},
     },
 };
-use gtk4::{gdk, gio, prelude::*, ApplicationWindow, Button, EventControllerKey};
+use gtk4::{ApplicationWindow, Button, EventControllerKey, gdk, gio, prelude::*};
 use std::rc::Rc;
 
 /// Wires up all event handlers for the main UI

@@ -15,8 +15,8 @@
 use crate::core::{
     types::{BindType, KeyCombo, Keybinding, Modifier},
     validator::{
-        check_shell_metacharacters, validate_dispatcher, validate_key, validate_keybinding,
-        ValidationError,
+        ValidationError, check_shell_metacharacters, validate_dispatcher, validate_key,
+        validate_keybinding,
     },
 };
 

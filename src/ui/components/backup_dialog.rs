@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use gtk4::{
-    gdk, prelude::*, Align, Box as GtkBox, Button, EventControllerKey, Label, ListBox, Orientation,
-    ScrolledWindow, Window,
+    Align, Box as GtkBox, Button, EventControllerKey, Label, ListBox, Orientation, ScrolledWindow,
+    Window, gdk, prelude::*,
 };
 use std::{
     cell::Cell,

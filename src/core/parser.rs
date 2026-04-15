@@ -33,6 +33,7 @@
 //! The parser only reads and structures data - it never executes commands
 //! or modifies files. All validation happens in validator.rs after parsing.
 
+use nom::{IResult, Parser, sequence::preceded};
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_until, take_while1},
@@ -41,7 +42,6 @@ use nom::{
     character::complete::{char, space0},
     combinator::{map, opt},
 };
-use nom::{sequence::preceded, IResult, Parser};
 use std::{collections::HashMap, path::Path};
 use thiserror::Error;
 

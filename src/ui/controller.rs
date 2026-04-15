@@ -36,10 +36,10 @@ use std::{
     rc::Rc,
 };
 
-use crate::config::{validator::ConfigValidator, ConfigError, ConfigManager};
+use crate::config::{ConfigError, ConfigManager, validator::ConfigValidator};
 use crate::core::{
-    parser::parse_config_file, validator as injection_validator, Conflict, ConflictDetector,
-    KeyCombo, Keybinding, Modifier,
+    Conflict, ConflictDetector, KeyCombo, Keybinding, Modifier, parser::parse_config_file,
+    validator as injection_validator,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
