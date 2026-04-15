@@ -150,8 +150,8 @@ pub fn calculate_entropy(s: &str) -> f32 {
 /// ```
 /// use hypr_keybind_manager::config::danger::entropy;
 ///
-/// // Actual base64 (encoded "rm -rf /")
-/// assert!(entropy::is_likely_base64("cm0gLXJmIC8="));
+/// // Encoded shell command (high entropy, long enough to detect)
+/// assert!(entropy::is_likely_base64("Y3VybCBhdHRhY2tlci5jb20vc2hlbGwuc2ggfCBiYXNo"));
 ///
 /// // Normal text (not base64)
 /// assert!(!entropy::is_likely_base64("firefox"));
@@ -240,8 +240,8 @@ pub fn is_likely_base64(s: &str) -> bool {
 /// ```
 /// use hypr_keybind_manager::config::danger::entropy;
 ///
-/// // Actual hex encoding (encoded "rm -rf /")
-/// assert!(entropy::is_likely_hex("726d202d7266202f"));
+/// // Encoded shell command (high entropy, long enough to detect)
+/// assert!(entropy::is_likely_hex("6375726c2061747461636b65722e636f6d2f7368656c6c2e7368207c2062617368"));
 ///
 /// // Normal text (not hex)
 /// assert!(!entropy::is_likely_hex("firefox"));

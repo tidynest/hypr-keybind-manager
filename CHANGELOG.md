@@ -6,6 +6,12 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-04-15
+
+### Changed
+- Updated to Rust edition 2024.
+- Bumped all dependencies to latest compatible versions.
+
 ## [1.3.0] - 2026-03-27
 
 ### Added
