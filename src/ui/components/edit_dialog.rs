@@ -380,6 +380,9 @@ impl EditDialog {
             Some(args) if self.sandbox_switch.is_active() && dispatcher == "exec" => {
                 Some(sandbox::wrap_command(&args)?)
             }
+            None if matches!(dispatcher.as_str(), "exec" | "execr") => {
+                return Err(format!("{dispatcher} needs a command in Arguments"));
+            }
             other => other,
         };
 
