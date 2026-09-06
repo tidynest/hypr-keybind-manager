@@ -241,7 +241,8 @@ impl App {
             let status_banner = layout.status_banner.clone();
 
             glib::timeout_add_local(std::time::Duration::from_secs(1), move || {
-                if file_watcher.check_for_changes() {
+                // The app's own writes come back as events too; those are not external edits
+                if file_watcher.check_for_changes() && !controller.file_matches_last_write() {
                     match controller.load_keybindings() {
                         Ok(_) => {
                             controller.clear_history();

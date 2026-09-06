@@ -83,6 +83,8 @@ pub struct Controller {
     redo_stack: RefCell<Vec<Vec<Keybinding>>>,
     /// Bindings the editor cannot rewrite (Lua configs), with the reason
     read_only: RefCell<HashMap<Keybinding, String>>,
+    /// Hash of the main file as it was after this app last wrote it
+    last_written: RefCell<Option<u64>>,
 }
 
 const HISTORY_LIMIT: usize = 20;
@@ -124,7 +126,28 @@ impl Controller {
             undo_stack: RefCell::new(Vec::new()),
             redo_stack: RefCell::new(Vec::new()),
             read_only: RefCell::new(HashMap::new()),
+            last_written: RefCell::new(None),
         })
+    }
+
+    /// Whether the config file on disk is exactly what this app last wrote
+    ///
+    /// Lets the file watcher tell the app's own writes apart from edits made
+    /// in another program.
+    pub fn file_matches_last_write(&self) -> bool {
+        let Some(expected) = *self.last_written.borrow() else {
+            return false;
+        };
+        fs::read_to_string(self.config_path())
+            .map(|content| content_hash(&content) == expected)
+            .unwrap_or(false)
+    }
+
+    /// Records the main file's content after a write by this app
+    fn remember_written_file(&self) {
+        *self.last_written.borrow_mut() = fs::read_to_string(self.config_path())
+            .ok()
+            .map(|content| content_hash(&content));
     }
 
     /// Which language the managed config is written in
@@ -216,7 +239,9 @@ impl Controller {
         self.config_manager
             .borrow_mut()
             .write_bindings(bindings)
-            .map_err(|e| format!("Failed to write changes to config: {}", e))
+            .map_err(|e| format!("Failed to write changes to config: {}", e))?;
+        self.remember_written_file();
+        Ok(())
     }
 
     fn replace_bindings(&self, new_bindings: Vec<Keybinding>) {
@@ -625,6 +650,7 @@ impl Controller {
             .map_err(|e| format!("Failed to restore backup: {}", e))?;
 
         // Reload keybindings from the restored config; the snapshot lets Undo revert the restore
+        self.remember_written_file();
         self.record_undo_snapshot();
         self.load_keybindings()
             .map_err(|e| format!("Failed to reload keybindings: {}", e))?;
@@ -704,12 +730,7 @@ impl Controller {
         }
 
         let bindings: Vec<_> = self.keybindings.borrow().clone();
-        if let Err(e) = self
-            .config_manager
-            .borrow_mut()
-            .write_bindings(&bindings)
-            .map_err(|e| format!("Failed to write imported bindings: {}", e))
-        {
+        if let Err(e) = self.write_snapshot(&bindings) {
             let previous = self.undo_stack.borrow_mut().pop();
             if let Some(previous) = previous {
                 self.replace_bindings(previous);
@@ -857,6 +878,13 @@ impl Controller {
             ))
         }
     }
+}
+
+fn content_hash(content: &str) -> u64 {
+    use std::hash::{DefaultHasher, Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    content.hash(&mut hasher);
+    hasher.finish()
 }
 
 fn candidate_keys() -> Vec<&'static str> {
