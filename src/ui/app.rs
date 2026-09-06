@@ -21,37 +21,36 @@
 //!
 //! ```text
 //! App (GTK4 Application)
-//!   ├─ Creates Controller
+//!   ├─ Creates Controller when the app activates
+//!   ├─ Asks for a config file if the given one does not exist
 //!   ├─ Builds main window
 //!   └─ Connects components to Controller
 //! ```
 
-use gtk4::{gdk, prelude::*, Application, ApplicationWindow, CssProvider};
+use gtk4::{
+    AlertDialog, Application, ApplicationWindow, CssProvider, FileDialog, Window, gdk,
+    gio::Cancellable, prelude::*,
+};
 use std::{path::PathBuf, rc::Rc};
 
-use crate::ui::{actions, builders, file_watcher::FileWatcher, Controller};
+use crate::{
+    config::ConfigError,
+    ui::{Controller, actions, builders, file_watcher::FileWatcher},
+};
 
 /// GTK4 Application for keybinding management
 pub struct App {
     /// GTK4 Application instance
     app: Application,
-    /// MVC Controller
-    controller: Rc<Controller>,
-    /// File Watcher
-    file_watcher: Option<FileWatcher>,
+    /// Config file to open once the application activates
+    config_path: PathBuf,
 }
 
 impl App {
     /// Creates a new App with the given config file path
     ///
-    /// # Arguments
-    ///
-    /// * `config_path` - Path to Hyprland configuration file
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(App)` - Successfully initialised
-    /// * `Err(String)` - Failed to create Controller or App
+    /// The file is opened when the application activates, so a missing
+    /// file leads to a file chooser instead of a failure here.
     ///
     /// # Example
     ///
@@ -65,29 +64,11 @@ impl App {
     /// # Ok::<(), String>(())
     /// ```
     pub fn new(config_path: PathBuf) -> Result<Self, String> {
-        // Create GTK4 Application
         let app = Application::builder()
             .application_id("com.tidynest.hypr-keybind-manager")
             .build();
 
-        // Create Controller
-        let controller = Controller::new(config_path)
-            .map_err(|e| format!("Failed to create controller: {}", e))?;
-
-        let controller = Rc::new(controller);
-
-        let file_watcher = {
-            let config_path = controller.config_path().to_path_buf();
-            FileWatcher::new(config_path)
-                .map_err(|e| eprintln!("⚠️  File watcher setup failed: {}", e))
-                .ok()
-        };
-
-        Ok(Self {
-            app,
-            controller,
-            file_watcher,
-        })
+        Ok(Self { app, config_path })
     }
 
     /// Runs the GTK4 application
@@ -105,16 +86,80 @@ impl App {
     /// # Ok::<(), String>(())
     /// ```
     pub fn run(self) {
-        let controller = self.controller.clone();
-        let file_watcher = self.file_watcher.map(Rc::new);
-
-        // Connect activate signal (called when app starts)
+        let config_path = self.config_path.clone();
         self.app.connect_activate(move |app| {
-            Self::build_ui(app, controller.clone(), file_watcher.clone());
+            Self::open_config(app, config_path.clone());
         });
 
-        // Run the application (blocks until exit)
         self.app.run_with_args::<&str>(&[]);
+    }
+
+    /// Creates the Controller for `config_path` and shows the main window
+    ///
+    /// A missing file opens a chooser; any other error is shown and the
+    /// application quits.
+    fn open_config(app: &Application, config_path: PathBuf) {
+        match Controller::new(config_path) {
+            Ok(controller) => Self::build_ui(app, Rc::new(controller)),
+            Err(ConfigError::NotFound(missing)) => Self::prompt_for_config(app, missing),
+            Err(e) => Self::fail_and_quit(app, "Cannot open config file", &e.to_string()),
+        }
+    }
+
+    /// Shows `detail` in a dialog and quits once it is dismissed
+    fn fail_and_quit(app: &Application, message: &str, detail: &str) {
+        let hold = app.hold();
+        let app = app.clone();
+        AlertDialog::builder()
+            .modal(true)
+            .message(message)
+            .detail(detail)
+            .buttons(vec!["Quit"])
+            .build()
+            .choose(None::<&Window>, None::<&Cancellable>, move |_| {
+                drop(hold);
+                app.quit();
+            });
+    }
+
+    /// Explains that `missing` does not exist and offers a file chooser
+    fn prompt_for_config(app: &Application, missing: PathBuf) {
+        // No window exists yet, so keep the application alive until one does
+        let hold = app.hold();
+        let app = app.clone();
+
+        let dialog = AlertDialog::builder()
+            .modal(true)
+            .message("Config file not found")
+            .detail(format!(
+                "{} does not exist.\n\nChoose the Hyprland config file to manage, or start the \
+                 program with -c <path>.",
+                missing.display()
+            ))
+            .buttons(vec!["Choose file…", "Quit"])
+            .cancel_button(1)
+            .default_button(0)
+            .build();
+
+        dialog.choose(None::<&Window>, None::<&Cancellable>, move |response| {
+            if response != Ok(0) {
+                drop(hold);
+                app.quit();
+                return;
+            }
+            let file_dialog = FileDialog::builder()
+                .title("Choose Hyprland config file")
+                .modal(true)
+                .build();
+            let app_for_pick = app.clone();
+            file_dialog.open(None::<&Window>, None::<&Cancellable>, move |result| {
+                match result.ok().and_then(|file| file.path()) {
+                    Some(path) => Self::open_config(&app_for_pick, path),
+                    None => app_for_pick.quit(),
+                }
+                drop(hold);
+            });
+        });
     }
 
     /// Loads custom CSS styling for the application
@@ -126,141 +171,101 @@ impl App {
         let css = include_str!("style.css");
         provider.load_from_string(css);
 
-        // Apply CSS to the default display
-        gtk4::style_context_add_provider_for_display(
-            &gdk::Display::default().expect("Could not connect to a display"),
-            &provider,
-            gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
-        );
+        if let Some(display) = gdk::Display::default() {
+            gtk4::style_context_add_provider_for_display(
+                &display,
+                &provider,
+                gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+            );
+        }
     }
 
     /// Builds the main window UI
     ///
     /// This is called when the application activates. It creates
     /// the window and all components.
-    fn build_ui(
-        app: &Application,
-        controller: Rc<Controller>,
-        file_watcher: Option<Rc<FileWatcher>>,
-    ) {
-        // Load keybindings
+    fn build_ui(app: &Application, controller: Rc<Controller>) {
         if let Err(e) = controller.load_keybindings() {
-            eprintln!("Failed to load keybindings: {}", e);
+            Self::fail_and_quit(app, "Cannot read keybindings", &e.to_string());
             return;
         }
 
-        // Setup quit action
-        actions::setup_quit_action(app);
+        let file_watcher = FileWatcher::new(controller.config_path())
+            .map_err(|e| eprintln!("⚠️  File watcher setup failed: {}", e))
+            .ok()
+            .map(Rc::new);
 
+        actions::setup_quit_action(app);
         Self::load_css();
 
-        // Create header bar with menu
-        let (header_bar, _undo_button, _redo_button) = builders::build_header_bar();
+        let header = builders::build_header_bar();
 
         let window = ApplicationWindow::builder()
             .application(app)
             .title("Hyprland Keybinding Manager")
             .default_width(1000)
             .default_height(800)
-            .titlebar(&header_bar)
+            .titlebar(&header.header_bar)
             .build();
 
-        // Setup export action
         actions::setup_export_action(app, &window, controller.clone());
 
-        // Build main layout
-        let (
-            main_vbox,
-            paned,
-            keybind_list,
-            details_panel,
-            conflict_panel,
-            add_keybinding_button,
-            backup_button,
-        ) = builders::build_main_layout(controller.clone());
+        let layout = builders::build_main_layout(controller.clone());
+        Self::setup_paned_constraints(&window, &layout.paned);
+        window.set_child(Some(&layout.main_vbox));
 
-        Self::setup_paned_constraints(&window, &paned);
-
-        // Set window content
-        window.set_child(Some(&main_vbox));
-
-        // Connect conflict resolution button
-        conflict_panel.connect_resolve_button(
+        layout.conflict_panel.connect_resolve_button(
             window.upcast_ref(),
-            conflict_panel.clone(),
-            keybind_list.clone(),
+            layout.conflict_panel.clone(),
+            layout.keybind_list.clone(),
         );
 
-        // Setup import action (needs widgets to refresh UI after import)
-        actions::setup_import_action(
-            app,
-            &window,
-            controller.clone(),
-            keybind_list.clone(),
-            details_panel.clone(),
-            conflict_panel.clone(),
-        );
+        actions::setup_import_action(app, &window, controller.clone(), &layout);
+        actions::setup_history_actions(app, &window, controller.clone(), &layout);
+        actions::setup_apply_action(app, &window, controller.clone(), &layout);
 
-        actions::setup_history_actions(
-            app,
-            &window,
-            controller.clone(),
-            keybind_list.clone(),
-            details_panel.clone(),
-            conflict_panel.clone(),
-        );
+        builders::wire_up_handlers(&window, controller.clone(), &layout, &header);
 
-        // Setup apply to Hyprland action
-        actions::setup_apply_action(app, controller.clone());
-
-        // Wire up all event handlers
-        builders::wire_up_handlers(
-            &window,
-            controller.clone(),
-            keybind_list.clone(),
-            details_panel.clone(),
-            conflict_panel.clone(),
-            &add_keybinding_button,
-            &backup_button,
-        );
-
-        // Initial display
-        let all_bindings = controller.get_current_view();
-        keybind_list.update_with_bindings(all_bindings);
+        layout
+            .keybind_list
+            .update_with_bindings(controller.get_current_view());
         actions::sync_history_actions(app, &controller);
+        layout.conflict_panel.refresh();
 
-        // Update conflict panel
-        conflict_panel.refresh();
-
-        // Setup file watcher polling (if available)
         if let Some(file_watcher) = file_watcher {
-            let app_for_watcher = app.clone();
-            let controller_clone = controller.clone();
-            let keybind_list_clone = keybind_list.clone();
-            let details_panel_clone = details_panel.clone();
-            let conflict_panel_clone = conflict_panel.clone();
+            let app = app.clone();
+            let controller = controller.clone();
+            let keybind_list = layout.keybind_list.clone();
+            let details_panel = layout.details_panel.clone();
+            let conflict_panel = layout.conflict_panel.clone();
+            let status_banner = layout.status_banner.clone();
 
             glib::timeout_add_local(std::time::Duration::from_secs(1), move || {
-                if file_watcher.check_for_changes() {
-                    eprintln!("📝 Config file changed - reloading...");
-
-                    if let Err(e) = controller_clone.load_keybindings() {
-                        eprintln!("❌ Failed to reload: {}", e);
-                    } else {
-                        controller_clone.clear_history();
-                        let all_bindings = controller_clone.get_keybindings();
-                        keybind_list_clone.update_with_bindings(all_bindings);
-                        details_panel_clone.update_binding(None);
-                        conflict_panel_clone.refresh();
-                        actions::sync_history_actions(&app_for_watcher, &controller_clone);
-                        eprintln!("✅ Config reloaded successfully");
+                // The app's own writes come back as events too; those are not external edits
+                if file_watcher.check_for_changes() && !controller.file_matches_last_write() {
+                    match controller.load_keybindings() {
+                        Ok(_) => {
+                            controller.clear_history();
+                            actions::refresh_main_view(
+                                &controller,
+                                &keybind_list,
+                                &details_panel,
+                                &conflict_panel,
+                            );
+                            actions::sync_history_actions(&app, &controller);
+                            status_banner.show(
+                                "The config file changed on disk and was reloaded. Undo history was cleared.",
+                            );
+                        }
+                        Err(e) => status_banner.show(&format!(
+                            "The config file changed on disk but could not be reloaded: {e}"
+                        )),
                     }
                 }
                 glib::ControlFlow::Continue
             });
         }
 
-        // Show window
         window.present();
     }
 

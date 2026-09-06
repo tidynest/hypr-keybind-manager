@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use crate::core::{
-    types::{BindType, Modifier},
     ConflictDetector, KeyCombo, Keybinding,
+    types::{BindType, Modifier},
 };
 
 /// Helper to create test bindings
@@ -24,6 +24,8 @@ fn test_binding(modifiers: Vec<Modifier>, key: &str, app: &str) -> Keybinding {
         bind_type: BindType::Bind,
         dispatcher: "exec".to_string(),
         args: Some(app.to_string()),
+        description: None,
+        submap: None,
     }
 }
 
@@ -109,10 +111,10 @@ fn test_has_conflict_method() {
     let combo = KeyCombo::new(vec![Modifier::Super], "K");
 
     detector.add_binding(test_binding(vec![Modifier::Super], "K", "firefox"));
-    assert!(!detector.has_conflict(&combo));
+    assert!(!detector.has_conflict(None, &combo));
 
     detector.add_binding(test_binding(vec![Modifier::Super], "K", "chrome"));
-    assert!(detector.has_conflict(&combo));
+    assert!(detector.has_conflict(None, &combo));
 }
 
 #[test]

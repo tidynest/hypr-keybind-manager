@@ -43,20 +43,104 @@ pub use {error::ConfigError, transaction::ConfigTransaction};
 
 use atomic_write_file::AtomicWriteFile;
 use chrono::Local;
+#[cfg(unix)]
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::{
+    collections::HashMap,
     fs,
     io::Write,
     path::{Path, PathBuf},
 };
-#[cfg(unix)]
-use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
-use crate::{core::types::Keybinding, Modifier::*};
+use crate::core::{
+    lua_config::{ADDED_HEADER, parse_lua_config, render_lua_bind, rewrite_lua_files},
+    parser::{LineKind, parse_config_tree, scan_lines},
+    types::Keybinding,
+};
 
 /// Manages Hyprland configuration files with safe atomic operations.
 /// The ConfigManager provides read-only access and transactional writes
 /// with automatic backup creation. All writes go through the transaction
 /// API to ensure atomicity and recoverability.
+/// Which language a config file is written in, decided by its extension
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ConfigFormat {
+    /// `hyprland.conf`, the hyprlang syntax
+    Hyprlang,
+    /// `hyprland.lua`, Hyprland 0.55 and later
+    Lua,
+}
+
+impl ConfigFormat {
+    pub fn of(path: &Path) -> Self {
+        if path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("lua"))
+        {
+            Self::Lua
+        } else {
+            Self::Hyprlang
+        }
+    }
+}
+
+/// Bindings read from a config, with what cannot be edited and why
+#[derive(Debug, Default)]
+pub struct LoadedBindings {
+    pub bindings: Vec<Keybinding>,
+    /// Lua binds the editor cannot rewrite, keyed by binding
+    pub read_only: HashMap<Keybinding, String>,
+    /// The main file and every file it pulls in
+    pub files: Vec<PathBuf>,
+}
+
+/// Reads the bindings of a config file of either format
+pub fn load_bindings_from(path: &Path) -> Result<LoadedBindings, ConfigError> {
+    match ConfigFormat::of(path) {
+        ConfigFormat::Lua => {
+            let parsed = parse_lua_config(path).map_err(ConfigError::ValidationFailed)?;
+            let read_only = parsed
+                .bindings
+                .iter()
+                .filter_map(|b| Some((b.binding.clone(), b.read_only.clone()?)))
+                .collect();
+            Ok(LoadedBindings {
+                bindings: parsed.bindings.into_iter().map(|b| b.binding).collect(),
+                read_only,
+                files: parsed.files,
+            })
+        }
+        ConfigFormat::Hyprlang => {
+            let content = fs::read_to_string(path)?;
+            let tree = parse_config_tree(&content, path)
+                .map_err(|e| ConfigError::ValidationFailed(e.to_string()))?;
+            Ok(LoadedBindings {
+                bindings: tree.bindings,
+                read_only: HashMap::new(),
+                files: tree.files,
+            })
+        }
+    }
+}
+
+/// The config Hyprland would use: `hyprland.conf` if present, else `hyprland.lua`
+///
+/// Falls back to the `.conf` path when neither exists, so the caller can
+/// report what was looked for.
+pub fn default_config_path() -> PathBuf {
+    let base = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
+        .unwrap_or_else(|| PathBuf::from("."));
+    let dir = base.join("hypr");
+    let conf = dir.join("hyprland.conf");
+    if conf.exists() {
+        return conf;
+    }
+    let lua = dir.join("hyprland.lua");
+    if lua.exists() { lua } else { conf }
+}
+
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct ConfigManager {
@@ -225,6 +309,16 @@ impl ConfigManager {
         &self.config_path
     }
 
+    /// Which language the managed file is written in
+    pub fn format(&self) -> ConfigFormat {
+        ConfigFormat::of(&self.config_path)
+    }
+
+    /// Reads the bindings of the managed file, following sources or requires
+    pub fn load_bindings(&self) -> Result<LoadedBindings, ConfigError> {
+        load_bindings_from(&self.config_path)
+    }
+
     #[allow(dead_code)]
     fn create_timestamped_backup(&self) -> Result<PathBuf, ConfigError> {
         // Read the current config content
@@ -315,7 +409,7 @@ impl ConfigManager {
         }
 
         // Sort by timestamp, newest first (descending order)
-        backups.sort_by(|a, b| b.1.cmp(&a.1));
+        backups.sort_by_key(|(_, timestamp)| std::cmp::Reverse(*timestamp));
 
         // Extract just the paths (discard timestamps)
         Ok(backups.into_iter().map(|(path, _)| path).collect())
@@ -449,19 +543,18 @@ impl ConfigManager {
         Ok(())
     }
 
-    /// Writes keybindings back to the configuration file
+    /// Writes keybindings to the config file, changing only the lines that changed
     ///
-    /// Creates an automatic backup via the transaction system before writing.
-    /// Preserves comments, blank lines, and non-keybinding configuration.
-    ///
-    /// # Arguments
-    /// * `bindings` - The complete list of keybindings to write
+    /// The current file (and every file it sources) is scanned line by line.
+    /// A binding that is no longer in `bindings` has its line replaced by a
+    /// new binding in the same submap when one is waiting, or removed. New
+    /// bindings that found no line to take over are appended after the last
+    /// bind line of their submap in the main file. Comments, variables,
+    /// settings and the order of untouched bindings stay as they were.
     ///
     /// # Errors
-    /// Returns `ConfigError` if:
-    /// - File cannot be read
-    /// - Backup creation fails
-    /// - File cannot be written
+    /// Returns `ConfigError` if a file cannot be read or parsed, a backup
+    /// cannot be created, or a file cannot be written.
     ///
     /// # Example
     /// ```no_run
@@ -475,175 +568,229 @@ impl ConfigManager {
     /// # }
     /// ```
     pub fn write_bindings(&mut self, bindings: &[Keybinding]) -> Result<(), ConfigError> {
-        // Read current config to preserve non-keybinding content
-        let original_content = self.read_config()?;
+        if self.format() == ConfigFormat::Lua {
+            return self.write_bindings_lua(bindings);
+        }
 
-        // Rebuild config with updated keybindings
-        let new_content = self.rebuild_config(&original_content, bindings)?;
+        let content = self.read_config()?;
+        let tree = parse_config_tree(&content, &self.config_path)
+            .map_err(|e| ConfigError::ValidationFailed(e.to_string()))?;
 
-        // Write atomically via transaction (creates backup automatically)
-        let transaction = ConfigTransaction::begin(self)?;
-        transaction.commit(&new_content)?;
+        // ponytail: O(n·m) multiset diff, bindings lists are a few hundred entries at most
+        let mut removed = tree.bindings.clone();
+        let mut added = Vec::new();
+        for binding in bindings {
+            match removed.iter().position(|r| r == binding) {
+                Some(i) => {
+                    removed.remove(i);
+                }
+                None => added.push(binding.clone()),
+            }
+        }
+        if removed.is_empty() && added.is_empty() {
+            return Ok(());
+        }
 
+        // Main file first so its removed lines are consumed before sourced
+        // files are looked at; whatever is still new lands in the main file.
+        let mut main = rewrite_file(&content, &tree.variables, &mut removed, &mut added);
+        for file in tree.files.iter().skip(1) {
+            let original = fs::read_to_string(file)?;
+            let rewritten = rewrite_file(&original, &tree.variables, &mut removed, &mut added);
+            if rewritten.changed {
+                let manager = ConfigManager::new(file.clone())?;
+                ConfigTransaction::begin(&manager)?.commit(&rewritten.render(&original))?;
+            }
+        }
+        if !added.is_empty() {
+            main.append(added, &tree.variables);
+        }
+        if main.changed {
+            ConfigTransaction::begin(self)?.commit(&main.render(&content))?;
+        }
+
+        Ok(())
+    }
+
+    /// Rewrites the `hl.bind` lines of a Lua config that changed
+    ///
+    /// The config is run again to find the current line of every bind, then
+    /// `rewrite_lua_files` works out the new text of each affected file.
+    /// Each file is written through its own transaction.
+    fn write_bindings_lua(&self, bindings: &[Keybinding]) -> Result<(), ConfigError> {
+        let parsed = parse_lua_config(&self.config_path).map_err(ConfigError::ValidationFailed)?;
+        let outputs =
+            rewrite_lua_files(&parsed, bindings).map_err(ConfigError::ValidationFailed)?;
+        for (file, text) in outputs {
+            if file == self.config_path {
+                ConfigTransaction::begin(self)?.commit(&text)?;
+            } else {
+                let manager = ConfigManager::new(file)?;
+                ConfigTransaction::begin(&manager)?.commit(&text)?;
+            }
+        }
         Ok(())
     }
 
     /// Exports keybindings to a specified file path
     ///
-    /// Creates a new config file containing only keybinding (no preservation of other content)
+    /// Creates a new config file containing only keybindings (no preservation of other content).
+    /// For a Lua config the export is Lua too; binds that run Lua code are
+    /// listed as comments. Hyprlang exports group bindings under `submap`
+    /// sections where needed.
     pub fn export_to(
         &self,
         export_path: &Path,
         bindings: &[Keybinding],
     ) -> Result<(), ConfigError> {
+        if self.format() == ConfigFormat::Lua {
+            let mut content = format!("{ADDED_HEADER}\n\n");
+            for binding in bindings {
+                match render_lua_bind(binding) {
+                    Ok(line) => content.push_str(&line),
+                    Err(reason) => content.push_str(&format!("-- {binding}: {reason}")),
+                }
+                content.push('\n');
+            }
+            fs::write(export_path, content)?;
+            return Ok(());
+        }
+
         let mut content = String::from("# Exported Hyprland Keybindings\n\n");
+        let mut current_submap: Option<&str> = None;
 
         for binding in bindings {
-            content.push_str(&self.format_binding(binding));
+            if binding.submap.as_deref() != current_submap {
+                current_submap = binding.submap.as_deref();
+                content.push_str(&format!("submap = {}\n", current_submap.unwrap_or("reset")));
+            }
+            content.push_str(&binding.to_string());
             content.push('\n');
+        }
+        if current_submap.is_some() {
+            content.push_str("submap = reset\n");
         }
 
         fs::write(export_path, content)?;
 
         Ok(())
     }
+}
 
-    /// Rebuilds config file, replacing keybinding lines whilst preserving everything else
-    ///
-    /// This is the "smart" part - we identify the keybinding section and replace only that,
-    /// keeping comments, blank lines, and other settings intact.
-    ///
-    /// # Strategy
-    /// 1. Scan through original line by line
-    /// 2. When we hit the first keybinding line, mark that position
-    /// 3. Skip all subsequent keybinding lines
-    /// 4. At the end of the keybinding section, insert our new bindings
-    /// 5. Continue with the rest of the file
-    ///
-    /// # Arguments
-    /// * `original` - Original config file content
-    /// * `bindings` - New keybindings to write
-    ///
-    /// # Returns
-    /// The rebuilt config as a string
-    fn rebuild_config(
-        &self,
-        original: &str,
-        bindings: &[Keybinding],
-    ) -> Result<String, ConfigError> {
-        let mut result = String::new();
-        let mut in_keybinding_section = false;
-        let mut keybindings_written = false;
+/// One file's lines after the in-place pass, plus where each submap's last bind line is
+struct Rewritten {
+    lines: Vec<String>,
+    /// Index in `lines` of the last bind line per submap, `None` = global map
+    last_bind_line: HashMap<Option<String>, usize>,
+    changed: bool,
+}
 
-        for line in original.lines() {
-            let trimmed = line.trim();
+impl Rewritten {
+    /// Adds bindings that found no line to take over
+    ///
+    /// Each goes after the last bind line of its submap. Submaps not present
+    /// in the file get a fresh `submap = name` ... `submap = reset` block at
+    /// the end, under a `# Keybindings` header.
+    fn append(&mut self, added: Vec<Keybinding>, variables: &HashMap<String, String>) {
+        let mut inserts: HashMap<usize, Vec<String>> = HashMap::new();
+        let mut tail: Vec<String> = Vec::new();
+        let mut tail_submap: Option<String> = None;
 
-            // Check if this is a keybinding line
-            let is_keybinding = trimmed.starts_with("bind")
-                && !trimmed.starts_with("#")
-                && (trimmed.starts_with("bind =")
-                    || trimmed.starts_with("binde =")
-                    || trimmed.starts_with("bindl =")
-                    || trimmed.starts_with("bindm =")
-                    || trimmed.starts_with("bindr =")
-                    || trimmed.starts_with("bindel ="));
-
-            if is_keybinding {
-                // Keybinding section has been reached
-                if !in_keybinding_section {
-                    in_keybinding_section = true;
+        for binding in added {
+            let rendered = binding.to_config_line(variables);
+            match self.last_bind_line.get(&binding.submap) {
+                Some(&index) => inserts.entry(index).or_default().push(rendered),
+                None => {
+                    if tail.is_empty() {
+                        tail.push(String::new());
+                        tail.push("# Keybindings".to_string());
+                    }
+                    if binding.submap != tail_submap {
+                        tail.push(format!(
+                            "submap = {}",
+                            binding.submap.as_deref().unwrap_or("reset")
+                        ));
+                        tail_submap = binding.submap.clone();
+                    }
+                    tail.push(rendered);
                 }
-
-                // Skip this line - new bindings will be written at the end of the section
-                continue;
             }
+        }
+        if tail_submap.is_some() {
+            tail.push("submap = reset".to_string());
+        }
 
-            // If we're in keybinding section but hit a non-keybinding line, write our bindings now
-            if in_keybinding_section && !keybindings_written {
-                for binding in bindings {
-                    result.push_str(&self.format_binding(binding));
-                    result.push('\n');
-                }
-                keybindings_written = true;
-                in_keybinding_section = false;
+        let old = std::mem::take(&mut self.lines);
+        for (index, line) in old.into_iter().enumerate() {
+            self.lines.push(line);
+            if let Some(extra) = inserts.remove(&index) {
+                self.lines.extend(extra);
             }
+        }
+        self.lines.extend(tail);
+        self.changed = true;
+    }
 
-            // Preserve all non-keybinding lines
-            result.push_str(line);
+    /// Joins the lines back, keeping a trailing newline when the original had one
+    fn render(&self, original: &str) -> String {
+        let mut result = self.lines.join("\n");
+        if original.ends_with('\n') || original.is_empty() {
             result.push('\n');
         }
-
-        // If we never found a keybinding section, or we're still in it at EOF, write bindings now
-        if !keybindings_written {
-            result.push_str("\n# Keybindings\n");
-            for binding in bindings {
-                result.push_str(&self.format_binding(binding));
-                result.push('\n');
-            }
-        }
-
-        Ok(result)
+        result
     }
+}
 
-    /// Formats a keybinding into a config file line
-    ///
-    /// Example output: `bind = SUPER, K, exec, firefox`
-    ///
-    /// # Arguments
-    /// * `binding` - The keybinding to format
-    ///
-    /// # Returns
-    /// A formatted config line (without trailing newline)
-    fn format_binding(&self, binding: &Keybinding) -> String {
-        // Build a modifier string
-        let modifiers_str = if binding.key_combo.modifiers.is_empty() {
-            String::new()
-        } else {
-            binding
-                .key_combo
-                .modifiers
-                .iter()
-                .map(|m| match m {
-                    Super => "SUPER",
-                    Ctrl => "CTRL",
-                    Shift => "SHIFT",
-                    Alt => "ALT",
-                })
-                .collect::<Vec<_>>()
-                .join("_")
+/// Rewrites one file's bind lines in place
+///
+/// Removed bindings are consumed from `removed` as their lines are met. Each
+/// such line is replaced by the first waiting entry of `added` in the same
+/// submap, so an edit stays where it was and a new binding may take the slot
+/// of a deleted one. Untouched lines are copied as they are.
+fn rewrite_file(
+    original: &str,
+    variables: &HashMap<String, String>,
+    removed: &mut Vec<Keybinding>,
+    added: &mut Vec<Keybinding>,
+) -> Rewritten {
+    let mut vars = variables.clone();
+    let scanned = scan_lines(original, &mut vars);
+    let mut out = Rewritten {
+        lines: Vec::with_capacity(scanned.len()),
+        last_bind_line: HashMap::new(),
+        changed: false,
+    };
+
+    for (line, (_, kind)) in original.lines().zip(scanned) {
+        let Ok(LineKind::Binding(binding)) = kind else {
+            out.lines.push(line.to_string());
+            continue;
         };
-
-        // Build the parts that will be comma-separated
-        let mut parts = Vec::new();
-
-        // Add modifiers and key
-        if !modifiers_str.is_empty() {
-            parts.push(modifiers_str);
+        if let Some(i) = removed.iter().position(|r| *r == binding) {
+            removed.remove(i);
+            out.changed = true;
+            let Some(j) = added.iter().position(|a| a.submap == binding.submap) else {
+                continue;
+            };
+            let replacement = added.remove(j);
+            let indent: String = line.chars().take_while(|c| c.is_whitespace()).collect();
+            out.lines
+                .push(format!("{indent}{}", replacement.to_config_line(&vars)));
         } else {
-            // No modifiers - just key
-            parts.push(String::new());
+            out.lines.push(line.to_string());
         }
-
-        // Add key
-        parts.push(binding.key_combo.key.clone());
-
-        // Add dispatcher
-        parts.push(binding.dispatcher.clone());
-
-        // Add args if present
-        if let Some(args) = &binding.args {
-            parts.push(args.clone());
-        }
-
-        // Format: bind_type = comma,separated,parts
-        // Example: bind = SUPER, K, exec, firefox
-        format!("{} = {}", binding.bind_type, parts.join(", "))
+        out.last_bind_line
+            .insert(binding.submap.clone(), out.lines.len() - 1);
     }
+
+    out
 }
 
 #[cfg(unix)]
 fn current_uid() -> Option<u32> {
-    fs::metadata("/proc/self").ok().map(|metadata| metadata.uid())
+    fs::metadata("/proc/self")
+        .ok()
+        .map(|metadata| metadata.uid())
 }
 
 #[cfg(test)]

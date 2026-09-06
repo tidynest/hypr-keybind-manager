@@ -29,17 +29,18 @@
 
 use std::{
     cell::RefCell,
+    collections::HashMap,
     fs,
-    fs::read_to_string,
     path::{Path, PathBuf},
     process::Command,
     rc::Rc,
 };
 
-use crate::config::{validator::ConfigValidator, ConfigError, ConfigManager};
+use crate::config::{
+    ConfigError, ConfigFormat, ConfigManager, load_bindings_from, validator::ConfigValidator,
+};
 use crate::core::{
-    parser::parse_config_file, validator as injection_validator, Conflict, ConflictDetector,
-    KeyCombo, Keybinding, Modifier,
+    Conflict, ConflictDetector, KeyCombo, Keybinding, Modifier, validator as injection_validator,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -80,6 +81,10 @@ pub struct Controller {
     undo_stack: RefCell<Vec<Vec<Keybinding>>>,
     /// Redo history of complete binding snapshots
     redo_stack: RefCell<Vec<Vec<Keybinding>>>,
+    /// Bindings the editor cannot rewrite (Lua configs), with the reason
+    read_only: RefCell<HashMap<Keybinding, String>>,
+    /// Hash of the main file as it was after this app last wrote it
+    last_written: RefCell<Option<u64>>,
 }
 
 const HISTORY_LIMIT: usize = 20;
@@ -120,7 +125,44 @@ impl Controller {
             current_search_query: RefCell::new(String::new()),
             undo_stack: RefCell::new(Vec::new()),
             redo_stack: RefCell::new(Vec::new()),
+            read_only: RefCell::new(HashMap::new()),
+            last_written: RefCell::new(None),
         })
+    }
+
+    /// Whether the config file on disk is exactly what this app last wrote
+    ///
+    /// Lets the file watcher tell the app's own writes apart from edits made
+    /// in another program.
+    pub fn file_matches_last_write(&self) -> bool {
+        let Some(expected) = *self.last_written.borrow() else {
+            return false;
+        };
+        fs::read_to_string(self.config_path())
+            .map(|content| content_hash(&content) == expected)
+            .unwrap_or(false)
+    }
+
+    /// Records the main file's content after a write by this app
+    fn remember_written_file(&self) {
+        *self.last_written.borrow_mut() = fs::read_to_string(self.config_path())
+            .ok()
+            .map(|content| content_hash(&content));
+    }
+
+    /// Which language the managed config is written in
+    pub fn config_format(&self) -> ConfigFormat {
+        self.config_manager.borrow().format()
+    }
+
+    /// Why `binding` cannot be edited or deleted, `None` when it can
+    pub fn read_only_reason(&self, binding: &Keybinding) -> Option<String> {
+        self.read_only.borrow().get(binding).cloned()
+    }
+
+    /// How many loaded bindings are read-only
+    pub fn read_only_count(&self) -> usize {
+        self.read_only.borrow().len()
     }
 
     /// Gets the config file path
@@ -149,13 +191,9 @@ impl Controller {
     /// # Ok::<(), hypr_keybind_manager::config::ConfigError>(())
     /// ```
     pub fn load_keybindings(&self) -> Result<usize, ConfigError> {
-        // Read config content from ConfigManager
-        let config_manager = self.config_manager.borrow();
-        let content = config_manager.read_config()?;
-
-        // Parse keybindings using existing parser
-        let bindings = parse_config_file(&content, Path::new(""))
-            .map_err(|e| ConfigError::ValidationFailed(e.to_string()))?;
+        let loaded = self.config_manager.borrow().load_bindings()?;
+        let bindings = loaded.bindings;
+        *self.read_only.borrow_mut() = loaded.read_only;
 
         let count = bindings.len();
 
@@ -170,6 +208,13 @@ impl Controller {
         *self.conflict_detector.borrow_mut() = detector;
 
         Ok(count)
+    }
+
+    fn ensure_editable(&self, binding: &Keybinding) -> Result<(), String> {
+        match self.read_only_reason(binding) {
+            Some(reason) => Err(format!("This binding is read-only: it {reason}")),
+            None => Ok(()),
+        }
     }
 
     fn record_undo_snapshot(&self) {
@@ -194,7 +239,9 @@ impl Controller {
         self.config_manager
             .borrow_mut()
             .write_bindings(bindings)
-            .map_err(|e| format!("Failed to write changes to config: {}", e))
+            .map_err(|e| format!("Failed to write changes to config: {}", e))?;
+        self.remember_written_file();
+        Ok(())
     }
 
     fn replace_bindings(&self, new_bindings: Vec<Keybinding>) {
@@ -268,14 +315,11 @@ impl Controller {
                     return true;
                 }
 
-                // Search in args
-                if let Some(args) = &binding.args {
-                    if args.to_lowercase().contains(&query_lower) {
-                        return true;
-                    }
-                }
-
-                false
+                // Search in args, description and submap
+                [&binding.args, &binding.description, &binding.submap]
+                    .into_iter()
+                    .flatten()
+                    .any(|text| text.to_lowercase().contains(&query_lower))
             })
             .cloned()
             .collect()
@@ -330,12 +374,14 @@ impl Controller {
     pub fn get_bindings_for_key_combo(
         &self,
         key_combo: &KeyCombo,
+        submap: Option<&str>,
         exclude: Option<&Keybinding>,
     ) -> Vec<Keybinding> {
         self.keybindings
             .borrow()
             .iter()
             .filter(|binding| binding.key_combo == *key_combo)
+            .filter(|binding| binding.submap.as_deref() == submap)
             .filter(|binding| exclude != Some(*binding))
             .cloned()
             .collect()
@@ -345,9 +391,10 @@ impl Controller {
     pub fn is_key_combo_available(
         &self,
         key_combo: &KeyCombo,
+        submap: Option<&str>,
         exclude: Option<&Keybinding>,
     ) -> bool {
-        self.get_bindings_for_key_combo(key_combo, exclude)
+        self.get_bindings_for_key_combo(key_combo, submap, exclude)
             .is_empty()
     }
 
@@ -355,6 +402,7 @@ impl Controller {
     pub fn get_key_combo_assistance(
         &self,
         key_combo: Option<&KeyCombo>,
+        submap: Option<&str>,
         exclude: Option<&Keybinding>,
     ) -> KeyComboAssistance {
         let Some(key_combo) = key_combo else {
@@ -364,7 +412,7 @@ impl Controller {
             };
         };
 
-        let in_use = self.get_bindings_for_key_combo(key_combo, exclude);
+        let in_use = self.get_bindings_for_key_combo(key_combo, submap, exclude);
         if in_use.is_empty() {
             KeyComboAssistance {
                 availability: KeyComboAvailability::Available,
@@ -373,7 +421,13 @@ impl Controller {
         } else {
             KeyComboAssistance {
                 availability: KeyComboAvailability::InUse(in_use),
-                suggestions: self.suggest_key_combos(&key_combo.modifiers, exclude, 5, key_combo),
+                suggestions: self.suggest_key_combos(
+                    &key_combo.modifiers,
+                    submap,
+                    exclude,
+                    5,
+                    key_combo,
+                ),
             }
         }
     }
@@ -382,6 +436,7 @@ impl Controller {
     pub fn suggest_key_combos(
         &self,
         modifiers: &[Modifier],
+        submap: Option<&str>,
         exclude: Option<&Keybinding>,
         limit: usize,
         original: &KeyCombo,
@@ -392,7 +447,7 @@ impl Controller {
             .into_iter()
             .map(|key| KeyCombo::new(modifiers.clone(), key))
             .filter(|candidate| candidate != original)
-            .filter(|candidate| self.is_key_combo_available(candidate, exclude))
+            .filter(|candidate| self.is_key_combo_available(candidate, submap, exclude))
             .take(limit)
             .collect()
     }
@@ -497,6 +552,8 @@ impl Controller {
     ///     bind_type: BindType::Bind,
     ///     dispatcher: "exec".to_string(),
     ///     args: Some("firefox".to_string()),
+    ///     description: None,
+    ///     submap: None,
     /// };
     ///
     /// controller.delete_keybinding(&binding)?;
@@ -504,6 +561,7 @@ impl Controller {
     /// # }
     /// ```
     pub fn delete_keybinding(&self, binding: &Keybinding) -> Result<(), String> {
+        self.ensure_editable(binding)?;
         self.record_undo_snapshot();
         let mut bindings = self.keybindings.borrow_mut();
         bindings.retain(|b| b != binding);
@@ -591,10 +649,11 @@ impl Controller {
             .restore_backup(backup_path)
             .map_err(|e| format!("Failed to restore backup: {}", e))?;
 
-        // Reload keybindings from the restored config
+        // Reload keybindings from the restored config; the snapshot lets Undo revert the restore
+        self.remember_written_file();
+        self.record_undo_snapshot();
         self.load_keybindings()
             .map_err(|e| format!("Failed to reload keybindings: {}", e))?;
-        self.clear_history();
 
         Ok(())
     }
@@ -641,13 +700,10 @@ impl Controller {
     pub fn import_from(&self, import_path: &Path, mode: ImportMode) -> Result<(), String> {
         self.record_undo_snapshot();
 
-        // Read the import file
-        let content = read_to_string(import_path)
-            .map_err(|e| format!("Failed to read import file: {}", e))?;
-
-        // Parse bindings from import file
-        let imported_bindings = parse_config_file(&content, import_path)
-            .map_err(|e| format!("Failed to parse import file: {}", e))?;
+        // Either format can be imported; read-only Lua binds still copy as plain bindings
+        let imported_bindings = load_bindings_from(import_path)
+            .map_err(|e| format!("Failed to read import file: {}", e))?
+            .bindings;
 
         // Handle import mode
         match mode {
@@ -663,7 +719,9 @@ impl Controller {
                 let mut existing = self.keybindings.borrow_mut();
                 for binding in imported_bindings.clone() {
                     // Check if binding already exists (same key combo)
-                    let exists = existing.iter().any(|b| b.key_combo == binding.key_combo);
+                    let exists = existing
+                        .iter()
+                        .any(|b| b.key_combo == binding.key_combo && b.submap == binding.submap);
                     if !exists {
                         existing.push(binding);
                     }
@@ -672,12 +730,7 @@ impl Controller {
         }
 
         let bindings: Vec<_> = self.keybindings.borrow().clone();
-        if let Err(e) = self
-            .config_manager
-            .borrow_mut()
-            .write_bindings(&bindings)
-            .map_err(|e| format!("Failed to write imported bindings: {}", e))
-        {
+        if let Err(e) = self.write_snapshot(&bindings) {
             let previous = self.undo_stack.borrow_mut().pop();
             if let Some(previous) = previous {
                 self.replace_bindings(previous);
@@ -714,6 +767,7 @@ impl Controller {
     /// }
     /// ```
     pub fn update_keybinding(&self, old: &Keybinding, new: Keybinding) -> Result<(), String> {
+        self.ensure_editable(old)?;
         self.record_undo_snapshot();
         let mut bindings = self.keybindings.borrow_mut();
         let position = bindings.iter().position(|b| b == old);
@@ -803,13 +857,34 @@ impl Controller {
     /// # Ok::<(), String>(())
     /// ```
     pub fn apply_to_hyprland(&self) -> Result<(), String> {
-        Command::new("hyprctl")
+        let output = Command::new("hyprctl")
             .arg("reload")
             .output()
             .map_err(|e| format!("Failed to run hyprctl: {}", e))?;
 
-        Ok(())
+        if output.status.success() {
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let detail = if stderr.trim().is_empty() {
+                stdout.trim()
+            } else {
+                stderr.trim()
+            };
+            Err(format!(
+                "hyprctl reload exited with {}: {}",
+                output.status, detail
+            ))
+        }
     }
+}
+
+fn content_hash(content: &str) -> u64 {
+    use std::hash::{DefaultHasher, Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    content.hash(&mut hasher);
+    hasher.finish()
 }
 
 fn candidate_keys() -> Vec<&'static str> {

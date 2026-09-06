@@ -321,7 +321,17 @@ fn shannon_entropy(data: &str) -> f64 {
 
 **Retention**: User-configurable (default: keep all backups).
 
-### 6. Permission Verification Warnings
+**Sourced files**: A binding that lives in a `source =` file is written to that file, through the same transaction. Its backups go to a `backups/` directory next to that file.
+
+**Scope of a write**: Only bind lines whose binding changed are rewritten. Every other line is copied through unchanged, which keeps the reviewable diff of a config edit to the lines the user meant to touch.
+
+### 6. Lua Config Sandbox
+
+A `hyprland.lua` config is executed to discover its binds. It runs in an embedded Lua 5.5 state with a restricted environment: no `io`, no `load`/`dofile`, no `os.execute`, `require` limited to files inside the config directory, a 64 MiB memory limit and a 20 million instruction limit. Every `hl` function is a stub; callbacks passed to `hl.on` or `hl.timer` are never called. The config is the user's own file that Hyprland itself executes, so this is a guard against mistakes and endless loops rather than a trust boundary.
+
+Text written back into a Lua config is rendered as Lua string literals (keys, commands, descriptions), dispatcher paths are restricted to `[a-z0-9_.]`, and other arguments must evaluate as a literal in an empty environment. Dialog input cannot become code.
+
+### 7. Permission Verification Warnings
 
 On startup, the application checks the target config file and warns when:
 - The file is world-readable
@@ -500,4 +510,4 @@ The author thanks:
 ---
 
 **Last Updated**: 2025-11-01
-**Version**: 1.3.0
+**Version**: 1.4.0

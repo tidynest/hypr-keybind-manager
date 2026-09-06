@@ -27,12 +27,13 @@
 //! comprehensive unit testing without requiring a display server.
 
 pub mod conflict;
+pub mod lua_config;
 pub mod parser;
 pub mod sandbox;
 pub mod types;
 pub mod validator;
 
-pub use validator::{validate_keybinding, ValidationError};
+pub use validator::{ValidationError, validate_keybinding};
 pub use {
     conflict::{Conflict, ConflictDetector},
     types::*,

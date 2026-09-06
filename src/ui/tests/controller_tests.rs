@@ -21,8 +21,8 @@ use tempfile::TempDir;
 
 use crate::{
     core::{BindType, KeyCombo, Keybinding, Modifier},
-    ui::controller::{KeyComboAssistance, KeyComboAvailability},
     ui::Controller,
+    ui::controller::{KeyComboAssistance, KeyComboAvailability},
 };
 
 /// Helper: Creates test config with known content
@@ -253,6 +253,8 @@ fn test_search_persists_after_add() {
         key_combo: KeyCombo::new(vec![Modifier::Super], "X"),
         dispatcher: "exec".to_string(),
         args: Some("code".to_string()),
+        description: None,
+        submap: None,
     };
 
     controller.add_keybinding(new_binding).unwrap();
@@ -316,7 +318,7 @@ fn test_key_combo_assistance_marks_busy_combo_as_in_use() {
     controller.load_keybindings().unwrap();
 
     let combo = KeyCombo::new(vec![Modifier::Super], "k");
-    let assistance = controller.get_key_combo_assistance(Some(&combo), None);
+    let assistance = controller.get_key_combo_assistance(Some(&combo), None, None);
 
     match assistance.availability {
         KeyComboAvailability::InUse(bindings) => {
@@ -333,7 +335,7 @@ fn test_key_combo_assistance_marks_free_combo_as_available() {
     controller.load_keybindings().unwrap();
 
     let combo = KeyCombo::new(vec![Modifier::Super], "X");
-    let assistance = controller.get_key_combo_assistance(Some(&combo), None);
+    let assistance = controller.get_key_combo_assistance(Some(&combo), None, None);
 
     assert_eq!(
         assistance,
@@ -357,7 +359,7 @@ fn test_key_combo_assistance_ignores_original_binding_when_editing() {
         .unwrap();
 
     let assistance =
-        controller.get_key_combo_assistance(Some(&original.key_combo), Some(&original));
+        controller.get_key_combo_assistance(Some(&original.key_combo), None, Some(&original));
 
     assert_eq!(
         assistance.availability,
@@ -373,7 +375,7 @@ fn test_key_combo_suggestions_skip_used_combos_and_preserve_modifier_set() {
     controller.load_keybindings().unwrap();
 
     let original = KeyCombo::new(vec![Modifier::Super], "K");
-    let suggestions = controller.suggest_key_combos(&original.modifiers, None, 5, &original);
+    let suggestions = controller.suggest_key_combos(&original.modifiers, None, None, 5, &original);
 
     assert_eq!(suggestions.len(), 5);
     assert_eq!(suggestions[0], KeyCombo::new(vec![Modifier::Super], "A"));
@@ -386,7 +388,7 @@ fn test_key_combo_suggestions_skip_used_combos_and_preserve_modifier_set() {
     assert!(
         suggestions
             .iter()
-            .all(|combo| controller.is_key_combo_available(combo, None)),
+            .all(|combo| controller.is_key_combo_available(combo, None, None)),
         "Suggestions should only contain free combos"
     );
 }
@@ -398,7 +400,7 @@ fn test_key_combo_assistance_matches_loaded_binding_with_different_modifier_orde
     controller.load_keybindings().unwrap();
 
     let typed_combo = KeyCombo::new(vec![Modifier::Alt, Modifier::Super], "1");
-    let assistance = controller.get_key_combo_assistance(Some(&typed_combo), None);
+    let assistance = controller.get_key_combo_assistance(Some(&typed_combo), None, None);
 
     match assistance.availability {
         KeyComboAvailability::InUse(bindings) => {
@@ -420,6 +422,8 @@ fn test_undo_reverts_added_binding() {
         key_combo: KeyCombo::new(vec![Modifier::Super], "X"),
         dispatcher: "exec".to_string(),
         args: Some("code".to_string()),
+        description: None,
+        submap: None,
     };
 
     controller.add_keybinding(new_binding).unwrap();
@@ -429,10 +433,12 @@ fn test_undo_reverts_added_binding() {
     controller.undo().unwrap();
 
     assert_eq!(controller.keybinding_count(), 5);
-    assert!(!controller
-        .filter_keybindings("code")
-        .iter()
-        .any(|b| b.args.as_deref() == Some("code")));
+    assert!(
+        !controller
+            .filter_keybindings("code")
+            .iter()
+            .any(|b| b.args.as_deref() == Some("code"))
+    );
     assert!(controller.can_redo());
 }
 
@@ -447,6 +453,8 @@ fn test_redo_reapplies_undone_change() {
         key_combo: KeyCombo::new(vec![Modifier::Super], "X"),
         dispatcher: "exec".to_string(),
         args: Some("code".to_string()),
+        description: None,
+        submap: None,
     };
 
     controller.add_keybinding(new_binding).unwrap();

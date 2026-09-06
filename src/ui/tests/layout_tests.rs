@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ui::builders::layout::{clamp_paned_position, IDEAL_RIGHT_PANEL_WIDTH};
+use crate::ui::builders::layout::{IDEAL_RIGHT_PANEL_WIDTH, clamp_paned_position};
 
 #[test]
 fn test_clamp_paned_position_uses_startup_width() {

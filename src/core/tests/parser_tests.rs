@@ -115,3 +115,49 @@ binde = $mainMod SHIFT, R, exec, wofi
     let bindings = result.unwrap();
     assert_eq!(bindings.len(), 2);
 }
+
+#[test]
+fn test_parse_bindd_description_and_other_flags() {
+    let (_, binding) = parse_bind_line("bindd = SUPER, T, Open terminal, exec, kitty").unwrap();
+    assert!(binding.bind_type.has_description());
+    assert_eq!(binding.description, Some("Open terminal".to_string()));
+    assert_eq!(binding.dispatcher, "exec");
+    assert_eq!(binding.args, Some("kitty".to_string()));
+
+    let (_, binding) = parse_bind_line("bindnt = , XF86AudioMute, exec, mute").unwrap();
+    assert_eq!(binding.bind_type.to_string(), "bindnt");
+    assert_eq!(binding.key_combo.key, "XF86AudioMute");
+
+    let err = parse_config_file("bindx = SUPER, K, exec, x", Path::new("t.conf"))
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("unknown bind flag 'x'"), "{err}");
+}
+
+#[test]
+fn test_parse_submaps_trailing_comments_and_sources() {
+    let dir = tempfile::tempdir().unwrap();
+    let main = dir.path().join("hyprland.conf");
+    let extra = dir.path().join("extra.conf");
+    std::fs::write(&extra, "bind = $mainMod, E, exec, thunar\n").unwrap();
+    let content = "$mainMod = SUPER\nbind = $mainMod, R, submap, resize # enter\nsubmap = resize\nbinde = , right, resizeactive, 10 0\nbind = , escape, submap, reset\nsubmap = reset\nsource = ./extra.conf\nsource = ./missing.conf\n";
+
+    let parsed = parse_config_tree(content, &main).unwrap();
+    assert_eq!(parsed.files, vec![main.clone(), extra.clone()]);
+    let bindings = parsed.bindings;
+    assert_eq!(bindings.len(), 4);
+    assert_eq!(
+        bindings[0].args,
+        Some("resize".to_string()),
+        "trailing comment stripped"
+    );
+    assert_eq!(bindings[0].submap, None);
+    assert_eq!(bindings[1].submap, Some("resize".to_string()));
+    assert_eq!(bindings[2].submap, Some("resize".to_string()));
+    assert_eq!(
+        bindings[3].args,
+        Some("thunar".to_string()),
+        "sourced file read"
+    );
+    assert_eq!(bindings[3].submap, None);
+}

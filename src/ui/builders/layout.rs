@@ -17,44 +17,42 @@
 //! Creates the main application layout structure.
 
 use crate::ui::{
-    components::{ConflictPanel, DetailsPanel, KeybindList, SearchBar},
     Controller,
+    components::{ConflictPanel, DetailsPanel, KeybindList, SearchBar, StatusBanner},
 };
-use gtk4::{prelude::*, Box as GtkBox, Button, Orientation, Paned};
+use gtk4::{
+    Box as GtkBox, CallbackAction, Orientation, Paned, Shortcut, ShortcutController, ShortcutScope,
+    ShortcutTrigger, prelude::*,
+};
 use std::rc::Rc;
 
 pub const DEFAULT_WINDOW_WIDTH: i32 = 1000;
-pub const IDEAL_RIGHT_PANEL_WIDTH: i32 = 280;
+pub const IDEAL_RIGHT_PANEL_WIDTH: i32 = 300;
 pub const MIN_LEFT_PANEL_WIDTH: i32 = 520;
+
+/// The main window content and the components other modules talk to
+pub struct MainLayout {
+    pub main_vbox: GtkBox,
+    pub paned: Paned,
+    pub keybind_list: Rc<KeybindList>,
+    pub details_panel: Rc<DetailsPanel>,
+    pub conflict_panel: Rc<ConflictPanel>,
+    pub status_banner: Rc<StatusBanner>,
+}
 
 /// Builds the main application layout
 ///
-/// Creates a vertical box containing:
-/// - Conflict panel at top
-/// - Paned layout with:
-///   - Left: Search bar, buttons, keybinding list
-///   - Right: Details panel (fixed 280px width)
-///
-/// # Returns
-///
-/// Tuple of (main_vbox, keybind_list, details_panel, conflict_panel, add_button, backup_button)
-pub fn build_main_layout(
-    controller: Rc<Controller>,
-) -> (
-    GtkBox,
-    Paned,
-    Rc<KeybindList>,
-    Rc<DetailsPanel>,
-    Rc<ConflictPanel>,
-    Button,
-    Button,
-) {
-    // Create main vertical box
+/// A vertical box holding the conflict banner, the status banner and a
+/// paned area with the search bar and list on the left and the details
+/// panel on the right.
+pub fn build_main_layout(controller: Rc<Controller>) -> MainLayout {
     let main_vbox = GtkBox::new(Orientation::Vertical, 0);
 
-    // Create conflict panel at top
     let conflict_panel = Rc::new(ConflictPanel::new(controller.clone()));
     main_vbox.append(conflict_panel.widget());
+
+    let status_banner = Rc::new(StatusBanner::new());
+    main_vbox.append(status_banner.widget());
 
     let paned = Paned::new(Orientation::Horizontal);
     paned.set_wide_handle(true);
@@ -66,41 +64,33 @@ pub fn build_main_layout(
     left_vbox.set_margin_bottom(10);
     left_vbox.set_size_request(MIN_LEFT_PANEL_WIDTH, -1);
 
-    // Create SINGLE keybind list instance
     let keybind_list = Rc::new(KeybindList::new(controller.clone()));
 
-    // Create search bar
+    // Search bar, focusable from anywhere with Ctrl+F
     let search_bar = SearchBar::new();
     left_vbox.append(search_bar.widget());
 
-    let add_keybinding_button = Button::builder().label("➕ Add Keybinding").build();
-    add_keybinding_button.add_css_class("suggested-action");
-    add_keybinding_button.set_tooltip_text(Some("Create a new keybinding"));
-    add_keybinding_button.set_can_focus(true);
-    left_vbox.append(&add_keybinding_button);
+    let search_entry = search_bar.widget().clone();
+    let focus_search = CallbackAction::new(move |_, _| {
+        search_entry.grab_focus();
+        glib::Propagation::Stop
+    });
+    let shortcuts = ShortcutController::new();
+    shortcuts.set_scope(ShortcutScope::Global);
+    shortcuts.add_shortcut(Shortcut::new(
+        ShortcutTrigger::parse_string("<Control>f"),
+        Some(focus_search),
+    ));
+    left_vbox.add_controller(shortcuts);
 
-    let backup_button = Button::builder().label("📦 Manage Backups").build();
-    backup_button.set_tooltip_text(Some("Browse, restore, or delete automatic backups"));
-    backup_button.set_can_focus(true);
-    left_vbox.append(&backup_button);
-
-    // Add keybind list to left side
     left_vbox.append(keybind_list.widget());
 
-    // Wire up search functionality manually
     let keybind_list_for_search = keybind_list.clone();
     let controller_for_search = controller.clone();
-
     search_bar.widget().connect_search_changed(move |entry| {
         let query = entry.text().to_string();
-        eprintln!("🔍 Search: '{}'", query);
-
-        // Store the query in Controller (single source of truth)
-        controller_for_search.set_search_query(query.clone());
-
-        // Update the view with filtered results
-        let filtered = controller_for_search.get_current_view();
-        keybind_list_for_search.update_with_bindings(filtered);
+        controller_for_search.set_search_query(query);
+        keybind_list_for_search.update_with_bindings(controller_for_search.get_current_view());
     });
 
     let details_panel = Rc::new(DetailsPanel::new(controller.clone()));
@@ -120,15 +110,14 @@ pub fn build_main_layout(
 
     main_vbox.append(&paned);
 
-    (
+    MainLayout {
         main_vbox,
         paned,
         keybind_list,
         details_panel,
         conflict_panel,
-        add_keybinding_button,
-        backup_button,
-    )
+        status_banner,
+    }
 }
 
 pub fn clamp_paned_position(window_width: i32, requested_position: i32) -> i32 {

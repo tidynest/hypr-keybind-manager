@@ -20,13 +20,15 @@
 use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use std::{
     path::PathBuf,
-    sync::mpsc::{channel, Receiver},
+    sync::mpsc::{Receiver, channel},
 };
 
 /// Watches Hyprland.conf file for modifications and notifies via callback
 pub struct FileWatcher {
     _watcher: RecommendedWatcher,
     rx: Receiver<notify::Result<Event>>,
+    /// The config file, events for other files in its directory are ignored
+    path: PathBuf,
 }
 
 impl FileWatcher {
@@ -40,23 +42,36 @@ impl FileWatcher {
             Config::default(),
         )?;
 
-        watcher.watch(&path, RecursiveMode::NonRecursive)?;
+        // Watch the directory, not the file: the app replaces the file by
+        // atomic rename, and a watch on the old inode would go dead after
+        // the first write.
+        let path = path.canonicalize().unwrap_or(path);
+        let dir = path.parent().ok_or("config file has no parent directory")?;
+        watcher.watch(dir, RecursiveMode::NonRecursive)?;
 
         Ok(FileWatcher {
             _watcher: watcher,
             rx,
+            path,
         })
     }
 
     /// Checks for file modification events (non-blocking)
     pub fn check_for_changes(&self) -> bool {
+        let mut changed = false;
         while let Ok(event_result) = self.rx.try_recv() {
-            if let Ok(event) = event_result {
-                if matches!(event.kind, notify::EventKind::Modify(_)) {
-                    return true;
-                }
+            let Ok(event) = event_result else { continue };
+            let touches_config = event.paths.iter().any(|p| p == &self.path);
+            let is_write = matches!(
+                event.kind,
+                notify::EventKind::Modify(_)
+                    | notify::EventKind::Create(_)
+                    | notify::EventKind::Remove(_)
+            );
+            if touches_config && is_write {
+                changed = true;
             }
         }
-        false
+        changed
     }
 }

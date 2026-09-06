@@ -6,6 +6,36 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-06
+
+### Added
+- Lua configs (`hyprland.lua`, Hyprland 0.55+) are supported. The file runs in a sandboxed embedded Lua with a recording `hl` stub, so binds built with `mainMod .. " + Q"`, loops and `require`d modules are all found. Single-line `hl.bind(...)` statements can be edited and deleted in place, keeping a `mainMod ..` prefix; new binds are appended. Loop-generated binds, function actions and `local x = hl.bind(...)` are shown read-only with the reason.
+- The default config path is `hyprland.conf` when it exists, otherwise `hyprland.lua`.
+- Every Hyprland bind flag combination is parsed (`bindd`, `bindnt`, `bindle`, ...) instead of only six variants; a config using any other flag no longer fails to load.
+- `bindd` descriptions are read, shown in the list tooltip and details panel, and editable in the dialog.
+- `source =` lines are followed, relative to the including file; bindings from sourced files are shown and edited in the file they came from.
+- Submaps are recorded per binding, shown as a `[name]` prefix in the list, and conflicts are detected per submap.
+- Record button in the edit dialog fills the key combination from a key press.
+- Searchable dispatcher list in the edit dialog, limited to what the validator accepts.
+- Status banner for apply results, imports and on-disk reloads.
+- Conflicting rows are highlighted; list footer shows shown/total/conflict counts.
+- Keyboard shortcuts: Enter or double-click edits, Delete deletes, Ctrl+N adds, Ctrl+F focuses search.
+- `list --json` prints bindings as JSON.
+- A missing config file opens a file chooser instead of failing at startup.
+
+### Changed
+- Writing bindings edits the config in place: only changed lines are replaced, removed or added, so `$mainMod`, comments, indentation and ordering are kept.
+- Key names keep their case (`Return`, `XF86AudioMute`) and compare case-insensitively; modifiers sort SUPER first.
+- Add and Backups moved to the header bar with symbolic icons; emoji labels removed.
+- Import asks for the file before the replace/merge choice; restoring a backup can be undone.
+- `hyprctl reload` failures are reported in a dialog instead of only on stderr.
+
+## [1.3.1] - 2026-04-15
+
+### Changed
+- Updated to Rust edition 2024.
+- Bumped all dependencies to latest compatible versions.
+
 ## [1.3.0] - 2026-03-27
 
 ### Added

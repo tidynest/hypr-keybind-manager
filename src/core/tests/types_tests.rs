@@ -53,6 +53,8 @@ fn test_keybinding_display() {
         bind_type: BindType::Bind,
         dispatcher: "exec".to_string(),
         args: Some("firefox".to_string()),
+        description: None,
+        submap: None,
     };
 
     let display = format!("{}", binding);
@@ -70,6 +72,8 @@ fn test_keybinding_no_args() {
         bind_type: BindType::Bind,
         dispatcher: "killactive".to_string(),
         args: None,
+        description: None,
+        submap: None,
     };
 
     let display = format!("{}", binding);

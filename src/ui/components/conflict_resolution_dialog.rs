@@ -20,14 +20,14 @@
 //! deletions and closes when all conflicts in view are resolved.
 
 use gtk4::{
-    gdk, prelude::*, Align, Box as GtkBox, Button, EventControllerKey, Label, Orientation,
-    ScrolledWindow, Window,
+    Align, Box as GtkBox, Button, EventControllerKey, Label, Orientation, ScrolledWindow, Window,
+    gdk, prelude::*,
 };
 use std::rc::Rc;
 
 use crate::ui::{
-    components::{ConflictPanel, KeybindList},
     Controller,
+    components::{ConflictPanel, KeybindList},
 };
 
 pub struct ConflictResolutionDialog {
@@ -89,7 +89,12 @@ impl ConflictResolutionDialog {
             group_box.set_margin_start(20);
 
             // Header showing conflicted key combo
-            let header = Label::new(Some(&format!("⚠️ Conflict: {}", conflict.key_combo)));
+            let where_ = conflict
+                .submap
+                .as_deref()
+                .map(|s| format!(" in submap {s}"))
+                .unwrap_or_default();
+            let header = Label::new(Some(&format!("Conflict: {}{where_}", conflict.key_combo)));
             header.set_halign(Align::Start);
             header.add_css_class("conflict-header");
             group_box.append(&header);
@@ -111,9 +116,13 @@ impl ConflictResolutionDialog {
                 label.set_hexpand(true);
                 binding_row.append(&label);
 
-                // Delete button
+                // Delete button, disabled for binds the editor cannot rewrite
                 let delete_button = Button::with_label("Delete");
                 delete_button.add_css_class("destructive-action");
+                if let Some(reason) = controller.read_only_reason(binding) {
+                    delete_button.set_sensitive(false);
+                    delete_button.set_tooltip_text(Some(&format!("Read-only: it {reason}")));
+                }
                 binding_row.append(&delete_button);
 
                 // Wire up delete handler

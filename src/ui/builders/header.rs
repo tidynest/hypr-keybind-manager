@@ -14,66 +14,79 @@
 
 //! Header bar builder
 //!
-//! Creates the application header bar with menu
+//! Creates the application header bar: undo/redo, Add, Backups, Apply to
+//! Hyprland and the application menu. Buttons use symbolic icons from the
+//! icon theme so they match whatever GTK theme is active.
 
-use gtk4::{gio::Menu, prelude::WidgetExt, Button, HeaderBar, MenuButton};
+use gtk4::{
+    Box as GtkBox, Button, HeaderBar, Image, Label, MenuButton, Orientation, gio::Menu, prelude::*,
+};
 
-/// Builds the application header bar with File menu
-///
-/// Creates a HeaderBar containing a menu button with:
-/// - Export... (app.export action)
-/// - Import... (app.import action)
-/// - Quit (app.quit action)
-///
-/// # Returns
-///
-/// The configured HeaderBar widget
-pub fn build_header_bar() -> (HeaderBar, Button, Button) {
+/// The header bar and the buttons other modules wire up
+pub struct HeaderWidgets {
+    pub header_bar: HeaderBar,
+    pub add_button: Button,
+    pub backup_button: Button,
+}
+
+/// A button showing a symbolic icon followed by a text label
+pub fn icon_button(icon: &str, label: &str) -> Button {
+    let content = GtkBox::new(Orientation::Horizontal, 6);
+    content.append(&Image::from_icon_name(icon));
+    content.append(&Label::new(Some(label)));
+    Button::builder().child(&content).build()
+}
+
+/// Builds the application header bar
+pub fn build_header_bar() -> HeaderWidgets {
     let header_bar = HeaderBar::new();
 
-    // Menu options
     let menu = Menu::new();
     menu.append(Some("Export..."), Some("app.export"));
     menu.append(Some("Import..."), Some("app.import"));
-    menu.append(Some("Quit..."), Some("app.quit"));
+    menu.append(Some("Quit"), Some("app.quit"));
 
-    // Menu button
     let menu_button = MenuButton::new();
     menu_button.set_icon_name("open-menu-symbolic");
     menu_button.set_menu_model(Some(&menu));
     menu_button.set_tooltip_text(Some("Open the application menu"));
-    menu_button.set_can_focus(true);
-
-    // Apply Hyprland button (left side)
-    let apply_button = Button::builder()
-        .label("Apply to Hyprland")
-        .action_name("app.apply-to-hyprland")
-        .tooltip_text("Reload Hyprland with current changes")
-        .build();
-    apply_button.set_focus_on_click(false);
-    apply_button.set_can_focus(true);
 
     let undo_button = Button::builder()
-        .label("Undo")
+        .icon_name("edit-undo-symbolic")
         .action_name("app.undo")
-        .tooltip_text("Undo the last keybinding change (Ctrl+Z)")
+        .tooltip_text("Undo the last change (Ctrl+Z)")
+        .focus_on_click(false)
         .build();
-    undo_button.set_focus_on_click(false);
-    undo_button.set_can_focus(true);
 
     let redo_button = Button::builder()
-        .label("Redo")
+        .icon_name("edit-redo-symbolic")
         .action_name("app.redo")
         .tooltip_text("Redo the last undone change (Ctrl+Shift+Z)")
+        .focus_on_click(false)
         .build();
-    redo_button.set_focus_on_click(false);
-    redo_button.set_can_focus(true);
 
-    apply_button.add_css_class("suggested-action"); // <- Blue highlight!
+    let add_button = icon_button("list-add-symbolic", "Add");
+    add_button.set_tooltip_text(Some("Create a new keybinding (Ctrl+N)"));
+
+    let backup_button = icon_button("document-open-recent-symbolic", "Backups");
+    backup_button.set_tooltip_text(Some("Browse, restore, or delete automatic backups"));
+
+    let apply_button = icon_button("view-refresh-symbolic", "Apply to Hyprland");
+    apply_button.set_action_name(Some("app.apply-to-hyprland"));
+    apply_button.set_tooltip_text(Some("Reload Hyprland with the saved config (Ctrl+R)"));
+    apply_button.set_focus_on_click(false);
+    apply_button.add_css_class("suggested-action");
+
     header_bar.pack_start(&undo_button);
     header_bar.pack_start(&redo_button);
-    header_bar.pack_start(&apply_button); // <- Left side
-    header_bar.pack_end(&menu_button); // <- Right side
+    header_bar.pack_start(&add_button);
+    header_bar.pack_end(&menu_button);
+    header_bar.pack_end(&apply_button);
+    header_bar.pack_end(&backup_button);
 
-    (header_bar, undo_button, redo_button)
+    HeaderWidgets {
+        header_bar,
+        add_button,
+        backup_button,
+    }
 }

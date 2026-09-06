@@ -13,9 +13,9 @@
 // limitations under the License.
 
 use super::super::*;
-use std::{fs, os::unix::fs::symlink, path::PathBuf, thread, time::Duration};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+use std::{fs, os::unix::fs::symlink, path::PathBuf, thread, time::Duration};
 use tempfile::TempDir;
 
 /// Helper: Creates a temporary config file for testing.
@@ -156,7 +156,9 @@ fn test_permission_warnings_for_unexpected_owner() {
     );
 
     assert!(
-        warnings.iter().any(|warning| warning.contains("owned by uid")),
+        warnings
+            .iter()
+            .any(|warning| warning.contains("owned by uid")),
         "Expected an ownership warning, got: {warnings:?}",
     );
 }

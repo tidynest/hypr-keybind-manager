@@ -34,13 +34,17 @@ use std::collections::HashMap;
 /// Uses a HashMap where keys are KeyCombos and values are vectors of all
 /// bindings using that combo. A conflict exists when any vector has length > 1.
 pub struct ConflictDetector {
-    /// Maps KeyCombo to all bindings using that combination.
-    bindings: HashMap<KeyCombo, Vec<Keybinding>>,
+    /// Maps (submap, KeyCombo) to all bindings using that combination.
+    /// The same combo in different submaps is not a conflict.
+    bindings: HashMap<(Option<String>, KeyCombo), Vec<Keybinding>>,
 }
 
 /// Represents a detected conflict between keybindings.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Conflict {
+    /// Submap the conflict lives in, `None` for the global map
+    pub submap: Option<String>,
+
     /// The key combination that has conflicts
     pub key_combo: KeyCombo,
 
@@ -62,7 +66,7 @@ impl ConflictDetector {
     pub fn add_binding(&mut self, binding: Keybinding) {
         // Clone KeyCombo for HashMap ownership
         self.bindings
-            .entry(binding.key_combo.clone())
+            .entry((binding.submap.clone(), binding.key_combo.clone()))
             .or_default()
             .push(binding);
     }
@@ -74,7 +78,8 @@ impl ConflictDetector {
         self.bindings
             .iter()
             .filter(|(_, bindings)| bindings.len() > 1)
-            .map(|(key_combo, bindings)| Conflict {
+            .map(|((submap, key_combo), bindings)| Conflict {
+                submap: submap.clone(),
                 key_combo: key_combo.clone(),
                 conflicting_bindings: bindings.clone(),
             })
@@ -84,9 +89,9 @@ impl ConflictDetector {
     /// Checks if a specific key combo has conflicts.
     ///
     /// Returns true if this KeyCombo has 2 or more bindings.
-    pub fn has_conflict(&self, key_combo: &KeyCombo) -> bool {
+    pub fn has_conflict(&self, submap: Option<&str>, key_combo: &KeyCombo) -> bool {
         self.bindings
-            .get(key_combo)
+            .get(&(submap.map(str::to_string), key_combo.clone()))
             .map(|bindings| bindings.len() > 1)
             .unwrap_or(false)
     }

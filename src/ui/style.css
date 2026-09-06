@@ -14,6 +14,18 @@ row {
     background-color: transparent;
 }
 
+/* Rows whose key combo is bound more than once */
+.conflict-row {
+    background-color: alpha(#f59e0b, 0.18);
+    border-left: 3px solid #d97706;
+}
+
+/* Count line under the keybinding list */
+.list-footer {
+    color: alpha(@theme_fg_color, 0.6);
+    font-size: 0.9em;
+}
+
 /* Hover effect for NON-selected rows */
 row:hover {
     background-color: alpha(@theme_bg_color, 0.3);
@@ -127,4 +139,27 @@ entry.search {
 /* Apply to Hyprland button hover effect */
 .suggested-action:hover {
     background-color: shade(@theme_selected_bg_color, 1.05);
+}
+
+/* Transient notice under the header bar */
+.status-banner {
+    background-color: alpha(@theme_selected_bg_color, 0.15);
+    border-left: 4px solid @theme_selected_bg_color;
+    border-radius: 8px;
+    padding: 6px 10px;
+}
+
+/* The rendered config line in the details panel */
+.config-line {
+    font-family: monospace;
+    font-size: 0.9em;
+}
+
+.conflict-header {
+    font-weight: bold;
+}
+
+/* Lua binds the editor cannot rewrite */
+.readonly-row {
+    opacity: 0.65;
 }

@@ -25,18 +25,26 @@
 
 **File**: `src/core/types.rs:40-55`
 
-**Decision**: Sort modifiers alphabetically and uppercase keys in the `KeyCombo::new()` constructor.
+**Decision**: Sort modifiers (SUPER, CTRL, SHIFT, ALT order) in the `KeyCombo::new()` constructor, keep the key name as written, and compare and hash the key case-insensitively.
 
 ```rust
 pub fn new(mut modifiers: Vec<Modifier>, key: &str) -> Self {
-    modifiers.sort_by_key(|m| format!("{:?}", m));
+    modifiers.sort_by_key(|m| *m as u8);
     modifiers.dedup();
     Self {
         modifiers,
-        key: key.to_uppercase(),
+        key: key.trim().to_string(),
+    }
+}
+
+impl PartialEq for KeyCombo {
+    fn eq(&self, other: &Self) -> bool {
+        self.modifiers == other.modifiers && self.key.eq_ignore_ascii_case(&other.key)
     }
 }
 ```
+
+Earlier versions uppercased the key. That made `Return` display as `RETURN` and wrote `XF86AUDIOMUTE` back into the config. Hyprland resolves keysyms case-insensitively, so equality lives in `PartialEq`/`Hash` and the text stays the user's.
 
 **Rationale**:
 - **Hash Consistency**: Ensures `SUPER+SHIFT+K` and `SHIFT+SUPER+K` produce identical hash values
@@ -99,31 +107,23 @@ SUPER+SHIFT+K  ==  SHIFT+SUPER+K  (same hash, correct)
 
 ## Parser Implementation
 
-### Two-Pass Parsing Strategy
+### Sequential Scan Shared With the Writer
 
-**File**: `src/core/parser.rs:50-100`
+**File**: `src/core/parser.rs` (`scan_lines`, `parse_config_tree`)
 
-**Decision**: First pass collects variables, second pass parses bindings.
+**Decision**: One pass per file classifies each line (binding, submap change, source, other) while collecting `$variables` and the current submap as it goes. The main file and every sourced file are scanned in the order Hyprland reads them.
 
 ```rust
-pub fn parse_config_file(content: &str, base_path: &Path) -> Result<Vec<Keybinding>, ParseError> {
-    // Pass 1: Collect all $variable definitions
-    let variables = collect_variables(content);
+pub fn scan_lines(content: &str, variables: &mut HashMap<String, String>)
+    -> Vec<(usize, Result<LineKind, ParseError>)>;
 
-    // Pass 2: Substitute variables and parse bindings
-    for line in content.lines() {
-        let substituted = substitute_variables(line, &variables);
-        if let Ok(binding) = parse_bind_line(&substituted) {
-            bindings.push(binding);
-        }
-    }
-}
+pub fn parse_config_tree(content: &str, file_path: &Path) -> Result<ParsedConfig, ParseError>;
 ```
 
 **Rationale**:
-- **Simplicity**: Avoids complex forward-reference handling
-- **Correctness**: Variables always defined before use (Hyprland convention)
-- **Clarity**: Two distinct phases easy to understand and debug
+- **Correctness**: Variables are defined before use in Hyprland, so sequential resolution matches the compositor, including redefinitions
+- **Submaps and sources need state**: Which submap a bind belongs to, and which file it came from, are only known while walking the file in order
+- **One scanner, two users**: `ConfigManager::write_bindings` runs the same `scan_lines` to find the lines it may touch, so a line is understood identically when read and when rewritten
 
 **Alternatives Considered**:
 1. **Single-pass with forward references** (Rejected)
@@ -188,37 +188,37 @@ fn parse_bind_line(input: &str) -> IResult<&str, Keybinding> {
 
 ---
 
-### Bind Type Ordering
+### Bind Type as a Flag Set
 
-**File**: `src/core/parser.rs:140`
+**File**: `src/core/types.rs` (`BindType`), `src/core/parser.rs` (`parse_bind_type`)
 
-**Decision**: Check `bindel` **before** `binde` in `alt()` combinator.
+**Decision**: `BindType` is a bit set over Hyprland's twelve flag letters, not an enum of six keywords. The parser reads `bind` followed by any letters and rejects only unknown ones.
 
 ```rust
+pub struct BindType { flags: u16 }
+
+impl BindType {
+    pub const Bind: Self = Self { flags: 0 };
+    pub const BindEL: Self = Self { flags: Self::bit('e') | Self::bit('l') };
+    pub fn from_flags(flags: &str) -> Result<Self, char>;
+    pub fn has(&self, flag: char) -> bool;
+}
+
 fn parse_bind_type(input: &str) -> IResult<&str, BindType> {
-    alt((
-        value(BindType::BindL, tag("bindl")),
-        value(BindType::BindR, tag("bindr")),
-        value(BindType::BindM, tag("bindm")),
-        value(BindType::BindEl, tag("bindel")),  // BEFORE binde
-        value(BindType::BindE, tag("binde")),    // AFTER bindel
-        value(BindType::Bind, tag("bind")),
-    ))(input)
+    map_res(
+        (tag("bind"), take_while(|c: char| c.is_ascii_alphabetic())),
+        |(_, flags)| BindType::from_flags(flags),
+    )
+    .parse(input)
 }
 ```
 
-**Rationale**: Longest match first prevents partial match bugs.
+**Rationale**: The enum approach failed the whole config on the first `bindd`, `bindnt` or `bindle` line, and users hit that on ordinary modern configs. Flags combine freely in Hyprland, so the type models them as a set. The six familiar names stay as constants so call sites and tests read as before.
 
-**Bug Scenario (if order was wrong)**:
-```
-Input: "bindel = ..."
-Wrong order: binde matches → leftover "l" → parse error
-Correct order: bindel matches → no leftover → success
-```
-
-**Nom Behavior**: `alt()` tries parsers in order, returns first success.
-
-**Key Insight**: When parsing keywords with common prefixes, **always check longer keywords first**.
+**Consequences**:
+- The `d` flag means a description field follows the key; `Keybinding::description` carries it and `to_config_line` derives the flag from the field
+- Flags render in one canonical order (`bindel`, never `bindle`); Hyprland accepts either
+- No `alt()` ordering problem exists any more, since the letters are read greedily
 
 ---
 
@@ -228,16 +228,16 @@ Correct order: bindel matches → no leftover → success
 
 **File**: `src/core/conflict.rs:25-50`
 
-**Decision**: Use `HashMap<KeyCombo, Vec<Keybinding>>` instead of nested loops.
+**Decision**: Use `HashMap<(Option<String>, KeyCombo), Vec<Keybinding>>` instead of nested loops. The submap is part of the key, so `escape` in a resize submap does not conflict with a global `escape`.
 
 ```rust
 pub struct ConflictDetector {
-    bindings: HashMap<KeyCombo, Vec<Keybinding>>,
+    bindings: HashMap<(Option<String>, KeyCombo), Vec<Keybinding>>,
 }
 
 pub fn add_binding(&mut self, binding: Keybinding) {
     self.bindings
-        .entry(binding.key_combo.clone())
+        .entry((binding.submap.clone(), binding.key_combo.clone()))
         .or_default()
         .push(binding);
 }
@@ -687,6 +687,41 @@ pub struct ConfigTransaction<'a> {  // 'a lifetime
 
 ---
 
+### In-Place Rewriting Instead of Regenerating the Bind Section
+
+**File**: `src/config/mod.rs` (`write_bindings`, `rewrite_file`, `Rewritten`)
+
+**Decision**: A write is a diff. The current file tree is parsed, the old and new binding lists are compared as multisets, and only lines whose binding was removed are replaced or dropped. Additions go after the last bind line of their submap.
+
+**What the previous approach did**: It skipped every bind line and emitted the whole new list at the position of the first one. One edit therefore expanded every `$mainMod` to `SUPER`, uppercased every key name, reordered modifiers, moved bindings out of their commented sections and left the section comments orphaned. For anyone who organises `hyprland.conf` by hand that is data loss.
+
+**Rules**:
+- A removed binding's line is replaced by the first added binding in the same submap, so an edit stays on its line and a new binding may take the slot of a deleted one
+- Untouched lines are copied byte for byte, including indentation and trailing comments
+- Rewritten lines get `$name` back when the modifiers or the arguments equal a variable's value; ties are broken by name so output is deterministic
+- Bindings from `source =` files are edited in that file through its own transaction and backup; new bindings always go to the main file
+- The diff is O(n·m) over two lists of a few hundred entries, which is well under a millisecond
+
+**Trade-off**: A binding that only changed in a sourced file's variable (`$term = kitty` edited to `alacritty` in the GUI) is written back as a literal on that one line, because the GUI edited the binding, not the variable. Everything the user did not touch keeps its variable.
+
+---
+
+### Lua Configs Are Run, Not Parsed
+
+**File**: `src/core/lua_config.rs`, `src/core/lua_prelude.lua`
+
+**Decision**: Read `hyprland.lua` by executing it in a sandboxed embedded Lua with a recording `hl` stub, and edit only lines that are a single `hl.bind(...)` statement.
+
+**Why not a text parser**: A real config builds keys with `mainMod .. " + Q"`, creates binds in `for` loops over tables, passes closures as actions and pulls modules in with `require`. A static scan sees none of that. Running the file sees exactly what Hyprland sees; on the owner's config the recorded count matches `hyprctl binds -j`.
+
+**Why not `hyprctl binds`**: The compositor reports Lua binds as dispatcher `__lua` with a function id, so it cannot say what a bind does, and it needs a running Hyprland.
+
+**Why line-based editing**: Rewriting arbitrary Lua is not possible in general. Because every recorded bind knows its file and line, a bind whose line is one `hl.bind(...)` call can be replaced whole. Binds created in loops share a line and are reported read-only with that reason, which is honest about what the editor can do. The `mainMod ..` prefix survives because the recorded keys value and the literal suffix on the line give the variable's value.
+
+**Sandbox**: the config gets `hl`, `string`, `table`, `math`, `utf8`, `os.getenv`/`date`/`time` and `require` limited to the config directory. No `io`, no `load`, no `os.execute`; 64 MiB memory limit; 20 million instruction limit. Values written back are Lua string literals or validated literals, so the edit dialog cannot inject code.
+
+---
+
 ### Backup Naming Convention
 
 **File**: `src/config/mod.rs:250`
@@ -978,18 +1013,16 @@ where F: Fn(&Keybinding) + 'static {
 
 ## Performance vs Simplicity Trade-offs
 
-### Case 1: Two-Pass Parsing
+### Case 1: Re-parsing on Every Write
 
-**Trade-off**: Read file twice (performance) vs Complex single-pass (simplicity)
+**Trade-off**: Parse the file tree again before each write (performance) vs keeping line positions in memory (complexity)
 
-**Decision**: **Favour simplicity** (two-pass)
+**Decision**: **Favour simplicity** (re-parse)
 
 **Rationale**:
-- File size: <10KB typical (reading twice = <1ms overhead)
-- Code clarity: Two distinct phases easy to understand
-- Maintainability: Future developers can modify without breaking
-
-**Benchmark**: 500 bindings, two-pass: 2.3ms, single-pass (hypothetical): ~2.1ms (0.2ms saved not worth complexity)
+- File size: <10KB typical, so a full scan is well under a millisecond
+- The file may have changed on disk since it was loaded; scanning what is there now is what makes the write safe
+- No line bookkeeping to keep in sync across undo, import and external edits
 
 ---
 
@@ -1082,4 +1115,4 @@ For questions or discussions about design decisions, please open an issue on Git
 ---
 
 **Last Updated**: 2026-03-27
-**Version**: 1.3.0
+**Version**: 1.4.0

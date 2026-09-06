@@ -47,10 +47,10 @@
 //! panel.refresh();  // Shows banner if conflicts exist
 //! ```
 
-use gtk4::{prelude::*, Box as GtkBox, Button, Label, Orientation, Revealer};
+use gtk4::{Box as GtkBox, Button, Label, Orientation, Revealer, prelude::*};
 use std::rc::Rc;
 
-use crate::ui::{components::KeybindList, Controller};
+use crate::ui::{Controller, components::KeybindList};
 
 /// Warning panel that displays when keybinding conflicts are detected
 ///

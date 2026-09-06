@@ -16,7 +16,10 @@ use super::super::*;
 use std::{fs, thread, time::Duration};
 use tempfile::TempDir;
 
-use crate::{BindType, KeyCombo, Modifier::Super};
+use crate::{
+    BindType, KeyCombo,
+    Modifier::{Shift, Super},
+};
 
 /// Helper to create a test keybinding
 fn create_test_binding() -> Keybinding {
@@ -25,6 +28,8 @@ fn create_test_binding() -> Keybinding {
         bind_type: BindType::Bind,
         dispatcher: "exec".to_string(),
         args: Some("kitty".to_string()),
+        description: None,
+        submap: None,
     }
 }
 
@@ -405,74 +410,133 @@ bind = SUPER, F, togglefloating
 // ============================================================================
 
 #[test]
-fn test_format_binding_with_modifiers() {
-    let temp_dir = TempDir::new().unwrap();
-    let config_path = temp_dir.path().join("hyprland.conf");
-    fs::write(&config_path, "initial\n").unwrap();
-
-    let manager = ConfigManager::new(config_path).unwrap();
-
+fn test_config_line_with_modifiers() {
     let binding = Keybinding {
         key_combo: KeyCombo::new(vec![Super], "K"),
         bind_type: BindType::Bind,
         dispatcher: "exec".to_string(),
         args: Some("firefox".to_string()),
+        description: None,
+        submap: None,
     };
 
-    let formatted = manager.format_binding(&binding);
-
-    // Should match Hyprland format: bind = SUPER, K, exec, firefox
-    assert!(formatted.contains("bind"));
-    assert!(formatted.contains("SUPER"));
-    assert!(formatted.contains("K"));
-    assert!(formatted.contains("exec"));
-    assert!(formatted.contains("firefox"));
-    assert!(formatted.contains("="));
-    assert!(formatted.contains(","));
+    assert_eq!(binding.to_string(), "bind = SUPER, K, exec, firefox");
 }
 
 #[test]
-fn test_format_binding_multiple_modifiers() {
+fn test_config_line_multiple_modifiers() {
+    let binding = Keybinding {
+        key_combo: KeyCombo::new(vec![Shift, Super], "M"),
+        bind_type: BindType::BindEL,
+        dispatcher: "exec".to_string(),
+        args: Some("kitty".to_string()),
+        description: None,
+        submap: None,
+    };
+
+    // Super first, as people write it in hyprland.conf
+    assert_eq!(binding.to_string(), "bindel = SUPER SHIFT, M, exec, kitty");
+}
+
+#[test]
+fn test_config_line_no_args_and_description() {
+    let binding = Keybinding {
+        key_combo: KeyCombo::new(vec![], "XF86AudioMute"),
+        bind_type: BindType::BindL,
+        dispatcher: "killactive".to_string(),
+        args: None,
+        description: Some("Close window".to_string()),
+        submap: None,
+    };
+
+    // The d flag follows from the description being present
+    assert_eq!(
+        binding.to_string(),
+        "bindld = , XF86AudioMute, Close window, killactive"
+    );
+}
+
+#[test]
+fn test_write_bindings_keeps_variables_comments_and_order() {
     let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("hyprland.conf");
-    fs::write(&config_path, "initial\n").unwrap();
+    let initial = "$mainMod = SUPER\n$term = kitty\n\n# Apps\nbind = $mainMod, Q, exec, $term\n  bind = $mainMod SHIFT, R, exec, rofi # launcher\n\n# Focus\nbind = $mainMod, H, movefocus, l\n";
+    fs::write(&config_path, initial).unwrap();
+    let mut manager = ConfigManager::new(config_path.clone()).unwrap();
 
-    let manager = ConfigManager::new(config_path).unwrap();
-
-    let binding = Keybinding {
-        key_combo: KeyCombo::new(vec![Super, Shift], "M"),
+    let mut bindings = crate::core::parser::parse_config_file(initial, &config_path).unwrap();
+    // Edit the middle one, delete the last one, add a new one
+    bindings[1].args = Some("wofi".to_string());
+    bindings.remove(2);
+    bindings.push(Keybinding {
+        key_combo: KeyCombo::new(vec![Super], "T"),
         bind_type: BindType::Bind,
         dispatcher: "exec".to_string(),
         args: Some("kitty".to_string()),
-    };
+        description: None,
+        submap: None,
+    });
+    manager.write_bindings(&bindings).unwrap();
 
-    let formatted = manager.format_binding(&binding);
-
-    // Should have both modifiers joined with underscore
-    assert!(formatted.contains("SUPER") || formatted.contains("SHIFT"));
-    assert!(formatted.contains("_"));
+    let result = fs::read_to_string(&config_path).unwrap();
+    assert_eq!(
+        result,
+        // The new binding takes the slot of the deleted one
+        "$mainMod = SUPER\n$term = kitty\n\n# Apps\nbind = $mainMod, Q, exec, $term\n  bind = $mainMod SHIFT, R, exec, wofi\n\n# Focus\nbind = $mainMod, T, exec, $term\n"
+    );
 }
 
 #[test]
-fn test_format_binding_no_args() {
+fn test_write_bindings_edits_sourced_file_in_place() {
     let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("hyprland.conf");
-    fs::write(&config_path, "initial\n").unwrap();
+    let keys_path = temp_dir.path().join("keys.conf");
+    fs::write(&config_path, "$mainMod = SUPER\nsource = ./keys.conf\n").unwrap();
+    fs::write(&keys_path, "# keys\nbind = $mainMod, K, exec, firefox\n").unwrap();
+    let mut manager = ConfigManager::new(config_path.clone()).unwrap();
 
-    let manager = ConfigManager::new(config_path).unwrap();
+    let mut bindings = manager
+        .read_config()
+        .ok()
+        .and_then(|c| crate::core::parser::parse_config_file(&c, &config_path).ok())
+        .unwrap();
+    assert_eq!(bindings.len(), 1);
+    bindings[0].args = Some("brave".to_string());
+    manager.write_bindings(&bindings).unwrap();
 
-    let binding = Keybinding {
-        key_combo: KeyCombo::new(vec![Super], "Q"),
+    assert_eq!(
+        fs::read_to_string(&config_path).unwrap(),
+        "$mainMod = SUPER\nsource = ./keys.conf\n"
+    );
+    assert_eq!(
+        fs::read_to_string(&keys_path).unwrap(),
+        "# keys\nbind = $mainMod, K, exec, brave\n"
+    );
+}
+
+#[test]
+fn test_write_bindings_appends_submap_binding_in_its_block() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_path = temp_dir.path().join("hyprland.conf");
+    let initial = "bind = SUPER, R, submap, resize\nsubmap = resize\nbinde = , right, resizeactive, 10 0\nsubmap = reset\n";
+    fs::write(&config_path, initial).unwrap();
+    let mut manager = ConfigManager::new(config_path.clone()).unwrap();
+
+    let mut bindings = crate::core::parser::parse_config_file(initial, &config_path).unwrap();
+    bindings.push(Keybinding {
+        key_combo: KeyCombo::new(vec![], "escape"),
         bind_type: BindType::Bind,
-        dispatcher: "killactive".to_string(),
-        args: None,
-    };
+        dispatcher: "submap".to_string(),
+        args: Some("reset".to_string()),
+        description: None,
+        submap: Some("resize".to_string()),
+    });
+    manager.write_bindings(&bindings).unwrap();
 
-    let formatted = manager.format_binding(&binding);
-
-    // Should have dispatcher but no args
-    assert!(formatted.contains("killactive"));
-    assert!(!formatted.ends_with(","));
+    assert_eq!(
+        fs::read_to_string(&config_path).unwrap(),
+        "bind = SUPER, R, submap, resize\nsubmap = resize\nbinde = , right, resizeactive, 10 0\nbind = , escape, submap, reset\nsubmap = reset\n"
+    );
 }
 
 #[test]
@@ -506,13 +570,17 @@ decoration {
             key_combo: KeyCombo::new(vec![Super], "K"),
             bind_type: BindType::Bind,
             dispatcher: "exec".to_string(),
-            args: Some("brave".to_string()), // Changed from firefox
+            args: Some("brave".to_string()), // Changed from firefox,
+            description: None,
+            submap: None,
         },
         Keybinding {
             key_combo: KeyCombo::new(vec![Super], "M"),
             bind_type: BindType::Bind,
             dispatcher: "exec".to_string(),
-            args: Some("alacritty".to_string()), // Changed from kitty
+            args: Some("alacritty".to_string()), // Changed from kitty,
+            description: None,
+            submap: None,
         },
     ];
 
