@@ -187,7 +187,7 @@ pub fn parse_lua_config(path: &Path) -> Result<LuaConfig, String> {
                         .as_deref()
                         .map(|s| s.strip_prefix('@').unwrap_or(s).to_string())
                         .unwrap_or_default();
-                    (file, debug.curr_line().max(0) as usize)
+                    (file, debug.current_line().unwrap_or(0))
                 })
                 .unwrap_or_default())
         })
