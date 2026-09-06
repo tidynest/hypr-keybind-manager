@@ -289,7 +289,7 @@ impl fmt::Display for KeyCombo {
 /// };
 /// // Represents: bind = SUPER, K, exec, firefox
 /// ```
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Keybinding {
     /// The key combination that triggers this binding
     pub key_combo: KeyCombo,

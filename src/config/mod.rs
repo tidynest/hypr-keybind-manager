@@ -53,6 +53,7 @@ use std::{
 };
 
 use crate::core::{
+    lua_config::{ADDED_HEADER, parse_lua_config, render_lua_bind, rewrite_lua_files},
     parser::{LineKind, parse_config_tree, scan_lines},
     types::Keybinding,
 };
@@ -61,6 +62,85 @@ use crate::core::{
 /// The ConfigManager provides read-only access and transactional writes
 /// with automatic backup creation. All writes go through the transaction
 /// API to ensure atomicity and recoverability.
+/// Which language a config file is written in, decided by its extension
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ConfigFormat {
+    /// `hyprland.conf`, the hyprlang syntax
+    Hyprlang,
+    /// `hyprland.lua`, Hyprland 0.55 and later
+    Lua,
+}
+
+impl ConfigFormat {
+    pub fn of(path: &Path) -> Self {
+        if path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("lua"))
+        {
+            Self::Lua
+        } else {
+            Self::Hyprlang
+        }
+    }
+}
+
+/// Bindings read from a config, with what cannot be edited and why
+#[derive(Debug, Default)]
+pub struct LoadedBindings {
+    pub bindings: Vec<Keybinding>,
+    /// Lua binds the editor cannot rewrite, keyed by binding
+    pub read_only: HashMap<Keybinding, String>,
+    /// The main file and every file it pulls in
+    pub files: Vec<PathBuf>,
+}
+
+/// Reads the bindings of a config file of either format
+pub fn load_bindings_from(path: &Path) -> Result<LoadedBindings, ConfigError> {
+    match ConfigFormat::of(path) {
+        ConfigFormat::Lua => {
+            let parsed = parse_lua_config(path).map_err(ConfigError::ValidationFailed)?;
+            let read_only = parsed
+                .bindings
+                .iter()
+                .filter_map(|b| Some((b.binding.clone(), b.read_only.clone()?)))
+                .collect();
+            Ok(LoadedBindings {
+                bindings: parsed.bindings.into_iter().map(|b| b.binding).collect(),
+                read_only,
+                files: parsed.files,
+            })
+        }
+        ConfigFormat::Hyprlang => {
+            let content = fs::read_to_string(path)?;
+            let tree = parse_config_tree(&content, path)
+                .map_err(|e| ConfigError::ValidationFailed(e.to_string()))?;
+            Ok(LoadedBindings {
+                bindings: tree.bindings,
+                read_only: HashMap::new(),
+                files: tree.files,
+            })
+        }
+    }
+}
+
+/// The config Hyprland would use: `hyprland.conf` if present, else `hyprland.lua`
+///
+/// Falls back to the `.conf` path when neither exists, so the caller can
+/// report what was looked for.
+pub fn default_config_path() -> PathBuf {
+    let base = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
+        .unwrap_or_else(|| PathBuf::from("."));
+    let dir = base.join("hypr");
+    let conf = dir.join("hyprland.conf");
+    if conf.exists() {
+        return conf;
+    }
+    let lua = dir.join("hyprland.lua");
+    if lua.exists() { lua } else { conf }
+}
+
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct ConfigManager {
@@ -227,6 +307,16 @@ impl ConfigManager {
     /// Returns a reference to the configuration file path
     pub fn config_path(&self) -> &Path {
         &self.config_path
+    }
+
+    /// Which language the managed file is written in
+    pub fn format(&self) -> ConfigFormat {
+        ConfigFormat::of(&self.config_path)
+    }
+
+    /// Reads the bindings of the managed file, following sources or requires
+    pub fn load_bindings(&self) -> Result<LoadedBindings, ConfigError> {
+        load_bindings_from(&self.config_path)
     }
 
     #[allow(dead_code)]
@@ -478,6 +568,10 @@ impl ConfigManager {
     /// # }
     /// ```
     pub fn write_bindings(&mut self, bindings: &[Keybinding]) -> Result<(), ConfigError> {
+        if self.format() == ConfigFormat::Lua {
+            return self.write_bindings_lua(bindings);
+        }
+
         let content = self.read_config()?;
         let tree = parse_config_tree(&content, &self.config_path)
             .map_err(|e| ConfigError::ValidationFailed(e.to_string()))?;
@@ -518,15 +612,50 @@ impl ConfigManager {
         Ok(())
     }
 
+    /// Rewrites the `hl.bind` lines of a Lua config that changed
+    ///
+    /// The config is run again to find the current line of every bind, then
+    /// `rewrite_lua_files` works out the new text of each affected file.
+    /// Each file is written through its own transaction.
+    fn write_bindings_lua(&self, bindings: &[Keybinding]) -> Result<(), ConfigError> {
+        let parsed = parse_lua_config(&self.config_path).map_err(ConfigError::ValidationFailed)?;
+        let outputs =
+            rewrite_lua_files(&parsed, bindings).map_err(ConfigError::ValidationFailed)?;
+        for (file, text) in outputs {
+            if file == self.config_path {
+                ConfigTransaction::begin(self)?.commit(&text)?;
+            } else {
+                let manager = ConfigManager::new(file)?;
+                ConfigTransaction::begin(&manager)?.commit(&text)?;
+            }
+        }
+        Ok(())
+    }
+
     /// Exports keybindings to a specified file path
     ///
     /// Creates a new config file containing only keybindings (no preservation of other content).
-    /// Bindings are grouped under `submap = name` sections where needed.
+    /// For a Lua config the export is Lua too; binds that run Lua code are
+    /// listed as comments. Hyprlang exports group bindings under `submap`
+    /// sections where needed.
     pub fn export_to(
         &self,
         export_path: &Path,
         bindings: &[Keybinding],
     ) -> Result<(), ConfigError> {
+        if self.format() == ConfigFormat::Lua {
+            let mut content = format!("{ADDED_HEADER}\n\n");
+            for binding in bindings {
+                match render_lua_bind(binding) {
+                    Ok(line) => content.push_str(&line),
+                    Err(reason) => content.push_str(&format!("-- {binding}: {reason}")),
+                }
+                content.push('\n');
+            }
+            fs::write(export_path, content)?;
+            return Ok(());
+        }
+
         let mut content = String::from("# Exported Hyprland Keybindings\n\n");
         let mut current_submap: Option<&str> = None;
 

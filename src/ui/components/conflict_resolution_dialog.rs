@@ -116,9 +116,13 @@ impl ConflictResolutionDialog {
                 label.set_hexpand(true);
                 binding_row.append(&label);
 
-                // Delete button
+                // Delete button, disabled for binds the editor cannot rewrite
                 let delete_button = Button::with_label("Delete");
                 delete_button.add_css_class("destructive-action");
+                if let Some(reason) = controller.read_only_reason(binding) {
+                    delete_button.set_sensitive(false);
+                    delete_button.set_tooltip_text(Some(&format!("Read-only: it {reason}")));
+                }
                 binding_row.append(&delete_button);
 
                 // Wire up delete handler

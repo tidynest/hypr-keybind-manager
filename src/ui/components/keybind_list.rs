@@ -127,12 +127,19 @@ impl KeybindList {
         // Add new rows with alternating colours
         for (index, binding) in bindings.iter().enumerate() {
             let in_conflict = conflict_keys.contains(&binding.key_combo);
-            let row = self.create_row(binding, index, in_conflict);
+            let read_only = self.controller.read_only_reason(binding);
+            let row = self.create_row(binding, index, in_conflict, read_only.as_deref());
             self.list_box.append(&row);
         }
 
+        let read_only = self.controller.read_only_count();
+        let read_only_note = if read_only > 0 {
+            format!(" · {read_only} read-only (Lua code)")
+        } else {
+            String::new()
+        };
         self.footer.set_label(&format!(
-            "{} of {} keybindings shown · {} conflicts",
+            "{} of {} keybindings shown · {} conflicts{read_only_note}",
             bindings.len(),
             self.controller.keybinding_count(),
             conflicts.len()
@@ -140,7 +147,13 @@ impl KeybindList {
     }
 
     /// Create a single row widget for a keybinding
-    fn create_row(&self, binding: &Keybinding, index: usize, in_conflict: bool) -> GtkBox {
+    fn create_row(
+        &self,
+        binding: &Keybinding,
+        index: usize,
+        in_conflict: bool,
+        read_only: Option<&str>,
+    ) -> GtkBox {
         let row = GtkBox::builder()
             .orientation(Orientation::Vertical)
             .margin_start(8)
@@ -154,11 +167,19 @@ impl KeybindList {
         } else {
             row.add_css_class("odd-row");
         }
+        let mut notes: Vec<String> = Vec::new();
         if in_conflict {
             row.add_css_class("conflict-row");
-            row.set_tooltip_text(Some("This key combination is bound more than once"));
+            notes.push("This key combination is bound more than once".to_string());
         } else if let Some(description) = &binding.description {
-            row.set_tooltip_text(Some(description));
+            notes.push(description.clone());
+        }
+        if let Some(reason) = read_only {
+            row.add_css_class("readonly-row");
+            notes.push(format!("Read-only: {reason}"));
+        }
+        if !notes.is_empty() {
+            row.set_tooltip_text(Some(&notes.join("\n")));
         }
 
         let grid = Grid::builder()

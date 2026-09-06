@@ -7,6 +7,8 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 ## [Unreleased]
 
 ### Added
+- Lua configs (`hyprland.lua`, Hyprland 0.55+) are supported. The file runs in a sandboxed embedded Lua with a recording `hl` stub, so binds built with `mainMod .. " + Q"`, loops and `require`d modules are all found. Single-line `hl.bind(...)` statements can be edited and deleted in place, keeping a `mainMod ..` prefix; new binds are appended. Loop-generated binds, function actions and `local x = hl.bind(...)` are shown read-only with the reason.
+- The default config path is `hyprland.conf` when it exists, otherwise `hyprland.lua`.
 - Every Hyprland bind flag combination is parsed (`bindd`, `bindnt`, `bindle`, ...) instead of only six variants; a config using any other flag no longer fails to load.
 - `bindd` descriptions are read, shown in the list tooltip and details panel, and editable in the dialog.
 - `source =` lines are followed, relative to the including file; bindings from sourced files are shown and edited in the file they came from.

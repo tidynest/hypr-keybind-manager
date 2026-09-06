@@ -156,8 +156,10 @@ impl DetailsPanel {
     pub fn update_binding(&self, binding: Option<&Keybinding>) {
         *self.current_binding.borrow_mut() = binding.cloned();
 
-        self.edit_button.set_sensitive(binding.is_some());
-        self.delete_button.set_sensitive(binding.is_some());
+        let read_only = binding.and_then(|b| self.controller.read_only_reason(b));
+        let editable = binding.is_some() && read_only.is_none();
+        self.edit_button.set_sensitive(editable);
+        self.delete_button.set_sensitive(editable);
 
         let Some(b) = binding else {
             for (index, value) in self.values.iter().enumerate() {
@@ -194,8 +196,13 @@ impl DetailsPanel {
             .filter(|cb| cb != b)
             .collect();
 
+        let read_only_note = read_only
+            .map(|reason| format!("Read-only: it {reason}\n"))
+            .unwrap_or_default();
+
         if others.is_empty() {
-            self.status_label.set_label("No conflicts");
+            self.status_label
+                .set_label(&format!("{read_only_note}No conflicts"));
             self.status_label
                 .set_tooltip_text(Some("This key combination is bound once"));
             return;
@@ -216,7 +223,7 @@ impl DetailsPanel {
             String::new()
         };
         self.status_label
-            .set_label(&format!("Conflicts with:\n{shown}{more}"));
+            .set_label(&format!("{read_only_note}Conflicts with:\n{shown}{more}"));
         self.status_label
             .set_tooltip_text(Some(&format!("Conflicts with:\n{}", lines.join("\n"))));
     }

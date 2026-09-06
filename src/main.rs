@@ -34,13 +34,11 @@
 use clap::{Parser, Subcommand};
 use colored::*;
 use hypr_keybind_manager::{
-    core::{conflict::ConflictDetector, parser::parse_config_file},
+    config::{default_config_path, load_bindings_from},
+    core::conflict::ConflictDetector,
     ui::App,
 };
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 /// Command-line interface for Hyprland Keybinding Manager.
 ///
@@ -59,16 +57,16 @@ struct Cli {
 enum Commands {
     /// Check for keybinding conflicts
     Check {
-        /// Path to Hyprland config file
-        #[arg(short, long, default_value = "~/.config/hypr/hyprland.conf")]
-        config: PathBuf,
+        /// Path to Hyprland config file [default: ~/.config/hypr/hyprland.conf, or hyprland.lua when only that exists]
+        #[arg(short, long)]
+        config: Option<PathBuf>,
     },
 
     /// List all keybindings
     List {
-        /// Path to Hyprland config file
-        #[arg(short, long, default_value = "~/.config/hypr/hyprland.conf")]
-        config: PathBuf,
+        /// Path to Hyprland config file [default: ~/.config/hypr/hyprland.conf, or hyprland.lua when only that exists]
+        #[arg(short, long)]
+        config: Option<PathBuf>,
 
         /// Print the bindings as JSON instead of a table
         #[arg(long)]
@@ -77,9 +75,9 @@ enum Commands {
 
     /// Launch GUI overlay
     Gui {
-        /// Path to Hyprland config file
-        #[arg(short, long, default_value = "~/.config/hypr/hyprland.conf")]
-        config: PathBuf,
+        /// Path to Hyprland config file [default: ~/.config/hypr/hyprland.conf, or hyprland.lua when only that exists]
+        #[arg(short, long)]
+        config: Option<PathBuf>,
     },
 }
 
@@ -103,12 +101,23 @@ fn main() -> anyhow::Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Check { config } => check_conflicts(&config)?,
-        Commands::List { config, json } => list_keybindings(&config, json)?,
-        Commands::Gui { config } => launch_gui(&config)?,
+        Commands::Check { config } => check_conflicts(&resolve_config_path(config)?)?,
+        Commands::List { config, json } => list_keybindings(&resolve_config_path(config)?, json)?,
+        Commands::Gui { config } => launch_gui(&resolve_config_path(config)?)?,
     }
 
     Ok(())
+}
+
+/// Expands `~` in a given path, or picks the config Hyprland would load
+fn resolve_config_path(config: Option<PathBuf>) -> anyhow::Result<PathBuf> {
+    let Some(config) = config else {
+        return Ok(default_config_path());
+    };
+    let text = config
+        .to_str()
+        .ok_or_else(|| anyhow::anyhow!("Invalid path encoding"))?;
+    Ok(PathBuf::from(shellexpand::tilde(text).as_ref()))
 }
 
 /// Checks configuration file for keybinding conflicts.
@@ -129,23 +138,10 @@ fn main() -> anyhow::Result<(), Box<dyn std::error::Error>> {
 /// # Exits
 ///
 /// Exits with code 1 if conflicts are detected
-fn check_conflicts(config_path: &Path) -> anyhow::Result<()> {
-    // Expand tilde in path
-    let expanded_path = shellexpand::tilde(
-        config_path
-            .to_str()
-            .ok_or_else(|| anyhow::anyhow!("Invalid path encoding"))?,
-    );
-    let path = Path::new(expanded_path.as_ref());
-
-    // Read config file
-    let content =
-        fs::read_to_string(path).map_err(|e| anyhow::anyhow!("Failed to read file: {}", e))?;
-
+fn check_conflicts(path: &Path) -> anyhow::Result<()> {
     println!("{} Parsing config: {}", "→".cyan(), path.display());
 
-    // Parse bindings
-    let bindings = parse_config_file(&content, path)?;
+    let bindings = load_bindings_from(path)?.bindings;
 
     println!("{} Found {} keybindings\n", "✓".green(), bindings.len());
 
@@ -220,20 +216,8 @@ fn check_conflicts(config_path: &Path) -> anyhow::Result<()> {
 ///
 /// * `Ok(())` - Successfully listed bindings
 /// * `Err(_)` - File read or parse error
-fn list_keybindings(config_path: &Path, json: bool) -> anyhow::Result<()> {
-    // Expand tilde in path
-    let expanded_path = shellexpand::tilde(
-        config_path
-            .to_str()
-            .ok_or_else(|| anyhow::anyhow!("Invalid path encoding"))?,
-    );
-    let path = Path::new(expanded_path.as_ref());
-
-    // Read and parse
-    let content =
-        fs::read_to_string(path).map_err(|e| anyhow::anyhow!("Failed to read file: {}", e))?;
-
-    let bindings = parse_config_file(&content, path)?;
+fn list_keybindings(path: &Path, json: bool) -> anyhow::Result<()> {
+    let bindings = load_bindings_from(path)?.bindings;
 
     if json {
         println!("{}", serde_json::to_string_pretty(&bindings)?);
@@ -289,20 +273,11 @@ fn list_keybindings(config_path: &Path, json: bool) -> anyhow::Result<()> {
 /// # Blocking
 ///
 /// This function blocks until the GUI window is closed by the user.
-fn launch_gui(config_path: &Path) -> anyhow::Result<()> {
-    // Expand tilde in path
-    let expanded_path = shellexpand::tilde(
-        config_path
-            .to_str()
-            .ok_or_else(|| anyhow::anyhow!("Invalid path encoding"))?,
-    );
-    let expanded_path = PathBuf::from(expanded_path.as_ref());
-
+fn launch_gui(path: &Path) -> anyhow::Result<()> {
     eprintln!("{} Launching GUI...", "→".cyan());
 
-    // Create and run app
     let app =
-        App::new(expanded_path).map_err(|e| anyhow::anyhow!("Failed to create app: {}", e))?;
+        App::new(path.to_path_buf()).map_err(|e| anyhow::anyhow!("Failed to create app: {}", e))?;
 
     app.run();
 

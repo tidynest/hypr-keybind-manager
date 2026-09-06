@@ -23,7 +23,9 @@
 //! - modal save/cancel flow with validation
 
 use crate::{
+    config::ConfigFormat,
     core::{
+        lua_config::LUA_DISPATCHERS,
         sandbox,
         types::{BIND_FLAGS, BindType, KeyCombo, Keybinding, Modifier},
         validator::ALLOWED_DISPATCHERS,
@@ -161,8 +163,14 @@ impl EditDialog {
             .build();
         attach_row(&grid, &mut row, "Submap", &submap_entry);
 
-        // Dispatcher: searchable list of what the validator accepts
-        let mut dispatchers: Vec<&str> = ALLOWED_DISPATCHERS.to_vec();
+        // Dispatcher: searchable list of what the validator accepts, or the
+        // hl.dsp functions for a Lua config
+        let is_lua = controller.config_format() == ConfigFormat::Lua;
+        let mut dispatchers: Vec<&str> = if is_lua {
+            LUA_DISPATCHERS.to_vec()
+        } else {
+            ALLOWED_DISPATCHERS.to_vec()
+        };
         if !binding.dispatcher.is_empty() && !dispatchers.contains(&binding.dispatcher.as_str()) {
             dispatchers.push(binding.dispatcher.as_str());
         }
@@ -187,9 +195,17 @@ impl EditDialog {
             .unwrap_or_default();
         let args_entry = Entry::builder()
             .text(visible_args)
-            .placeholder_text("Optional arguments")
+            .placeholder_text(if is_lua {
+                "Command for exec, or a Lua literal like { direction = \"left\" }"
+            } else {
+                "Optional arguments"
+            })
             .hexpand(true)
-            .tooltip_text("Optional dispatcher arguments")
+            .tooltip_text(if is_lua {
+                "For exec: the command line. For other dispatchers: the Lua arguments, written as they would appear inside hl.dsp.name(...)"
+            } else {
+                "Optional dispatcher arguments"
+            })
             .build();
         attach_row(&grid, &mut row, "Arguments", &args_entry);
 

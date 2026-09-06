@@ -476,7 +476,9 @@ pub struct ConfigTransaction<'a> {
 - `list_backups()` → `Result<Vec<PathBuf>, ConfigError>`
 - `restore_backup(path)` → `Result<(), ConfigError>`
 
-**In-Place Write Sequence** (`write_bindings`):
+**Format dispatch**: `ConfigFormat::of(path)` picks hyprlang or Lua by extension. `load_bindings_from(path)` returns `LoadedBindings` (bindings, read-only reasons, files) for either. `write_bindings` hands Lua configs to `write_bindings_lua`, which runs `rewrite_lua_files` and commits each changed file through a transaction. `default_config_path` prefers `hyprland.conf`, then `hyprland.lua`.
+
+**In-Place Write Sequence** (`write_bindings`, hyprlang):
 1. Parse the current file tree with `parse_config_tree` (main file plus every `source =` file)
 2. Diff the parsed bindings against the new list as multisets: `removed` and `added`
 3. Scan each file line by line with `scan_lines`. A bind line whose binding is in `removed` is replaced by the first `added` binding of the same submap, or dropped. Every other line is copied through
@@ -510,6 +512,20 @@ Rewritten lines are rendered with `Keybinding::to_config_line`, which writes `$n
 - `take_until()` - Comma-separated fields
 - `preceded()` - Match and discard prefix
 - `opt()` - Optional arguments
+
+---
+
+### `src/core/lua_config.rs` - Lua Config Reader and Rewriter
+
+**Responsibility**: Read `hyprland.lua` configs (Hyprland 0.55+) and rewrite individual `hl.bind` lines.
+
+**Reading**: The config is a program, so it is run. `parse_lua_config` creates an embedded Lua 5.5 state (mlua, vendored), loads `lua_prelude.lua`, and executes the config with the prelude's sandbox environment. The prelude's `hl.bind` records keys, action, options, submap and the calling file and line (via `Lua::inspect_stack`), and returns a handle whose `remove` marks the record removed. `hl.dsp.*` calls produce descriptors carrying the dispatcher path and its arguments rendered as Lua literals. `hl.define_submap` sets the submap for binds recorded inside it. `require` reads only files inside the config directory.
+
+**Read-only rules** (`mark_read_only`): a bind cannot be rewritten when its action is a Lua function, more than one bind came from its line (a loop), it uses an option the module cannot write back (`device`, `drag`, `auto_consuming`, ...), or its line is not a single `hl.bind(...)` statement.
+
+**Writing** (`rewrite_lua_files`): the wanted list is diffed against the recorded binds. A removed bind's line is replaced by a new bind of the same submap (keeping a `mainMod .. "..."` key prefix when possible) or deleted; remaining global additions are appended to the main file. Refuses to touch read-only binds and to add binds inside submaps.
+
+**Safety of written text**: keys, commands and descriptions become Lua string literals through `lua_string`; dispatcher paths are checked against `[a-z0-9_.]`; other arguments must evaluate as a literal in an empty environment.
 
 ---
 

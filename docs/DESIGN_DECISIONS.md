@@ -706,6 +706,22 @@ pub struct ConfigTransaction<'a> {  // 'a lifetime
 
 ---
 
+### Lua Configs Are Run, Not Parsed
+
+**File**: `src/core/lua_config.rs`, `src/core/lua_prelude.lua`
+
+**Decision**: Read `hyprland.lua` by executing it in a sandboxed embedded Lua with a recording `hl` stub, and edit only lines that are a single `hl.bind(...)` statement.
+
+**Why not a text parser**: A real config builds keys with `mainMod .. " + Q"`, creates binds in `for` loops over tables, passes closures as actions and pulls modules in with `require`. A static scan sees none of that. Running the file sees exactly what Hyprland sees; on the owner's config the recorded count matches `hyprctl binds -j`.
+
+**Why not `hyprctl binds`**: The compositor reports Lua binds as dispatcher `__lua` with a function id, so it cannot say what a bind does, and it needs a running Hyprland.
+
+**Why line-based editing**: Rewriting arbitrary Lua is not possible in general. Because every recorded bind knows its file and line, a bind whose line is one `hl.bind(...)` call can be replaced whole. Binds created in loops share a line and are reported read-only with that reason, which is honest about what the editor can do. The `mainMod ..` prefix survives because the recorded keys value and the literal suffix on the line give the variable's value.
+
+**Sandbox**: the config gets `hl`, `string`, `table`, `math`, `utf8`, `os.getenv`/`date`/`time` and `require` limited to the config directory. No `io`, no `load`, no `os.execute`; 64 MiB memory limit; 20 million instruction limit. Values written back are Lua string literals or validated literals, so the edit dialog cannot inject code.
+
+---
+
 ### Backup Naming Convention
 
 **File**: `src/config/mod.rs:250`

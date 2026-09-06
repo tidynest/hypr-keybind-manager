@@ -158,3 +158,8 @@ entry.search {
 .conflict-header {
     font-weight: bold;
 }
+
+/* Lua binds the editor cannot rewrite */
+.readonly-row {
+    opacity: 0.65;
+}

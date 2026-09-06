@@ -31,5 +31,6 @@ mod types_tests;
 #[cfg(test)]
 mod parser_tests;
 
+mod lua_config_tests;
 #[cfg(test)]
 mod sandbox_tests;

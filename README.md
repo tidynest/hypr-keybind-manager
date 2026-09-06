@@ -57,6 +57,7 @@
 
 - **Full [CRUD](https://en.wikipedia.org/wiki/Create,_read,_update_and_delete) Operations**: Create, read, update, and delete keybindings through an intuitive GUI
 - **In-Place Config Editing**: Only the changed lines are rewritten. `$mainMod`, comments, indentation, ordering and `source =` files stay as you wrote them
+- **Both Config Languages**: `hyprland.conf` (hyprlang) and `hyprland.lua` (Hyprland 0.55+). Lua configs are run in a sandbox to find every bind, including ones built in loops; hand-written `hl.bind` lines are editable
 - **Complete Hyprland Syntax**: Every bind flag (`bindd`, `bindel`, `bindnt`, ...), `bindd` descriptions, submaps and sourced files
 - **Real-Time Conflict Detection**: Instantly identifies duplicate key combinations per submap with [O(1)](https://en.wikipedia.org/wiki/Time_complexity#Constant_time) performance
 - **Defence-in-Depth Security Validation**: Prevents shell injection, dangerous commands, encoded payloads, and optionally sandboxes `exec` bindings
@@ -400,6 +401,7 @@ All user actions are logged to stderr for debugging and visibility.
 
 ```bash
 # Launch GUI with default Hyprland config
+# (~/.config/hypr/hyprland.conf, or hyprland.lua when only that exists)
 hypr-keybind-manager gui
 
 # Use specific config file
@@ -441,7 +443,7 @@ List Options:
       --json           Print the bindings as JSON instead of a table
 ```
 
-`check` exits with status 1 when conflicts exist, so it works as a pre-commit or CI gate for a dotfiles repository. Both commands follow `source =` lines.
+`check` exits with status 1 when conflicts exist, so it works as a pre-commit or CI gate for a dotfiles repository. Both commands follow `source =` lines in hyprlang configs and `require` in Lua configs.
 
 ### Workflow
 
@@ -463,6 +465,7 @@ List Options:
 - All changes are automatically backed up to `~/.config/hypr/backups/` with timestamps (sourced files get a `backups/` directory next to them)
 - The UI automatically refreshes when the config file is modified externally, and says so in the status line. Undo history is cleared then
 - If the default config file does not exist, the application asks for one instead of failing
+- With a Lua config, binds the editor cannot rewrite are dimmed in the list and their Edit and Delete buttons are disabled; the details panel says why (created by a loop, runs a Lua function, part of a larger statement, or uses an option such as `device`). Edit those in the file
 
 ---
 
@@ -518,7 +521,14 @@ The application uses a **[HashMap](https://doc.rust-lang.org/std/collections/str
 - Delete old backups to save space
 - Safety backup created before restore
 
-**In-Place Writes**:
+**Lua Configs** (`hyprland.lua`, Hyprland 0.55+):
+- The config is executed in an embedded Lua 5.5 with a recording stand-in for the `hl` API, so every `hl.bind` call is captured with the file and line it came from, whatever code produced it
+- The sandbox has no `io`, no `load`, no `os.execute`, a memory limit, an instruction limit, and `require` limited to files inside the config directory
+- A bind is editable when its line is a single `hl.bind(...)` statement whose action is a dispatcher and no other bind came from that line. The line is rewritten whole; a `mainMod .. " + Q"` key expression is kept when the new keys start with the same value
+- New binds are appended at the end of the main file under a `-- Keybindings added by hypr-keybind-manager` header; new binds inside a submap are refused, add those inside `hl.define_submap` yourself
+- Dispatcher names are `hl.dsp` paths (`window.close`, `focus`, ...); `exec` and `execr` stand for `exec_cmd` and `exec_raw`. Arguments are shown and edited as Lua literals such as `{ direction = "left" }`
+
+**In-Place Writes** (hyprlang):
 - The current file and every file it sources are scanned line by line
 - A binding that changed has its line replaced; a deleted binding has its line removed; a new binding goes after the last bind line of its submap
 - Everything else, including comments, `$variables`, indentation and `source =` lines, is copied through untouched
@@ -598,9 +608,9 @@ hypr-keybind-manager/
 ├── LICENSE                                     # Apache 2.0 license (201 lines)
 ├── CONTRIBUTING.md                             # Contribution guidelines (308 lines)
 ├── SECURITY.md                                 # Security policy and threat model (503 lines)
-├── CHANGELOG.md                                # Release history (78 lines)
+├── CHANGELOG.md                                # Release history (80 lines)
 ├── CONTRIBUTORS.md                             # Contributor recognition (15 lines)
-├── Cargo.toml                                  # Rust dependencies and metadata (59 lines)
+├── Cargo.toml                                  # Rust dependencies and metadata (60 lines)
 ├── PKGBUILD                                    # Arch Linux package build script (39 lines)
 ├── install.sh                                  # Installation script for manual builds (96 lines)
 ├── .cargo/                                     # Project-specific cargo configuration
@@ -639,7 +649,7 @@ hypr-keybind-manager/
     ├── bin/                                    # Binary utilities
     │   ├── measure_entropy.rs                  # Entropy measurement tool (57 lines)
     │   └── test_manual.rs                      # Manual testing utility (86 lines)
-    ├── main.rs                                 # CLI entry point (310 lines)
+    ├── main.rs                                 # CLI entry point (285 lines)
     ├── lib.rs                                  # Library root (100 lines)
     ├── config/                                 # Config file I/O (~4,599 lines)
     │   ├── mod.rs                              # ConfigManager (reads/writes with backups) (668 lines)
@@ -659,6 +669,8 @@ hypr-keybind-manager/
     │       └── validator_tests.rs              # Validator unit tests (150 lines)
     ├── core/                                   # Business logic (~1,839 lines)
     │   ├── types.rs                            # Keybinding, KeyCombo, Modifier, BindType (370 lines)
+    │   ├── lua_config.rs                       # Lua config: sandboxed run, line rewriting (656 lines)
+    │   ├── lua_prelude.lua                     # Recording hl stub and sandbox environment (173 lines)
     │   ├── parser.rs                           # Parse Hyprland config syntax (nom) (438 lines)
     │   ├── conflict.rs                         # ConflictDetector engine (HashMap) (109 lines)
     │   ├── validator.rs                        # Injection prevention (Layer 1) (186 lines)
@@ -666,6 +678,7 @@ hypr-keybind-manager/
     │   ├── mod.rs                              # Core module exports (42 lines)
     │   └── tests/                              # Core tests (extracted) (631 lines)
     │       ├── mod.rs                          # Test module organisation (35 lines)
+    │       ├── lua_config_tests.rs             # Lua config tests (264 lines)
     │       ├── conflict_tests.rs               # Conflict detection tests (149 lines)
     │       ├── parser_tests.rs                 # Parser tests (163 lines)
     │       ├── validator_tests.rs              # Validation tests (167 lines)
@@ -679,18 +692,18 @@ hypr-keybind-manager/
     │   │   ├── header.rs                       # Header bar with undo/redo buttons (92 lines)
     │   │   ├── layout.rs                       # Main layout construction (135 lines)
     │   │   └── handlers.rs                     # Event handler wiring (246 lines)
-    │   ├── controller.rs                       # MVC Controller (mediates Model ↔ View) (854 lines)
+    │   ├── controller.rs                       # MVC Controller (mediates Model ↔ View) (875 lines)
     │   ├── file_watcher.rs                     # Live config file monitoring (62 lines)
     │   ├── style.css                           # GTK CSS styling (160 lines)
     │   ├── mod.rs                              # UI module exports (45 lines)
     │   ├── components/                         # Reusable UI widgets (2,197 lines)
-    │   │   ├── keybind_list.rs                 # Scrollable list (276 lines)
+    │   │   ├── keybind_list.rs                 # Scrollable list (297 lines)
     │   │   ├── search_bar.rs                   # Real-time search (73 lines)
     │   │   ├── conflict_panel.rs               # Warning banner (245 lines)
     │   │   ├── conflict_resolution_dialog.rs   # Conflict resolver with Escape support (170 lines)
-    │   │   ├── details_panel.rs                # Shows selected binding (285 lines)
+    │   │   ├── details_panel.rs                # Shows selected binding (292 lines)
     │   │   ├── status_banner.rs                # Self-hiding status line (95 lines)
-│   │   ├── edit_dialog.rs                  # Edit/Add dialog with key recording, sandbox toggle (670 lines)
+│   │   ├── edit_dialog.rs                  # Edit/Add dialog with key recording, sandbox toggle (686 lines)
     │   │   ├── backup_dialog.rs                # Backup management with Escape support (340 lines)
     │   │   └── mod.rs                          # Component exports (43 lines)
     │   └── tests/                              # UI component tests (extracted) (635 lines)
@@ -708,7 +721,7 @@ For detailed architecture documentation, see [ARCHITECTURE.md](docs/ARCHITECTURE
 
 ### Testing
 
-**Rust Tests (193 passing, 7 ignored):**
+**Rust Tests (197 passing, 7 ignored):**
 ```bash
 # Run all Rust tests
 cargo test
@@ -854,6 +867,7 @@ All planned features are implemented and production-ready. The project has compl
 - ✅ **Edit dialog**: key recording, searchable dispatcher list, description and submap fields
 - ✅ **Feedback**: status banner, highlighted conflict rows, list footer, error dialogs for apply and import
 - ✅ **CLI**: `list --json`
+- ✅ **Lua configs**: read through a sandboxed Lua, single-line binds editable, the rest read-only with a reason
 
 **Quality Assurance (Phases 7.1-10.0):**
 - ✅ **Phase 7.1**: Code comments audit (100% documentation coverage)
