@@ -761,6 +761,7 @@ dependencies = [
  "notify",
  "regex",
  "serde",
+ "serde_json",
  "shellexpand",
  "tempfile",
  "thiserror",

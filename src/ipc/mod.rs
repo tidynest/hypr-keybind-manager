@@ -36,6 +36,8 @@
 //!     bind_type: BindType::Bind,
 //!     dispatcher: "exec".to_string(),
 //!     args: Some("firefox".to_string()),
+//!     description: None,
+//!     submap: None,
 //! };
 //!
 //! // Validates command but doesn't send to Hyprland
@@ -45,7 +47,7 @@
 use hyprland::dispatch::{Dispatch, DispatchType};
 
 use crate::config::ConfigError;
-use crate::core::{Keybinding, Modifier, validator as injection_validator};
+use crate::core::{Keybinding, validator as injection_validator};
 
 /// IPC client operation mode
 ///
@@ -139,6 +141,8 @@ impl HyprlandClient {
     ///     bind_type: BindType::Bind,
     ///     dispatcher: "exec".to_string(),
     ///     args: Some("firefox".to_string()),
+    ///     description: None,
+    ///     submap: None,
     /// };
     ///
     /// // Safe: validates but doesn't send in DryRun mode
@@ -163,7 +167,7 @@ impl HyprlandClient {
             )),
             ClientMode::Live => {
                 // Layer 4: Actually send to Hyprland
-                self.send_keyword_command("bind", &cmd)
+                self.send_keyword_command(&binding.bind_type.to_string(), &cmd)
             }
         }
     }
@@ -196,6 +200,8 @@ impl HyprlandClient {
     ///     bind_type: BindType::Bind,
     ///     dispatcher: "exec".to_string(),
     ///     args: Some("firefox".to_string()),
+    ///     description: None,
+    ///     submap: None,
     /// };
     ///
     /// // Safe: validates but doesn't send in DryRun mode
@@ -274,61 +280,13 @@ impl HyprlandClient {
     /// It builds the command by concatenating validated components,
     /// not by interpolating user input into a format string.
     fn build_keyword_command(&self, _keyword: &str, binding: &Keybinding) -> String {
-        // Build modifiers string (e.g., "SUPER_SHIFT")
-        let modifiers_str = if binding.key_combo.modifiers.is_empty() {
-            String::new()
-        } else {
-            binding
-                .key_combo
-                .modifiers
-                .iter()
-                .map(|m| match m {
-                    Modifier::Super => "SUPER",
-                    Modifier::Ctrl => "CTRL",
-                    Modifier::Shift => "SHIFT",
-                    Modifier::Alt => "ALT",
-                })
-                .collect::<Vec<_>>()
-                .join("_")
-        };
-
-        // Build the command parts
-        let mut parts = Vec::new();
-
-        // Add modifiers if present
-        if !modifiers_str.is_empty() {
-            parts.push(modifiers_str);
-        }
-
-        // Add key
-        parts.push(binding.key_combo.key.clone());
-
-        // Add dispatcher
-        parts.push(binding.dispatcher.clone());
-
-        // Add args if present
-        if let Some(args) = &binding.args {
-            parts.push(args.clone());
-        }
-
-        // Join with commas and spaces (Hyprland format)
-        parts.join(", ")
+        // Everything after "bind... = " is exactly what hyprctl keyword expects
+        let line = binding.to_string();
+        line.split_once(" = ")
+            .map(|(_, value)| value.to_string())
+            .unwrap_or(line)
     }
 
-    /// Sends a keyword command to Hyprland via IPC
-    ///
-    /// This is the actual IPC transmission layer. It should ONLY be called
-    /// from Live mode after all validation has passed.
-    ///
-    /// # Arguments
-    ///
-    /// * `keyword` - The Hyprland keyword ("bind", "unbind", etc.)
-    /// * `value` - The command value (already validated and built)
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` - Command sent successfully
-    /// * `Err(ConfigError)` - Hyprland not running or command failed
     fn send_keyword_command(&self, keyword: &str, value: &str) -> Result<(), ConfigError> {
         use hyprland::keyword::Keyword;
 

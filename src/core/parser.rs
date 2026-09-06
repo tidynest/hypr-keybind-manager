@@ -18,16 +18,17 @@
 //!
 //! This module parses Hyprland config files to extract keybindings.
 //! It handles:
-//! - All bind types (bind, binde, bindl, bindm, bindr, bindel)
-//! - Variable substitution ($mainMod)
-//! - Comments and whitespace
-//! - Line numbers for error reporting
+//! - Every bind flag combination (bind, bindel, bindd, bindnt, ...)
+//! - Variable substitution ($mainMod), defined before use like Hyprland
+//! - `submap = name` sections, recorded on each binding
+//! - `source = file` lines, followed relative to the including file
+//! - Comments, including trailing `# comment` on bind lines
 //!
 //! # Architecture
-//! The parser uses nom combinators for composable, type-safe parsing.
-//! It performs two-pass parsing:
-//! 1. First pass: Collect variable definitions
-//! 2. Second pass: Parse bindings with variable substitution
+//! `scan_lines` classifies every line of one file. `parse_config_tree` runs
+//! it over the main file and everything it sources, collecting bindings and
+//! the list of files visited. The config writer uses the same scanner so a
+//! line is understood the same way when read and when rewritten.
 //!
 //! # Security
 //! The parser only reads and structures data - it never executes commands
@@ -35,17 +36,21 @@
 
 use nom::{IResult, Parser, sequence::preceded};
 use nom::{
-    branch::alt,
-    bytes::complete::{tag, take_until, take_while1},
-};
-use nom::{
+    bytes::complete::{tag, take_until, take_while, take_while1},
     character::complete::{char, space0},
-    combinator::{map, opt},
+    combinator::{map_res, opt},
 };
-use std::{collections::HashMap, path::Path};
+use std::{
+    collections::HashMap,
+    fs,
+    path::{Path, PathBuf},
+};
 use thiserror::Error;
 
 use crate::core::types::{BindType, KeyCombo, Keybinding, Modifier};
+
+/// How deep `source =` chains are followed before giving up
+const MAX_SOURCE_DEPTH: usize = 8;
 
 /// Parse errors with line number context
 #[derive(Debug, Error)]
@@ -60,11 +65,35 @@ pub enum ParseError {
     IoError(#[from] std::io::Error),
 }
 
-/// Parse a complete Hyprland config file
+/// Everything read from a config file and the files it sources
+#[derive(Debug, Default)]
+pub struct ParsedConfig {
+    /// Bindings in file order, sourced files spliced in where they are sourced
+    pub bindings: Vec<Keybinding>,
+    /// The main file first, then every sourced file in the order visited
+    pub files: Vec<PathBuf>,
+    /// Every `$name = value` seen, later definitions win
+    pub variables: HashMap<String, String>,
+}
+
+/// What one config line is
+#[derive(Debug)]
+pub enum LineKind {
+    /// A bind line, with its submap filled in
+    Binding(Keybinding),
+    /// `submap = name`, or `submap = reset` as `None`
+    Submap(Option<String>),
+    /// `source = path`, the path as written
+    Source(String),
+    /// Comments, blank lines, variables, settings
+    Other,
+}
+
+/// Parse a complete Hyprland config file, following `source =` lines
 ///
 /// # Arguments
 /// * `content` - The full config file content as a string
-/// * `file_path` - Path to the config file (for error messages)
+/// * `file_path` - Path to the config file, used to resolve relative sources
 ///
 /// # Returns
 /// A vector of successfully parsed keybindings, or a ParseError
@@ -74,43 +103,181 @@ pub enum ParseError {
 /// let config = std::fs::read_to_string("hyprland.conf")?;
 /// let bindings = parse_config_file(&config, Path::new("hyprland.conf"))?;
 /// ```
-pub fn parse_config_file(content: &str, _file_path: &Path) -> Result<Vec<Keybinding>, ParseError> {
-    // First pass: Collect variable definitions
-    let variables = collect_variables(content);
+pub fn parse_config_file(content: &str, file_path: &Path) -> Result<Vec<Keybinding>, ParseError> {
+    Ok(parse_config_tree(content, file_path)?.bindings)
+}
 
-    // Second pass: Parse bindings with variable substitution
-    let mut keybindings = Vec::new();
+/// Parse a config file and everything it sources
+///
+/// Sourced files that cannot be read are skipped with a warning, so one
+/// missing include does not stop the whole config from loading. Glob
+/// patterns in `source =` lines are not expanded.
+pub fn parse_config_tree(content: &str, file_path: &Path) -> Result<ParsedConfig, ParseError> {
+    let mut parsed = ParsedConfig {
+        files: vec![file_path.to_path_buf()],
+        ..ParsedConfig::default()
+    };
+    parse_into(content, file_path, &mut parsed, 0)?;
+    Ok(parsed)
+}
 
-    for (line_num, line) in content.lines().enumerate() {
-        let line_num = line_num + 1; // Human-readable numbers start at 1
-
-        // Skip empty lines and comments
-        let line_trimmed = line.trim();
-        if line_trimmed.is_empty() || line_trimmed.starts_with('#') {
-            continue;
-        }
-
-        // Only process bind lines
-        if !line_trimmed.starts_with("bind") {
-            continue;
-        }
-
-        // Substitute variables before parsing
-        let substituted = substitute_variables(line_trimmed, &variables);
-
-        // Parse the bind line
-        match parse_bind_line(&substituted) {
-            Ok((_, binding)) => keybindings.push(binding),
-            Err(e) => {
+fn parse_into(
+    content: &str,
+    file_path: &Path,
+    parsed: &mut ParsedConfig,
+    depth: usize,
+) -> Result<(), ParseError> {
+    for (line, kind) in scan_lines(content, &mut parsed.variables) {
+        match kind {
+            Ok(LineKind::Binding(binding)) => parsed.bindings.push(binding),
+            Ok(LineKind::Source(target)) => {
+                let Some(target) = resolve_source(&target, file_path) else {
+                    eprintln!(
+                        "⚠ Skipping source line {line} of {}: glob patterns are not supported",
+                        file_path.display()
+                    );
+                    continue;
+                };
+                if parsed.files.contains(&target) || depth >= MAX_SOURCE_DEPTH {
+                    continue;
+                }
+                match fs::read_to_string(&target) {
+                    Ok(sourced) => {
+                        parsed.files.push(target.clone());
+                        parse_into(&sourced, &target, parsed, depth + 1)?;
+                    }
+                    Err(e) => eprintln!(
+                        "⚠ Cannot read sourced file {} (line {line} of {}): {e}",
+                        target.display(),
+                        file_path.display()
+                    ),
+                }
+            }
+            Ok(_) => {}
+            Err(ParseError::InvalidSyntax { line, message }) if depth > 0 => {
                 return Err(ParseError::InvalidSyntax {
-                    line: line_num,
-                    message: format!("{:?}", e),
+                    line,
+                    message: format!("{}: {message}", file_path.display()),
                 });
             }
+            Err(e) => return Err(e),
         }
     }
+    Ok(())
+}
 
-    Ok(keybindings)
+/// Resolves a `source =` target against the file that contains it
+fn resolve_source(target: &str, from: &Path) -> Option<PathBuf> {
+    // ponytail: no glob crate; a pattern is skipped rather than half-expanded
+    if target.contains(['*', '?', '[']) {
+        return None;
+    }
+    let expanded = shellexpand::tilde(target.trim()).into_owned();
+    let path = PathBuf::from(expanded);
+    if path.is_absolute() {
+        Some(path)
+    } else {
+        Some(from.parent().unwrap_or(Path::new(".")).join(path))
+    }
+}
+
+/// Classifies every line of one file, in order
+///
+/// Variables defined in the file are added to `variables` as they are met,
+/// so a `$mainMod` used below its definition resolves. Returns the
+/// 1-based line number with each result.
+pub fn scan_lines(
+    content: &str,
+    variables: &mut HashMap<String, String>,
+) -> Vec<(usize, Result<LineKind, ParseError>)> {
+    let mut submap: Option<String> = None;
+
+    content
+        .lines()
+        .enumerate()
+        .map(|(index, line)| {
+            let line_num = index + 1;
+            let stripped = strip_comment(line);
+            let trimmed = stripped.trim();
+
+            let kind = if trimmed.is_empty() {
+                Ok(LineKind::Other)
+            } else if let Some((name, value)) = variable_definition(trimmed) {
+                variables.insert(name, value);
+                Ok(LineKind::Other)
+            } else if let Some(name) = directive_value(trimmed, "submap") {
+                submap = (name != "reset").then(|| name.to_string());
+                Ok(LineKind::Submap(submap.clone()))
+            } else if let Some(target) = directive_value(trimmed, "source") {
+                Ok(LineKind::Source(target.to_string()))
+            } else if trimmed.starts_with("bind") {
+                parse_scanned_bind(trimmed, variables, line_num).map(|mut binding| {
+                    binding.submap = submap.clone();
+                    LineKind::Binding(binding)
+                })
+            } else {
+                Ok(LineKind::Other)
+            };
+
+            (line_num, kind)
+        })
+        .collect()
+}
+
+fn parse_scanned_bind(
+    line: &str,
+    variables: &HashMap<String, String>,
+    line_num: usize,
+) -> Result<Keybinding, ParseError> {
+    let flags: String = line[4..]
+        .chars()
+        .take_while(char::is_ascii_alphabetic)
+        .collect();
+    if let Err(unknown) = BindType::from_flags(&flags) {
+        return Err(ParseError::InvalidSyntax {
+            line: line_num,
+            message: format!("unknown bind flag '{unknown}' in 'bind{flags}'"),
+        });
+    }
+
+    let substituted = substitute_variables(line, variables);
+    parse_bind_line(&substituted)
+        .map(|(_, binding)| binding)
+        .map_err(|e| ParseError::InvalidSyntax {
+            line: line_num,
+            message: format!("{:?}", e),
+        })
+}
+
+/// Removes a trailing `# comment`; `##` is a literal `#` as in Hyprland
+fn strip_comment(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut chars = line.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '#' {
+            if chars.peek() == Some(&'#') {
+                chars.next();
+                out.push('#');
+                continue;
+            }
+            break;
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// `$name = value` split into its parts
+fn variable_definition(line: &str) -> Option<(String, String)> {
+    let rest = line.strip_prefix('$')?;
+    let (name, value) = rest.split_once('=')?;
+    Some((name.trim().to_string(), value.trim().to_string()))
+}
+
+/// The value of a `keyword = value` line, if `line` starts with `keyword`
+fn directive_value<'a>(line: &'a str, keyword: &str) -> Option<&'a str> {
+    let rest = line.strip_prefix(keyword)?.trim_start();
+    Some(rest.strip_prefix('=')?.trim())
 }
 
 /// Collect variable definitions from config
@@ -123,22 +290,10 @@ pub fn parse_config_file(content: &str, _file_path: &Path) -> Result<Vec<Keybind
 ///
 /// Returns a HashMap mapping variable names to their values
 pub fn collect_variables(contents: &str) -> HashMap<String, String> {
-    let mut variables = HashMap::new();
-
-    for line in contents.lines() {
-        let line_trimmed = line.trim();
-
-        // Variable definition format: $name = value
-        if line_trimmed.starts_with('$') {
-            if let Some(equals_pos) = line_trimmed.find('=') {
-                let var_name = line_trimmed[1..equals_pos].trim().to_string();
-                let var_value = line_trimmed[equals_pos + 1..].trim().to_string();
-                variables.insert(var_name, var_value);
-            }
-        }
-    }
-
-    variables
+    contents
+        .lines()
+        .filter_map(|line| variable_definition(line.trim()))
+        .collect()
 }
 
 /// Substitute variables in a line
@@ -157,16 +312,25 @@ pub fn substitute_variables(line: &str, variables: &HashMap<String, String>) -> 
 
 /// Parse a single bind line
 ///
-/// Format: bind = MODIFIERS, KEY, DISPATCHER, ARGS
+/// Format: bind[flags] = MODIFIERS, KEY, [DESCRIPTION,] DISPATCHER, ARGS
 /// Example: bind = SUPER, K, exec, firefox
 ///
+/// The description field is only read when the `d` flag is present.
 /// Returns a Keybinding struct or nom error
 pub fn parse_bind_line(input: &str) -> IResult<&str, Keybinding> {
-    // Parse: <bind_type> = <key_combo>, <dispatcher>, <args>
     let (input, bind_type) = parse_bind_type(input)?;
     let (input, _) = (space0, char('='), space0).parse(input)?;
     let (input, key_combo) = parse_key_combo(input)?;
     let (input, _) = (space0, char(','), space0).parse(input)?;
+
+    let (input, description) = if bind_type.has_description() {
+        let (input, description) = take_until(",")(input)?;
+        let (input, _) = (space0, char(','), space0).parse(input)?;
+        (input, Some(description.trim().to_string()))
+    } else {
+        (input, None)
+    };
+
     let (input, (dispatcher, args)) = parse_dispatcher(input)?;
 
     Ok((
@@ -176,39 +340,21 @@ pub fn parse_bind_line(input: &str) -> IResult<&str, Keybinding> {
             bind_type,
             dispatcher,
             args,
+            description,
+            submap: None,
         },
     ))
 }
 
-/// Parse bind_type (bind, binde, bindl, bindm, bindr, bindel)
-///
-/// Recognizes all six Hyprland binding types and converts them to
-/// the corresponding BindType enum variant. The order matters: `bindel`
-/// must be checked before `binde` to avoid partial matches.
+/// Parse the bind keyword and its flag letters (`bind`, `bindel`, `bindd`, ...)
 ///
 /// # Returns
 ///
-/// The parsed BindType variant, or a nom parsing error if the input
-/// doesn't start with a valid bind type keyword.
+/// The parsed BindType, or a nom error if a flag letter is unknown.
 pub fn parse_bind_type(input: &str) -> IResult<&str, BindType> {
-    map(
-        alt((
-            tag("bindel"), // Must come before "binde" due to being a longer match
-            tag("binde"),
-            tag("bindl"),
-            tag("bindm"),
-            tag("bindr"),
-            tag("bind"),
-        )),
-        |s: &str| match s {
-            "bind" => BindType::Bind,
-            "binde" => BindType::BindE,
-            "bindl" => BindType::BindL,
-            "bindm" => BindType::BindM,
-            "bindr" => BindType::BindR,
-            "bindel" => BindType::BindEL,
-            _ => unreachable!(),
-        },
+    map_res(
+        (tag("bind"), take_while(|c: char| c.is_ascii_alphabetic())),
+        |(_, flags): (&str, &str)| BindType::from_flags(flags),
     )
     .parse(input)
 }

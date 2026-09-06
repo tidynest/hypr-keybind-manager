@@ -30,10 +30,30 @@ use crate::{
     ui::controller::KeyComboAvailability,
 };
 use gtk4::{
-    ApplicationWindow, Box as GtkBox, Button, Entry, EventControllerKey, Grid, Label, Orientation,
-    Switch, Window, gdk, prelude::*,
+    ApplicationWindow, Box as GtkBox, Button, DropDown, Entry, EventControllerKey, Grid, Label,
+    Orientation, Switch, Window, gdk, prelude::*,
 };
 use std::{cell::Cell, rc::Rc};
+
+/// Bind variants offered by the bind type dropdown, in display order.
+const BIND_TYPES: [BindType; 6] = [
+    BindType::Bind,
+    BindType::BindE,
+    BindType::BindL,
+    BindType::BindM,
+    BindType::BindR,
+    BindType::BindEL,
+];
+
+/// Human-readable labels for `BIND_TYPES`, same order.
+const BIND_TYPE_LABELS: [&str; 6] = [
+    "bind (standard)",
+    "binde (repeat while held)",
+    "bindl (works on lock screen)",
+    "bindm (mouse binding)",
+    "bindr (trigger on release)",
+    "bindel (repeat + lock screen)",
+];
 
 /// Dialog for editing an existing keybinding
 pub struct EditDialog {
@@ -41,7 +61,7 @@ pub struct EditDialog {
     key_entry: Entry,
     dispatcher_entry: Entry,
     args_entry: Entry,
-    bind_type_entry: Entry,
+    bind_type_dropdown: DropDown,
     sandbox_switch: Switch,
     sandbox_label: Label,
     availability_label: Label,
@@ -163,14 +183,16 @@ impl EditDialog {
             .label("🔗 Bind Type:")
             .halign(gtk4::Align::End)
             .build();
-        let bind_type_entry = Entry::builder()
-            .text(binding.bind_type.to_string())
-            .placeholder_text("bind, binde, bindm, etc.")
-            .hexpand(true)
-            .build();
-        bind_type_entry.set_tooltip_text(Some("Choose the Hyprland bind variant"));
+        let bind_type_dropdown = DropDown::from_strings(&BIND_TYPE_LABELS);
+        let selected = BIND_TYPES
+            .iter()
+            .position(|t| *t == binding.bind_type)
+            .unwrap_or(0);
+        bind_type_dropdown.set_selected(selected as u32);
+        bind_type_dropdown.set_hexpand(true);
+        bind_type_dropdown.set_tooltip_text(Some("Choose the Hyprland bind variant"));
         grid.attach(&bind_type_label, 0, 5, 1, 1);
-        grid.attach(&bind_type_entry, 1, 5, 1, 1);
+        grid.attach(&bind_type_dropdown, 1, 5, 1, 1);
 
         let sandbox_label = Label::builder()
             .label("🛡️ Bubblewrap Sandbox:")
@@ -220,13 +242,11 @@ impl EditDialog {
             let key_entry = key_entry.clone();
             let dispatcher_entry = dispatcher_entry.clone();
             let args_entry = args_entry.clone();
-            let bind_type_entry = bind_type_entry.clone();
 
             cancel_button.connect_clicked(move |_| {
                 key_entry.select_region(0, 0);
                 dispatcher_entry.select_region(0, 0);
                 args_entry.select_region(0, 0);
-                bind_type_entry.select_region(0, 0);
 
                 response.set(Some(DialogResponse::Cancel));
                 window.close();
@@ -238,13 +258,11 @@ impl EditDialog {
             let key_entry = key_entry.clone();
             let dispatcher_entry = dispatcher_entry.clone();
             let args_entry = args_entry.clone();
-            let bind_type_entry = bind_type_entry.clone();
 
             save_button.connect_clicked(move |_| {
                 key_entry.select_region(0, 0);
                 dispatcher_entry.select_region(0, 0);
                 args_entry.select_region(0, 0);
-                bind_type_entry.select_region(0, 0);
 
                 response.set(Some(DialogResponse::Save));
             });
@@ -273,7 +291,7 @@ impl EditDialog {
             key_entry,
             dispatcher_entry,
             args_entry,
-            bind_type_entry,
+            bind_type_dropdown,
             sandbox_switch,
             sandbox_label,
             availability_label,
@@ -341,7 +359,6 @@ impl EditDialog {
         self.key_entry.select_region(0, 0);
         self.dispatcher_entry.select_region(0, 0);
         self.args_entry.select_region(0, 0);
-        self.bind_type_entry.select_region(0, 0);
     }
 
     /// Parses the form fields and returns a new Keybinding if valid.
@@ -349,7 +366,6 @@ impl EditDialog {
         let key_text = self.key_entry.text().to_string();
         let dispatcher = self.dispatcher_entry.text().to_string();
         let args_text = self.args_entry.text().to_string();
-        let bind_type_text = self.bind_type_entry.text().to_string();
 
         let key_combo = parse_key_combo_text(&key_text)?
             .ok_or_else(|| "Key combination cannot be empty".to_string())?;
@@ -357,19 +373,10 @@ impl EditDialog {
         if dispatcher.trim().is_empty() {
             return Err("Dispatcher cannot be empty".to_string());
         }
-        if bind_type_text.trim().is_empty() {
-            return Err("Bind type cannot be empty".to_string());
-        }
-
-        let bind_type = match bind_type_text.to_lowercase().as_str() {
-            "bind" => BindType::Bind,
-            "binde" => BindType::BindE,
-            "bindm" => BindType::BindM,
-            "bindr" => BindType::BindR,
-            "bindl" => BindType::BindL,
-            "bindel" => BindType::BindEL,
-            _ => return Err(format!("Invalid bind type: {}", bind_type_text)),
-        };
+        let bind_type = BIND_TYPES
+            .get(self.bind_type_dropdown.selected() as usize)
+            .copied()
+            .unwrap_or(BindType::Bind);
 
         let args = if args_text.trim().is_empty() {
             None
@@ -387,6 +394,8 @@ impl EditDialog {
             key_combo,
             dispatcher: dispatcher.trim().to_string(),
             args,
+            description: None,
+            submap: None,
         })
     }
 
@@ -536,7 +545,7 @@ fn refresh_key_combo_feedback_widgets(
         Err(message) => set_feedback_state(availability_label, &message, "availability-warning"),
         Ok(Some(key_combo)) => {
             let assistance =
-                controller.get_key_combo_assistance(Some(&key_combo), original_binding);
+                controller.get_key_combo_assistance(Some(&key_combo), None, original_binding);
             match assistance.availability {
                 KeyComboAvailability::Incomplete => {
                     set_feedback_state(

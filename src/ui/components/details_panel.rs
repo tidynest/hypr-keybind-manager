@@ -246,16 +246,7 @@ impl DetailsPanel {
                 self.args_label.set_has_tooltip(true);
                 self.args_label.set_tooltip_text(Some(args_text));
 
-                // Format BindType for display
-                let bind_type_str = match b.bind_type {
-                    crate::core::types::BindType::Bind => "bind",
-                    crate::core::types::BindType::BindE => "binde",
-                    crate::core::types::BindType::BindL => "bindl",
-                    crate::core::types::BindType::BindM => "bindm",
-                    crate::core::types::BindType::BindR => "bindr",
-                    crate::core::types::BindType::BindEL => "bindel",
-                };
-                self.bind_type_label.set_label(bind_type_str);
+                self.bind_type_label.set_label(&b.bind_type.to_string());
 
                 // Check for conflicts and show which bindings conflict
                 let conflicts = self.controller.get_conflicts();
@@ -408,5 +399,19 @@ impl DetailsPanel {
     /// Reference to the root `Frame` widget
     pub fn widget(&self) -> &Frame {
         &self.widget
+    }
+
+    /// Acts as if the user clicked Edit (no-op when nothing is selected)
+    pub fn trigger_edit(&self) {
+        if self.edit_button.is_sensitive() {
+            self.edit_button.emit_clicked();
+        }
+    }
+
+    /// Acts as if the user clicked Delete (no-op when nothing is selected)
+    pub fn trigger_delete(&self) {
+        if self.delete_button.is_sensitive() {
+            self.delete_button.emit_clicked();
+        }
     }
 }

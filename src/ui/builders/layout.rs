@@ -20,7 +20,10 @@ use crate::ui::{
     Controller,
     components::{ConflictPanel, DetailsPanel, KeybindList, SearchBar},
 };
-use gtk4::{Box as GtkBox, Button, Orientation, Paned, prelude::*};
+use gtk4::{
+    Box as GtkBox, Button, CallbackAction, Orientation, Paned, Shortcut, ShortcutController,
+    ShortcutScope, ShortcutTrigger, prelude::*,
+};
 use std::rc::Rc;
 
 pub const DEFAULT_WINDOW_WIDTH: i32 = 1000;
@@ -69,9 +72,22 @@ pub fn build_main_layout(
     // Create SINGLE keybind list instance
     let keybind_list = Rc::new(KeybindList::new(controller.clone()));
 
-    // Create search bar
+    // Create search bar, focusable from anywhere with Ctrl+F
     let search_bar = SearchBar::new();
     left_vbox.append(search_bar.widget());
+
+    let search_entry = search_bar.widget().clone();
+    let focus_search = CallbackAction::new(move |_, _| {
+        search_entry.grab_focus();
+        glib::Propagation::Stop
+    });
+    let shortcuts = ShortcutController::new();
+    shortcuts.set_scope(ShortcutScope::Global);
+    shortcuts.add_shortcut(Shortcut::new(
+        ShortcutTrigger::parse_string("<Control>f"),
+        Some(focus_search),
+    ));
+    left_vbox.add_controller(shortcuts);
 
     let add_keybinding_button = Button::builder().label("➕ Add Keybinding").build();
     add_keybinding_button.add_css_class("suggested-action");

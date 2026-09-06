@@ -21,23 +21,28 @@ use gtk4::{
     Box as GtkBox, Grid, Label, ListBox, Orientation, ScrolledWindow, pango::EllipsizeMode,
     prelude::*,
 };
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
-use crate::{core::types::Keybinding, ui::Controller};
+use crate::{
+    core::types::{KeyCombo, Keybinding},
+    ui::Controller,
+};
 
 const KEY_COLUMN_WIDTH: i32 = 190;
 const DISPATCHER_COLUMN_WIDTH: i32 = 140;
 
 /// Displays a scrollable list of keybindings
 pub struct KeybindList {
-    /// Root widget (scrollable container)
-    widget: ScrolledWindow,
+    /// Root widget (list plus footer)
+    widget: GtkBox,
     /// List box containing rows
     list_box: ListBox,
+    /// Footer summarising shown/total/conflict counts
+    footer: Label,
     /// Controller reference for data access
     controller: Rc<Controller>,
     /// Cache of currently displayed bindings
-    current_bindings: RefCell<Vec<Keybinding>>,
+    current_bindings: Rc<RefCell<Vec<Keybinding>>>,
 }
 
 impl KeybindList {
@@ -69,16 +74,30 @@ impl KeybindList {
         // Create list box
         let list_box = ListBox::builder()
             .selection_mode(gtk4::SelectionMode::Single) // Allow clicking rows
+            .activate_on_single_click(false) // Double-click or Enter activates
             .build();
+
+        let placeholder = Label::new(Some("No keybindings match"));
+        placeholder.add_css_class("dim-label");
+        placeholder.set_margin_top(24);
+        list_box.set_placeholder(Some(&placeholder));
 
         // Add list to scrolled window
         scrolled_window.set_child(Some(&list_box));
 
+        let footer = Label::builder().xalign(0.0).margin_start(8).build();
+        footer.add_css_class("list-footer");
+
+        let widget = GtkBox::new(Orientation::Vertical, 6);
+        widget.append(&scrolled_window);
+        widget.append(&footer);
+
         Self {
-            widget: scrolled_window,
+            widget,
             list_box,
+            footer,
             controller,
-            current_bindings: RefCell::new(Vec::new()),
+            current_bindings: Rc::new(RefCell::new(Vec::new())),
         }
     }
 
@@ -101,15 +120,27 @@ impl KeybindList {
         // Cache the bindings
         *self.current_bindings.borrow_mut() = bindings.clone();
 
+        let conflicts = self.controller.get_conflicts();
+        let conflict_keys: HashSet<KeyCombo> =
+            conflicts.iter().map(|c| c.key_combo.clone()).collect();
+
         // Add new rows with alternating colours
         for (index, binding) in bindings.iter().enumerate() {
-            let row = self.create_row(binding, index);
+            let in_conflict = conflict_keys.contains(&binding.key_combo);
+            let row = self.create_row(binding, index, in_conflict);
             self.list_box.append(&row);
         }
+
+        self.footer.set_label(&format!(
+            "{} of {} keybindings shown · {} conflicts",
+            bindings.len(),
+            self.controller.keybinding_count(),
+            conflicts.len()
+        ));
     }
 
     /// Create a single row widget for a keybinding
-    fn create_row(&self, binding: &Keybinding, index: usize) -> GtkBox {
+    fn create_row(&self, binding: &Keybinding, index: usize, in_conflict: bool) -> GtkBox {
         let row = GtkBox::builder()
             .orientation(Orientation::Vertical)
             .margin_start(8)
@@ -122,6 +153,10 @@ impl KeybindList {
             row.add_css_class("even-row");
         } else {
             row.add_css_class("odd-row");
+        }
+        if in_conflict {
+            row.add_css_class("conflict-row");
+            row.set_tooltip_text(Some("This key combination is bound more than once"));
         }
 
         let grid = Grid::builder()
@@ -173,8 +208,22 @@ impl KeybindList {
     }
 
     /// Returns the root widget for adding to parent container
-    pub fn widget(&self) -> &ScrolledWindow {
+    pub fn widget(&self) -> &GtkBox {
         &self.widget
+    }
+
+    /// Runs `callback` with the binding of a row activated by double-click or Enter
+    pub fn connect_activate<F>(&self, callback: F)
+    where
+        F: Fn(Keybinding) + 'static,
+    {
+        let current = self.current_bindings.clone();
+        self.list_box.connect_row_activated(move |_, row| {
+            let binding = current.borrow().get(row.index() as usize).cloned();
+            if let Some(binding) = binding {
+                callback(binding);
+            }
+        });
     }
 
     /// Get a binding by its current display index.

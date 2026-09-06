@@ -154,7 +154,7 @@ impl Controller {
         let content = config_manager.read_config()?;
 
         // Parse keybindings using existing parser
-        let bindings = parse_config_file(&content, Path::new(""))
+        let bindings = parse_config_file(&content, config_manager.config_path())
             .map_err(|e| ConfigError::ValidationFailed(e.to_string()))?;
 
         let count = bindings.len();
@@ -268,14 +268,11 @@ impl Controller {
                     return true;
                 }
 
-                // Search in args
-                if let Some(args) = &binding.args {
-                    if args.to_lowercase().contains(&query_lower) {
-                        return true;
-                    }
-                }
-
-                false
+                // Search in args, description and submap
+                [&binding.args, &binding.description, &binding.submap]
+                    .into_iter()
+                    .flatten()
+                    .any(|text| text.to_lowercase().contains(&query_lower))
             })
             .cloned()
             .collect()
@@ -330,12 +327,14 @@ impl Controller {
     pub fn get_bindings_for_key_combo(
         &self,
         key_combo: &KeyCombo,
+        submap: Option<&str>,
         exclude: Option<&Keybinding>,
     ) -> Vec<Keybinding> {
         self.keybindings
             .borrow()
             .iter()
             .filter(|binding| binding.key_combo == *key_combo)
+            .filter(|binding| binding.submap.as_deref() == submap)
             .filter(|binding| exclude != Some(*binding))
             .cloned()
             .collect()
@@ -345,9 +344,10 @@ impl Controller {
     pub fn is_key_combo_available(
         &self,
         key_combo: &KeyCombo,
+        submap: Option<&str>,
         exclude: Option<&Keybinding>,
     ) -> bool {
-        self.get_bindings_for_key_combo(key_combo, exclude)
+        self.get_bindings_for_key_combo(key_combo, submap, exclude)
             .is_empty()
     }
 
@@ -355,6 +355,7 @@ impl Controller {
     pub fn get_key_combo_assistance(
         &self,
         key_combo: Option<&KeyCombo>,
+        submap: Option<&str>,
         exclude: Option<&Keybinding>,
     ) -> KeyComboAssistance {
         let Some(key_combo) = key_combo else {
@@ -364,7 +365,7 @@ impl Controller {
             };
         };
 
-        let in_use = self.get_bindings_for_key_combo(key_combo, exclude);
+        let in_use = self.get_bindings_for_key_combo(key_combo, submap, exclude);
         if in_use.is_empty() {
             KeyComboAssistance {
                 availability: KeyComboAvailability::Available,
@@ -373,7 +374,13 @@ impl Controller {
         } else {
             KeyComboAssistance {
                 availability: KeyComboAvailability::InUse(in_use),
-                suggestions: self.suggest_key_combos(&key_combo.modifiers, exclude, 5, key_combo),
+                suggestions: self.suggest_key_combos(
+                    &key_combo.modifiers,
+                    submap,
+                    exclude,
+                    5,
+                    key_combo,
+                ),
             }
         }
     }
@@ -382,6 +389,7 @@ impl Controller {
     pub fn suggest_key_combos(
         &self,
         modifiers: &[Modifier],
+        submap: Option<&str>,
         exclude: Option<&Keybinding>,
         limit: usize,
         original: &KeyCombo,
@@ -392,7 +400,7 @@ impl Controller {
             .into_iter()
             .map(|key| KeyCombo::new(modifiers.clone(), key))
             .filter(|candidate| candidate != original)
-            .filter(|candidate| self.is_key_combo_available(candidate, exclude))
+            .filter(|candidate| self.is_key_combo_available(candidate, submap, exclude))
             .take(limit)
             .collect()
     }
@@ -497,6 +505,8 @@ impl Controller {
     ///     bind_type: BindType::Bind,
     ///     dispatcher: "exec".to_string(),
     ///     args: Some("firefox".to_string()),
+    ///     description: None,
+    ///     submap: None,
     /// };
     ///
     /// controller.delete_keybinding(&binding)?;
@@ -591,10 +601,10 @@ impl Controller {
             .restore_backup(backup_path)
             .map_err(|e| format!("Failed to restore backup: {}", e))?;
 
-        // Reload keybindings from the restored config
+        // Reload keybindings from the restored config; the snapshot lets Undo revert the restore
+        self.record_undo_snapshot();
         self.load_keybindings()
             .map_err(|e| format!("Failed to reload keybindings: {}", e))?;
-        self.clear_history();
 
         Ok(())
     }
@@ -663,7 +673,9 @@ impl Controller {
                 let mut existing = self.keybindings.borrow_mut();
                 for binding in imported_bindings.clone() {
                     // Check if binding already exists (same key combo)
-                    let exists = existing.iter().any(|b| b.key_combo == binding.key_combo);
+                    let exists = existing
+                        .iter()
+                        .any(|b| b.key_combo == binding.key_combo && b.submap == binding.submap);
                     if !exists {
                         existing.push(binding);
                     }
@@ -803,12 +815,26 @@ impl Controller {
     /// # Ok::<(), String>(())
     /// ```
     pub fn apply_to_hyprland(&self) -> Result<(), String> {
-        Command::new("hyprctl")
+        let output = Command::new("hyprctl")
             .arg("reload")
             .output()
             .map_err(|e| format!("Failed to run hyprctl: {}", e))?;
 
-        Ok(())
+        if output.status.success() {
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let detail = if stderr.trim().is_empty() {
+                stdout.trim()
+            } else {
+                stderr.trim()
+            };
+            Err(format!(
+                "hyprctl reload exited with {}: {}",
+                output.status, detail
+            ))
+        }
     }
 }
 

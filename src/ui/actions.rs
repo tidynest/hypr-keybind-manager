@@ -355,9 +355,14 @@ pub fn setup_import_action(
 ///
 /// Creates a GTK action that triggers Hyprland to reload its configuration,
 /// applying all pending changes immediately without restart.
-pub fn setup_apply_action(app: &Application, controller: Rc<Controller>) {
+pub fn setup_apply_action(
+    app: &Application,
+    window: &ApplicationWindow,
+    controller: Rc<Controller>,
+) {
     let apply_action = SimpleAction::new("apply-to-hyprland", None);
     let controller_for_apply = controller.clone();
+    let window_for_apply = window.clone();
 
     apply_action.connect_activate(move |_, _| {
         eprintln!("🔄 Applying changes to Hyprland...");
@@ -365,12 +370,12 @@ pub fn setup_apply_action(app: &Application, controller: Rc<Controller>) {
         match controller_for_apply.apply_to_hyprland() {
             Ok(()) => {
                 eprintln!("✅ Hyprland reloaded successfully!");
-                // TODO: Show success notification in UI
+                window_for_apply.set_title(Some(&format!(
+                    "Hyprland Keybinding Manager · applied {}",
+                    chrono::Local::now().format("%H:%M:%S")
+                )));
             }
-            Err(e) => {
-                eprintln!("❌ Failed to reload Hyprland: {}", e);
-                // TODO: Show error dialog
-            }
+            Err(e) => show_action_error(&window_for_apply, "Apply Failed", &e),
         }
     });
 

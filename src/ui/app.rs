@@ -211,7 +211,7 @@ impl App {
         );
 
         // Setup apply to Hyprland action
-        actions::setup_apply_action(app, controller.clone());
+        actions::setup_apply_action(app, &window, controller.clone());
 
         // Wire up all event handlers
         builders::wire_up_handlers(

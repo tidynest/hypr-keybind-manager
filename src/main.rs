@@ -69,6 +69,10 @@ enum Commands {
         /// Path to Hyprland config file
         #[arg(short, long, default_value = "~/.config/hypr/hyprland.conf")]
         config: PathBuf,
+
+        /// Print the bindings as JSON instead of a table
+        #[arg(long)]
+        json: bool,
     },
 
     /// Launch GUI overlay
@@ -100,7 +104,7 @@ fn main() -> anyhow::Result<(), Box<dyn std::error::Error>> {
 
     match cli.command {
         Commands::Check { config } => check_conflicts(&config)?,
-        Commands::List { config } => list_keybindings(&config)?,
+        Commands::List { config, json } => list_keybindings(&config, json)?,
         Commands::Gui { config } => launch_gui(&config)?,
     }
 
@@ -166,10 +170,16 @@ fn check_conflicts(config_path: &Path) -> anyhow::Result<()> {
         );
 
         for (i, conflict) in conflicts.iter().enumerate() {
+            let submap = conflict
+                .submap
+                .as_deref()
+                .map(|s| format!(" in submap {s}"))
+                .unwrap_or_default();
             println!(
-                "{} {}",
+                "{} {}{}",
                 format!("Conflict {}", i + 1).yellow().bold(),
-                format!("{}", conflict.key_combo).cyan()
+                format!("{}", conflict.key_combo).cyan(),
+                submap.dimmed()
             );
 
             for (idx, binding) in conflict.conflicting_bindings.iter().enumerate() {
@@ -210,7 +220,7 @@ fn check_conflicts(config_path: &Path) -> anyhow::Result<()> {
 ///
 /// * `Ok(())` - Successfully listed bindings
 /// * `Err(_)` - File read or parse error
-fn list_keybindings(config_path: &Path) -> anyhow::Result<()> {
+fn list_keybindings(config_path: &Path, json: bool) -> anyhow::Result<()> {
     // Expand tilde in path
     let expanded_path = shellexpand::tilde(
         config_path
@@ -225,6 +235,11 @@ fn list_keybindings(config_path: &Path) -> anyhow::Result<()> {
 
     let bindings = parse_config_file(&content, path)?;
 
+    if json {
+        println!("{}", serde_json::to_string_pretty(&bindings)?);
+        return Ok(());
+    }
+
     println!(
         "{}",
         format!("Keybindings from: {}\n", path.display()).bold()
@@ -237,8 +252,19 @@ fn list_keybindings(config_path: &Path) -> anyhow::Result<()> {
         let key_combo = format!("{}", binding.key_combo).cyan().bold();
         let dispatcher = binding.dispatcher.green();
         let args = binding.args.unwrap_or_default();
+        let submap = binding
+            .submap
+            .map(|s| format!("[{s}] ").dimmed().to_string())
+            .unwrap_or_default();
+        let description = binding
+            .description
+            .map(|d| format!("  # {d}").dimmed().to_string())
+            .unwrap_or_default();
 
-        println!("{} → {} {}", key_combo, dispatcher, args);
+        println!(
+            "{submap}{} → {} {}{description}",
+            key_combo, dispatcher, args
+        );
     }
 
     println!("\n{} Total: {} bindings", "✓".green(), total);

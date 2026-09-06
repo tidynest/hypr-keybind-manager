@@ -108,6 +108,8 @@ fn test_argument_length_limit() {
         bind_type: BindType::Bind,
         dispatcher: "exec".to_string(),
         args: Some(long_arg),
+        description: None,
+        submap: None,
     };
 
     assert!(matches!(
@@ -123,6 +125,8 @@ fn test_validates_complete_binding_success() {
         bind_type: BindType::Bind,
         dispatcher: "exec".to_string(),
         args: Some("firefox".to_string()),
+        description: None,
+        submap: None,
     };
 
     assert!(validate_keybinding(&binding).is_ok());
@@ -135,6 +139,8 @@ fn test_validates_complete_binding_invalid_dispatcher() {
         bind_type: BindType::Bind,
         dispatcher: "evil".to_string(),
         args: Some("firefox".to_string()),
+        description: None,
+        submap: None,
     };
 
     assert!(matches!(
@@ -150,6 +156,8 @@ fn test_validates_complete_binding_shell_injection() {
         bind_type: BindType::Bind,
         dispatcher: "exec".to_string(),
         args: Some("firefox; rm -rf /".to_string()),
+        description: None,
+        submap: None,
     };
 
     assert!(matches!(

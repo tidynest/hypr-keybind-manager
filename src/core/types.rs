@@ -26,7 +26,7 @@
 //! with security in mind (validation, normalization, consistent hashing).
 
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::{collections::HashMap, fmt};
 
 /// Keyboard modifier keys
 ///
@@ -55,41 +55,121 @@ impl fmt::Display for Modifier {
     }
 }
 
-/// Type of keybinding
+/// Bind flags as documented by Hyprland, in the order they are rendered.
 ///
-/// Hyprland supports six different binding types with different behaviours:
-/// - `Bind`: Standard binding
-/// - `BindE`: Repeat while key is held (e for "repeat")
-/// - `BindL`: Works on locked screen (l for "locked")
-/// - `BindM`: Mouse binding (m for "mouse")
-/// - `BindR`: Trigger on key release (r for "release")
-/// - `BindEL`: Combination of BindE and BindL
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-pub enum BindType {
+/// A bind line is `bind` followed by any of these letters, so `bindel`
+/// repeats while held and works on the lock screen.
+pub const BIND_FLAGS: [(char, &str); 12] = [
+    ('e', "repeat while held"),
+    ('l', "works on the lock screen"),
+    ('r', "triggers on release"),
+    ('c', "triggers on release without movement"),
+    ('n', "non-consuming, the key still reaches the window"),
+    ('m', "mouse binding"),
+    ('t', "transparent, cannot be shadowed by other binds"),
+    ('i', "ignores modifiers"),
+    ('s', "separate, any combination of the given modifiers"),
+    ('d', "has a description"),
+    ('o', "long press"),
+    ('p', "bypasses app requests to inhibit keybinds"),
+];
+
+/// Type of keybinding: `bind` plus any set of Hyprland flag letters.
+///
+/// The six common variants are available as constants (`BindType::Bind`,
+/// `BindType::BindEL`, ...). Any other combination such as `bindd` or `bindnt`
+/// is represented too, so a config using them still loads.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub struct BindType {
+    flags: u16,
+}
+
+#[allow(non_upper_case_globals)] // enum-style names, kept so call sites read as before
+impl BindType {
     /// Standard keybinding
-    Bind,
+    pub const Bind: Self = Self { flags: 0 };
     /// Repeat on hold
-    BindE,
+    pub const BindE: Self = Self {
+        flags: Self::bit('e'),
+    };
     /// Works on locked screen
-    BindL,
+    pub const BindL: Self = Self {
+        flags: Self::bit('l'),
+    };
     /// Mouse binding
-    BindM,
+    pub const BindM: Self = Self {
+        flags: Self::bit('m'),
+    };
     /// Trigger on release
-    BindR,
+    pub const BindR: Self = Self {
+        flags: Self::bit('r'),
+    };
     /// Repeat on hold + locked screen
-    BindEL,
+    pub const BindEL: Self = Self {
+        flags: Self::bit('e') | Self::bit('l'),
+    };
+
+    const fn bit(flag: char) -> u16 {
+        let mut i = 0;
+        while i < BIND_FLAGS.len() {
+            if BIND_FLAGS[i].0 == flag {
+                return 1 << i;
+            }
+            i += 1;
+        }
+        0
+    }
+
+    /// Builds a bind type from the letters after `bind`, e.g. `"el"`.
+    ///
+    /// Returns the offending character if one is not a known flag.
+    pub fn from_flags(flags: &str) -> Result<Self, char> {
+        let mut bits = 0;
+        for c in flags.chars() {
+            let bit = Self::bit(c);
+            if bit == 0 {
+                return Err(c);
+            }
+            bits |= bit;
+        }
+        Ok(Self { flags: bits })
+    }
+
+    /// Whether the given flag letter is set
+    pub fn has(&self, flag: char) -> bool {
+        self.flags & Self::bit(flag) != 0
+    }
+
+    /// Whether this is a `bindd` style binding carrying a description
+    pub fn has_description(&self) -> bool {
+        self.has('d')
+    }
+
+    /// Returns a copy with the description flag set or cleared
+    pub fn with_description(self, enabled: bool) -> Self {
+        let bit = Self::bit('d');
+        Self {
+            flags: if enabled {
+                self.flags | bit
+            } else {
+                self.flags & !bit
+            },
+        }
+    }
+
+    /// The flag letters in canonical order, e.g. `"el"`
+    pub fn flags(&self) -> String {
+        BIND_FLAGS
+            .iter()
+            .filter(|(c, _)| self.has(*c))
+            .map(|(c, _)| *c)
+            .collect()
+    }
 }
 
 impl fmt::Display for BindType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            BindType::Bind => write!(f, "bind"),
-            BindType::BindE => write!(f, "binde"),
-            BindType::BindL => write!(f, "bindl"),
-            BindType::BindM => write!(f, "bindm"),
-            BindType::BindR => write!(f, "bindr"),
-            BindType::BindEL => write!(f, "bindel"),
-        }
+        write!(f, "bind{}", self.flags())
     }
 }
 
@@ -110,14 +190,14 @@ impl fmt::Display for BindType {
 ///     key: "K".to_string(),
 /// };
 /// ```
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, Serialize)]
 pub struct KeyCombo {
     /// Modifier keys (SUPER, CTRL, SHIFT, ALT)
     /// Stored in a Vec to allow multiple modifiers
     pub modifiers: Vec<Modifier>,
 
-    /// Base key name (e.g., "K", "Return", "F1")
-    /// Always stored in uppercase for consistent hashing
+    /// Base key name as written in the config (e.g., "K", "Return", "XF86AudioMute").
+    /// Compared and hashed case-insensitively, since Hyprland resolves keysyms that way.
     pub key: String,
 }
 
@@ -126,19 +206,32 @@ impl KeyCombo {
     ///
     /// Normalisation includes:
     /// - Sorting modifiers for consistent hashing
-    /// - Converting key to uppercase
     /// - Removing duplicate modifiers
+    /// - Trimming the key name (case is kept for display)
     pub fn new(mut modifiers: Vec<Modifier>, key: &str) -> Self {
-        // Sort modifiers for consistent hashing
-        modifiers.sort_by_key(|m| format!("{:?}", m));
+        // Sort modifiers for consistent hashing, SUPER first as configs are usually written
+        modifiers.sort_by_key(|m| *m as u8);
 
         // Remove duplicates
         modifiers.dedup();
 
         Self {
             modifiers,
-            key: key.to_uppercase(),
+            key: key.trim().to_string(),
         }
+    }
+}
+
+impl PartialEq for KeyCombo {
+    fn eq(&self, other: &Self) -> bool {
+        self.modifiers == other.modifiers && self.key.eq_ignore_ascii_case(&other.key)
+    }
+}
+
+impl std::hash::Hash for KeyCombo {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.modifiers.hash(state);
+        self.key.to_ascii_uppercase().hash(state);
     }
 }
 
@@ -173,10 +266,12 @@ impl fmt::Display for KeyCombo {
 ///     bind_type: BindType::Bind,
 ///     dispatcher: "exec".to_string(),
 ///     args: Some("firefox".to_string()),
+///     description: None,
+///     submap: None,
 /// };
 /// // Represents: bind = SUPER, K, exec, firefox
 /// ```
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Keybinding {
     /// The key combination that triggers this binding
     pub key_combo: KeyCombo,
@@ -193,20 +288,65 @@ pub struct Keybinding {
     /// - workspace: Some("3")
     /// - killactive: None
     pub args: Option<String>,
+
+    /// Human-readable description, the extra field of a `bindd` line
+    #[serde(default)]
+    pub description: Option<String>,
+
+    /// Submap this binding lives in, `None` for the global map
+    #[serde(default)]
+    pub submap: Option<String>,
+}
+
+impl Keybinding {
+    /// Renders the binding as a config line, e.g. `bind = SUPER SHIFT, K, exec, firefox`.
+    ///
+    /// `variables` maps names to values as found in the config. When the
+    /// modifiers or the arguments equal a variable's value the `$name` form is
+    /// written instead, so `$mainMod` survives an edit.
+    pub fn to_config_line(&self, variables: &HashMap<String, String>) -> String {
+        let mut modifiers = self
+            .key_combo
+            .modifiers
+            .iter()
+            .map(|m| m.to_string())
+            .collect::<Vec<_>>();
+        if let Some(alias) = variable_alias(&modifiers.join(" "), variables) {
+            modifiers = vec![alias];
+        } else if let Some(first) = modifiers.first_mut() {
+            if let Some(alias) = variable_alias(first, variables) {
+                *first = alias;
+            }
+        }
+
+        let mut parts = vec![modifiers.join(" "), self.key_combo.key.clone()];
+        if let Some(description) = &self.description {
+            parts.push(description.clone());
+        }
+        parts.push(self.dispatcher.clone());
+        if let Some(args) = &self.args {
+            parts.push(variable_alias(args, variables).unwrap_or_else(|| args.clone()));
+        }
+
+        let bind_type = self.bind_type.with_description(self.description.is_some());
+        format!("{} = {}", bind_type, parts.join(", "))
+    }
+}
+
+/// Returns `$name` for the variable whose value equals `value`, if any.
+///
+/// Ties are broken by name so the output is deterministic.
+fn variable_alias(value: &str, variables: &HashMap<String, String>) -> Option<String> {
+    variables
+        .iter()
+        .filter(|(_, v)| v.eq_ignore_ascii_case(value.trim()))
+        .map(|(name, _)| name)
+        .min()
+        .map(|name| format!("${name}"))
 }
 
 impl fmt::Display for Keybinding {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{} = {}, {}",
-            self.bind_type, self.key_combo, self.dispatcher
-        )?;
-
-        if let Some(args) = &self.args {
-            write!(f, ", {}", args)?;
-        }
-
-        Ok(())
+        f.write_str(&self.to_config_line(&HashMap::new()))
     }
 }

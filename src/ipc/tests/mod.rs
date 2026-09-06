@@ -30,6 +30,8 @@ fn create_safe_binding(key: &str, app: &str) -> Keybinding {
         bind_type: BindType::Bind,
         dispatcher: "exec".to_string(),
         args: Some(app.to_string()),
+        description: None,
+        submap: None,
     }
 }
 
@@ -55,6 +57,8 @@ fn test_dryrun_mode_blocks_injection() {
         bind_type: BindType::Bind,
         dispatcher: "exec".to_string(),
         args: Some("firefox; echo hacked".to_string()),
+        description: None,
+        submap: None,
     };
 
     let result = client.add_bind(&malicious);
@@ -117,6 +121,8 @@ fn test_command_building_multiple_modifiers() {
         bind_type: BindType::Bind,
         dispatcher: "exec".to_string(),
         args: Some("kitty".to_string()),
+        description: None,
+        submap: None,
     };
 
     let cmd = client.build_keyword_command("bind", &binding);
@@ -138,6 +144,8 @@ fn test_command_building_no_args() {
         bind_type: BindType::Bind,
         dispatcher: "killactive".to_string(),
         args: None,
+        description: None,
+        submap: None,
     };
 
     let cmd = client.build_keyword_command("bind", &binding);

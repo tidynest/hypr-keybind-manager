@@ -76,6 +76,7 @@ pub fn wire_up_handlers(
     // ============================================================================
     let key_controller = EventControllerKey::new();
     let list_box_for_keys = keybind_list.list_box().clone();
+    let details_panel_for_keys = details_panel.clone();
 
     key_controller.connect_key_pressed(move |_controller, key, _code, _modifier| match key {
         gdk::Key::Up => {
@@ -100,16 +101,19 @@ pub fn wire_up_handlers(
             }
             glib::Propagation::Stop
         }
-        gdk::Key::Return | gdk::Key::KP_Enter => {
-            if let Some(selected_row) = list_box_for_keys.selected_row() {
-                list_box_for_keys.select_row(Some(&selected_row));
-            }
+        gdk::Key::Delete => {
+            details_panel_for_keys.trigger_delete();
             glib::Propagation::Stop
         }
+        // Return is left to the ListBox, which emits row-activated
         _ => glib::Propagation::Proceed,
     });
 
     keybind_list.list_box().add_controller(key_controller);
+
+    // Double-click or Enter on a row opens the editor
+    let details_panel_for_activate = details_panel.clone();
+    keybind_list.connect_activate(move |_| details_panel_for_activate.trigger_edit());
     keybind_list.list_box().set_can_focus(true);
     keybind_list.list_box().grab_focus();
 
@@ -265,6 +269,8 @@ pub fn wire_up_handlers(
             key_combo: KeyCombo::new(vec![], ""),
             dispatcher: String::new(),
             args: None,
+            description: None,
+            submap: None,
         };
 
         let edit_dialog = EditDialog::new(
