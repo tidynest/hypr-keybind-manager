@@ -24,7 +24,11 @@ use gtk4::{
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    core::types::{BIND_FLAGS, Keybinding},
+    config::ConfigFormat,
+    core::{
+        lua_config::render_lua_bind,
+        types::{BIND_FLAGS, Keybinding},
+    },
     ui::{Controller, builders::header::icon_button},
 };
 
@@ -180,7 +184,12 @@ impl DetailsPanel {
                 .clone()
                 .unwrap_or_else(|| "(none)".to_string()),
             b.submap.clone().unwrap_or_else(|| "(global)".to_string()),
-            b.to_string(),
+            match self.controller.config_format() {
+                ConfigFormat::Lua => {
+                    render_lua_bind(b).unwrap_or_else(|_| "(Lua code, see the file)".to_string())
+                }
+                ConfigFormat::Hyprlang => b.to_string(),
+            },
         ];
         for (value, text) in self.values.iter().zip(texts) {
             value.set_tooltip_text(Some(&text));

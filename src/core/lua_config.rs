@@ -357,14 +357,16 @@ fn mark_read_only(recorded: Vec<Recorded>, main_source: &str, main_path: &Path) 
             let read_only = if r.kind == "function" {
                 Some(format!("runs a Lua function; edit it in {at}"))
             } else if r.kind != "dispatcher" {
-                Some(format!("its action is not a dispatcher; edit it in {at}"))
+                Some(format!(
+                    "has an action that is not a dispatcher; edit it in {at}"
+                ))
             } else if per_line
                 .get(&(r.file.clone(), r.line))
                 .copied()
                 .unwrap_or(0)
                 > 1
             {
-                Some(format!("created by a loop at {at}; edit the Lua code"))
+                Some(format!("was created by a loop at {at}; edit the Lua code"))
             } else if !r.unsupported_options.is_empty() {
                 Some(format!(
                     "uses the {} option, which the editor cannot write back; edit it in {at}",
