@@ -106,7 +106,7 @@ fn test_parse_lua_config_records_every_bind() {
     assert_eq!(q.binding.description.as_deref(), Some("Terminal"));
     assert!(q.binding.bind_type.has_description());
     assert_eq!(q.line, 5);
-    assert_eq!(q.read_only, None);
+    assert_eq!(q.override_reason, None);
 
     let close = &parsed.bindings[1];
     assert_eq!(close.binding.dispatcher, "window.close");
@@ -119,18 +119,24 @@ fn test_parse_lua_config_records_every_bind() {
     let workspace = &parsed.bindings[3];
     assert_eq!(workspace.binding.dispatcher, "focus");
     assert_eq!(workspace.binding.args.as_deref(), Some("{ workspace = 1 }"));
-    assert!(workspace.read_only.as_deref().unwrap().contains("loop"));
+    assert!(
+        workspace
+            .override_reason
+            .as_deref()
+            .unwrap()
+            .contains("loop")
+    );
 
     assert!(
         parsed.bindings[6]
-            .read_only
+            .override_reason
             .as_deref()
             .unwrap()
             .contains("Lua function")
     );
     assert!(
         parsed.bindings[7]
-            .read_only
+            .override_reason
             .as_deref()
             .unwrap()
             .contains("larger statement")
@@ -138,7 +144,7 @@ fn test_parse_lua_config_records_every_bind() {
     assert!(parsed.bindings[8].binding.bind_type.has('m'));
     assert!(
         parsed.bindings[9]
-            .read_only
+            .override_reason
             .as_deref()
             .unwrap()
             .contains("device")
@@ -240,11 +246,46 @@ fn test_rewrite_lua_files_edits_lines_in_place() {
         format!("{CONFIG}\n{ADDED_HEADER}\nhl.bind(\"SUPER + Y\", hl.dsp.exec_cmd(\"yazi\"))\n")
     );
 
-    // Loop-generated binds refuse edits with a reason
-    let mut locked: Vec<Keybinding> = parsed.bindings.iter().map(|b| b.binding.clone()).collect();
-    locked[3].args = Some("{ workspace = 9 }".to_string());
-    let err = rewrite_lua_files(&parsed, &locked).unwrap_err();
-    assert!(err.contains("loop"), "{err}");
+    // Loop-generated and function binds are changed through overrides at the end
+    let mut overridden: Vec<Keybinding> =
+        parsed.bindings.iter().map(|b| b.binding.clone()).collect();
+    overridden[3].args = Some("{ workspace = 9 }".to_string()); // edit SUPER+1 (loop)
+    overridden.remove(6); // delete SUPER+G (function)
+    let (_, text) = rewrite_lua_files(&parsed, &overridden).unwrap().remove(0);
+    assert_eq!(
+        text,
+        format!(
+            "{CONFIG}\n{ADDED_HEADER}\nhl.unbind(\"SUPER + 1\")\nhl.bind(\"SUPER + 1\", hl.dsp.focus({{ workspace = 9 }}))\nhl.unbind(\"SUPER + G\")\n"
+        )
+    );
+    fs::write(&path, &text).unwrap();
+    let reparsed = parse_lua_config(&path).unwrap();
+    let ones: Vec<&Keybinding> = reparsed
+        .bindings
+        .iter()
+        .map(|b| &b.binding)
+        .filter(|b| b.key_combo.to_string() == "SUPER+1")
+        .collect();
+    assert_eq!(ones.len(), 1, "the override replaces the loop bind");
+    assert_eq!(ones[0].args.as_deref(), Some("{ workspace = 9 }"));
+    assert!(
+        !reparsed
+            .bindings
+            .iter()
+            .any(|b| b.binding.key_combo.to_string() == "SUPER+G"),
+        "unbind hides the function bind"
+    );
+    assert!(
+        reparsed
+            .bindings
+            .iter()
+            .find(|b| b.binding.key_combo.to_string() == "SUPER+1")
+            .unwrap()
+            .override_reason
+            .is_none(),
+        "the appended override is a plain line, editable in place"
+    );
+    fs::write(&path, CONFIG).unwrap();
 
     // New binds inside a submap are refused
     let mut with_submap: Vec<Keybinding> =

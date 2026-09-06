@@ -12,322 +12,165 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Hyprland IPC integration with defence-in-depth security
+//! Hyprland IPC client
 //!
-//! # Safety Modes
+//! Talks to the running compositor over its control socket,
+//! `$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket.sock`, the
+//! same channel `hyprctl` uses. A request is the command text; Hyprland
+//! answers `ok` or an error message and closes the connection. Only the
+//! standard library is involved.
 //!
-//! This module operates in three modes:
-//! - **DryRun** (default): Validates only, never sends IPC
-//! - **ReadOnly**: Can query Hyprland, cannot modify
-//! - **Live**: Full access (requires explicit opt-in)
+//! # Modes
 //!
-//! Tests default to DryRun mode for safety.
+//! `ClientMode::DryRun` validates and builds commands without sending them,
+//! `ClientMode::ReadOnly` refuses anything that would change state, and
+//! `ClientMode::Live` sends to the socket. Every binding is run through the
+//! injection validator before a command is built.
 //!
 //! # Example
-//! ```
+//! ```no_run
 //! use hypr_keybind_manager::ipc::{HyprlandClient, ClientMode};
-//! use hypr_keybind_manager::core::{Keybinding, KeyCombo, Modifier, BindType};
 //!
 //! // Safe: DryRun mode validates but never sends IPC
 //! let client = HyprlandClient::new(ClientMode::DryRun);
-//!
-//! let binding = Keybinding {
-//!     key_combo: KeyCombo::new(vec![Modifier::Super], "K"),
-//!     bind_type: BindType::Bind,
-//!     dispatcher: "exec".to_string(),
-//!     args: Some("firefox".to_string()),
-//!     description: None,
-//!     submap: None,
-//! };
-//!
-//! // Validates command but doesn't send to Hyprland
-//! assert!(client.add_bind(&binding).is_ok());
+//! client.reload()?;
+//! # Ok::<(), hypr_keybind_manager::config::ConfigError>(())
 //! ```
 
-use hyprland::dispatch::{Dispatch, DispatchType};
+use std::{
+    env,
+    io::{Read, Write},
+    os::unix::net::UnixStream,
+    path::PathBuf,
+    time::Duration,
+};
 
 use crate::config::ConfigError;
 use crate::core::{Keybinding, validator as injection_validator};
 
-/// IPC client operation mode
-///
-/// Controls what operations are allowed. Tests default to DryRun.
+/// How long to wait for the compositor to answer
+const TIMEOUT: Duration = Duration::from_secs(5);
+
+/// What the client is allowed to do
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ClientMode {
-    /// Validation only - NEVER sends to Hyprland (default for tests)
+    /// Validate and build commands, send nothing
     DryRun,
-
-    /// Can query Hyprland but cannot modify config
+    /// Send nothing that changes state
     ReadOnly,
-
-    /// Full access - requires explicit opt-in
-    /// ONLY use in production or VM testing
+    /// Send to the running Hyprland
     Live,
 }
 
-/// Hyprland IPC client with safety validation
-///
-/// Provides safe communication with Hyprland compositor via IPC socket.
-/// All commands are validated before transmission (defence-in-depth).
-///
-/// # Defence-in-Depth Security
-///
-/// Before any IPC command is sent, it passes through multiple validation layers:
-/// 1. **Injection validation** (Layer 1) - Blocks shell metacharacters
-/// 2. **Command building** (Layer 2) - Safe construction without string interpolation
-/// 3. **Mode check** (Layer 3) - DryRun/ReadOnly/Live enforcement
-/// 4. **IPC transmission** (Layer 4) - Only in Live mode
-///
-/// # Example
-/// ```
-/// use hypr_keybind_manager::ipc::{HyprlandClient, ClientMode};
-///
-/// // Safe for testing - validates but never sends commands
-/// let client = HyprlandClient::new(ClientMode::DryRun);
-/// ```
+/// Client for Hyprland's control socket
 pub struct HyprlandClient {
-    /// Operation mode (DryRun/ReadOnly/Live)
     mode: ClientMode,
 }
 
 impl HyprlandClient {
-    /// Creates a new client in the specified mode
-    ///
-    /// # Safety Modes
-    ///
-    /// - `DryRun`: Validates commands but never sends IPC (safe for tests)
-    /// - `ReadOnly`: Can query but not modify (safe for inspection)
-    /// - `Live`: Full access (requires explicit intent)
-    ///
-    /// # Example (Safe for tests)
-    /// ```
-    /// use hypr_keybind_manager::ipc::{HyprlandClient, ClientMode};
-    ///
-    /// let client = HyprlandClient::new(ClientMode::DryRun);
-    /// // This client will validate but never actually send commands
-    /// ```
     pub fn new(mode: ClientMode) -> Self {
         Self { mode }
     }
 
-    /// Adds a keybinding to Hyprland
+    /// Adds a binding at runtime with `keyword bind<flags> ...`
     ///
-    /// # Defence-in-Depth Process
-    ///
-    /// 1. Validates binding for injection attempts (Layer 1)
-    /// 2. Builds command safely (Layer 2)
-    /// 3. Checks operation mode (Layer 3)
-    /// 4. Sends to Hyprland only if Live mode (Layer 4)
-    ///
-    /// # Arguments
-    ///
-    /// * `binding` - The keybinding to add
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` - Command validated (DryRun) or sent successfully (Live)
-    /// * `Err(ConfigError::ValidationFailed)` - Injection attempt blocked
-    /// * `Err(ConfigError::IpcCommandFailed)` - Read-only mode or IPC failure
-    ///
-    /// # Example
-    /// ```
-    /// use hypr_keybind_manager::ipc::{HyprlandClient, ClientMode};
-    /// use hypr_keybind_manager::core::{Keybinding, KeyCombo, Modifier, BindType};
-    ///
-    /// let client = HyprlandClient::new(ClientMode::DryRun);
-    ///
-    /// let binding = Keybinding {
-    ///     key_combo: KeyCombo::new(vec![Modifier::Super], "K"),
-    ///     bind_type: BindType::Bind,
-    ///     dispatcher: "exec".to_string(),
-    ///     args: Some("firefox".to_string()),
-    ///     description: None,
-    ///     submap: None,
-    /// };
-    ///
-    /// // Safe: validates but doesn't send in DryRun mode
-    /// assert!(client.add_bind(&binding).is_ok());
-    /// ```
+    /// The binding is validated first, so an injection attempt never reaches
+    /// the socket. Runtime binds do not survive a reload; write the config too.
     pub fn add_bind(&self, binding: &Keybinding) -> Result<(), ConfigError> {
-        // Layer 1: Validate BEFORE IPC (defence-in-depth!)
         injection_validator::validate_keybinding(binding)
             .map_err(|e| ConfigError::ValidationFailed(e.to_string()))?;
-
-        // Layer 2: Build command safely (no string interpolation)
-        let cmd = self.build_keyword_command("bind", binding);
-
-        // Layer 3: Mode check
-        match self.mode {
-            ClientMode::DryRun => {
-                // Validation passed, but don't send IPC
-                Ok(())
-            }
-            ClientMode::ReadOnly => Err(ConfigError::IpcCommandFailed(
-                "Client in read-only mode - cannot modify bindings".to_string(),
-            )),
-            ClientMode::Live => {
-                // Layer 4: Actually send to Hyprland
-                self.send_keyword_command(&binding.bind_type.to_string(), &cmd)
-            }
-        }
+        let value = self.build_keyword_command("bind", binding);
+        self.modify(|| self.keyword(&binding.bind_type.to_string(), &value))
     }
 
-    /// Removes a keybinding from Hyprland
-    ///
-    /// # Defence-in-Depth Process
-    ///
-    /// Same validation layers as `add_bind()`, ensuring that even
-    /// removal commands are validated for safety.
-    ///
-    /// # Arguments
-    ///
-    /// * `binding` - The keybinding to remove
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` - Command validated (DryRun) or sent successfully (Live)
-    /// * `Err(ConfigError)` - Validation failed or IPC error
-    ///
-    /// # Example
-    /// ```
-    /// use hypr_keybind_manager::ipc::{HyprlandClient, ClientMode};
-    /// use hypr_keybind_manager::core::{Keybinding, KeyCombo, Modifier, BindType};
-    ///
-    /// let client = HyprlandClient::new(ClientMode::DryRun);
-    ///
-    /// let binding = Keybinding {
-    ///     key_combo: KeyCombo::new(vec![Modifier::Super], "K"),
-    ///     bind_type: BindType::Bind,
-    ///     dispatcher: "exec".to_string(),
-    ///     args: Some("firefox".to_string()),
-    ///     description: None,
-    ///     submap: None,
-    /// };
-    ///
-    /// // Safe: validates but doesn't send in DryRun mode
-    /// assert!(client.remove_bind(&binding).is_ok());
-    /// ```
+    /// Removes a binding at runtime with `keyword unbind ...`
     pub fn remove_bind(&self, binding: &Keybinding) -> Result<(), ConfigError> {
-        // Layer 1: Validate (even for removal)
         injection_validator::validate_keybinding(binding)
             .map_err(|e| ConfigError::ValidationFailed(e.to_string()))?;
-
-        // Layer 2: Build unbind command
-        let cmd = self.build_keyword_command("unbind", binding);
-
-        // Layer 3: Mode check
-        match self.mode {
-            ClientMode::DryRun => Ok(()),
-            ClientMode::ReadOnly => Err(ConfigError::IpcCommandFailed(
-                "Client in read-only mode - cannot modify bindings".to_string(),
-            )),
-            ClientMode::Live => {
-                // Layer 4: Send to Hyprland
-                self.send_keyword_command("unbind", &cmd)
-            }
-        }
+        let value = self.build_keyword_command("unbind", binding);
+        self.modify(|| self.keyword("unbind", &value))
     }
 
-    /// Reloads Hyprland configuration from file
-    ///
-    /// This triggers Hyprland to re-read its config file, applying all
-    /// changes at once. No validation needed as this just triggers a reload.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` - Reload command sent (or validated in DryRun)
-    /// * `Err(ConfigError)` - Mode restriction or IPC error
-    ///
-    /// # Example
-    /// ```
-    /// use hypr_keybind_manager::ipc::{HyprlandClient, ClientMode};
-    ///
-    /// let client = HyprlandClient::new(ClientMode::DryRun);
-    ///
-    /// // Safe: just validates in DryRun mode
-    /// assert!(client.reload().is_ok());
-    /// ```
+    /// Asks Hyprland to reload its config, like `hyprctl reload`
     pub fn reload(&self) -> Result<(), ConfigError> {
+        self.modify(|| self.send("reload"))
+    }
+
+    /// Applies the mode gate to a state-changing action
+    fn modify(&self, action: impl FnOnce() -> Result<(), ConfigError>) -> Result<(), ConfigError> {
         match self.mode {
             ClientMode::DryRun => Ok(()),
             ClientMode::ReadOnly => Err(ConfigError::IpcCommandFailed(
-                "Client in read-only mode - cannot reload config".to_string(),
+                "Client in read-only mode - cannot modify Hyprland".to_string(),
             )),
-            ClientMode::Live => self.send_reload_command(),
+            ClientMode::Live => action(),
         }
     }
 
-    /// Builds a keyword command string safely
-    ///
-    /// This constructs the command using safe concatenation, NOT string
-    /// interpolation or format macros that could be vulnerable to injection.
-    ///
-    /// # Arguments
-    ///
-    /// * `keyword` - The Hyprland keyword ("bind" or "unbind")
-    /// * `binding` - The keybinding to encode
-    ///
-    /// # Returns
-    ///
-    /// A safely constructed command string in Hyprland's format:
-    /// ```text
-    /// MODIFIERS, KEY, dispatcher, args
-    /// ```
-    ///
-    /// # Safety
-    ///
-    /// This method assumes the binding has already passed validation.
-    /// It builds the command by concatenating validated components,
-    /// not by interpolating user input into a format string.
+    /// The value part of a keyword command: everything after `bind... = `
     fn build_keyword_command(&self, _keyword: &str, binding: &Keybinding) -> String {
-        // Everything after "bind... = " is exactly what hyprctl keyword expects
         let line = binding.to_string();
         line.split_once(" = ")
             .map(|(_, value)| value.to_string())
             .unwrap_or(line)
     }
 
-    fn send_keyword_command(&self, keyword: &str, value: &str) -> Result<(), ConfigError> {
-        use hyprland::keyword::Keyword;
-
-        // Attempt to send the command
-        Keyword::set(keyword, value).map_err(|e| {
-            // Check if Hyprland is not running
-            if e.to_string().contains("No such file or directory") {
-                ConfigError::HyprlandNotRunning(
-                    "Hyprland IPC socket not found - is Hyprland running?".to_string(),
-                )
-            } else {
-                ConfigError::IpcCommandFailed(format!("Failed to send keyword command: {}", e))
-            }
-        })?;
-
-        Ok(())
+    fn keyword(&self, keyword: &str, value: &str) -> Result<(), ConfigError> {
+        self.send(&format!("keyword {keyword} {value}"))
     }
 
-    /// Sends a reload command to Hyprland
-    ///
-    /// Uses the exec dispatcher to trigger a config reload via hyprctl.
-    /// This is the standard way to reload Hyprland configuration.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` - Reload command sent successfully
-    /// * `Err(ConfigError)` - Hyprland not running or command failed
-    fn send_reload_command(&self) -> Result<(), ConfigError> {
-        // Use exec dispatcher to run hyprctl reload
-        Dispatch::call(DispatchType::Exec("hyprctl reload")).map_err(|e| {
-            if e.to_string().contains("No such file or directory") {
-                ConfigError::HyprlandNotRunning(
-                    "Hyprland IPC socket not found - is Hyprland running?".to_string(),
-                )
-            } else {
-                ConfigError::IpcCommandFailed(format!("Failed to reload config: {}", e))
-            }
-        })?;
-
-        Ok(())
+    /// Sends one command and expects `ok` back
+    fn send(&self, command: &str) -> Result<(), ConfigError> {
+        let reply = request(command)?;
+        if reply.trim() == "ok" {
+            Ok(())
+        } else {
+            Err(ConfigError::IpcCommandFailed(format!(
+                "Hyprland answered: {}",
+                reply.trim()
+            )))
+        }
     }
+}
+
+/// Sends one request to the running Hyprland instance and returns its reply
+///
+/// Fails with `HyprlandNotRunning` when the instance signature is not in the
+/// environment or the socket cannot be connected.
+pub fn request(command: &str) -> Result<String, ConfigError> {
+    let path = socket_path()?;
+    let mut stream = UnixStream::connect(&path).map_err(|e| {
+        ConfigError::HyprlandNotRunning(format!("cannot connect to {}: {e}", path.display()))
+    })?;
+    stream
+        .set_read_timeout(Some(TIMEOUT))
+        .and_then(|_| stream.set_write_timeout(Some(TIMEOUT)))
+        .map_err(|e| ConfigError::IpcCommandFailed(format!("socket setup failed: {e}")))?;
+
+    stream
+        .write_all(command.as_bytes())
+        .map_err(|e| ConfigError::IpcCommandFailed(format!("failed to send command: {e}")))?;
+
+    let mut reply = String::new();
+    stream
+        .read_to_string(&mut reply)
+        .map_err(|e| ConfigError::IpcCommandFailed(format!("failed to read reply: {e}")))?;
+    Ok(reply)
+}
+
+/// `$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket.sock`
+fn socket_path() -> Result<PathBuf, ConfigError> {
+    let signature = env::var_os("HYPRLAND_INSTANCE_SIGNATURE").ok_or_else(|| {
+        ConfigError::HyprlandNotRunning(
+            "HYPRLAND_INSTANCE_SIGNATURE is not set; is Hyprland running?".to_string(),
+        )
+    })?;
+    let runtime_dir = env::var_os("XDG_RUNTIME_DIR")
+        .ok_or_else(|| ConfigError::HyprlandNotRunning("XDG_RUNTIME_DIR is not set".to_string()))?;
+    Ok(PathBuf::from(runtime_dir)
+        .join("hypr")
+        .join(signature)
+        .join(".socket.sock"))
 }
 
 #[cfg(test)]

@@ -127,14 +127,14 @@ impl KeybindList {
         // Add new rows with alternating colours
         for (index, binding) in bindings.iter().enumerate() {
             let in_conflict = conflict_keys.contains(&binding.key_combo);
-            let read_only = self.controller.read_only_reason(binding);
-            let row = self.create_row(binding, index, in_conflict, read_only.as_deref());
+            let origin = self.controller.origin_note(binding);
+            let row = self.create_row(binding, index, in_conflict, origin.as_deref());
             self.list_box.append(&row);
         }
 
-        let read_only = self.controller.read_only_count();
-        let read_only_note = if read_only > 0 {
-            format!(" · {read_only} read-only (Lua code)")
+        let from_code = self.controller.origin_note_count();
+        let read_only_note = if from_code > 0 {
+            format!(" · {from_code} from Lua code")
         } else {
             String::new()
         };
@@ -156,7 +156,7 @@ impl KeybindList {
         binding: &Keybinding,
         index: usize,
         in_conflict: bool,
-        read_only: Option<&str>,
+        origin: Option<&str>,
     ) -> GtkBox {
         let row = GtkBox::builder()
             .orientation(Orientation::Vertical)
@@ -178,9 +178,11 @@ impl KeybindList {
         } else if let Some(description) = &binding.description {
             notes.push(description.clone());
         }
-        if let Some(reason) = read_only {
-            row.add_css_class("readonly-row");
-            notes.push(format!("Read-only: {reason}"));
+        if let Some(reason) = origin {
+            row.add_css_class("code-row");
+            notes.push(format!(
+                "From Lua code: {reason}. Changes are appended as an override at the end of the file."
+            ));
         }
         if !notes.is_empty() {
             row.set_tooltip_text(Some(&notes.join("\n")));

@@ -88,8 +88,9 @@ impl ConfigFormat {
 #[derive(Debug, Default)]
 pub struct LoadedBindings {
     pub bindings: Vec<Keybinding>,
-    /// Lua binds the editor cannot rewrite, keyed by binding
-    pub read_only: HashMap<Keybinding, String>,
+    /// Lua binds produced by code (loops, functions), keyed by binding, with
+    /// where they come from. Changes to them are written as overrides.
+    pub origin_notes: HashMap<Keybinding, String>,
     /// The main file and every file it pulls in
     pub files: Vec<PathBuf>,
 }
@@ -99,14 +100,14 @@ pub fn load_bindings_from(path: &Path) -> Result<LoadedBindings, ConfigError> {
     match ConfigFormat::of(path) {
         ConfigFormat::Lua => {
             let parsed = parse_lua_config(path).map_err(ConfigError::ValidationFailed)?;
-            let read_only = parsed
+            let origin_notes = parsed
                 .bindings
                 .iter()
-                .filter_map(|b| Some((b.binding.clone(), b.read_only.clone()?)))
+                .filter_map(|b| Some((b.binding.clone(), b.override_reason.clone()?)))
                 .collect();
             Ok(LoadedBindings {
                 bindings: parsed.bindings.into_iter().map(|b| b.binding).collect(),
-                read_only,
+                origin_notes,
                 files: parsed.files,
             })
         }
@@ -116,7 +117,7 @@ pub fn load_bindings_from(path: &Path) -> Result<LoadedBindings, ConfigError> {
                 .map_err(|e| ConfigError::ValidationFailed(e.to_string()))?;
             Ok(LoadedBindings {
                 bindings: tree.bindings,
-                read_only: HashMap::new(),
+                origin_notes: HashMap::new(),
                 files: tree.files,
             })
         }

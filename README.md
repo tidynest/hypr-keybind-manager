@@ -159,7 +159,7 @@ This project is likely to be enhanced and further developed in the near future.
 ### 9. Lua Configs
 
 ![Lua config](docs/screenshots/lua-config.png)  
-*A `hyprland.lua` config: binds written as single `hl.bind(...)` lines are editable, binds created by loops or Lua functions are dimmed and read-only, and the details panel shows the exact `hl.bind` line*
+*A `hyprland.lua` config: binds written as single `hl.bind(...)` lines are rewritten in place, binds created by loops or Lua functions are changed through overrides appended to the file, and the details panel shows the exact `hl.bind` line*
 
 ---
 
@@ -472,7 +472,7 @@ List Options:
 - All changes are automatically backed up to `~/.config/hypr/backups/` with timestamps (sourced files get a `backups/` directory next to them)
 - The UI automatically refreshes when the config file is modified externally, and says so in the status line. Undo history is cleared then
 - If the default config file does not exist, the application asks for one instead of failing
-- With a Lua config, binds the editor cannot rewrite are dimmed in the list and their Edit and Delete buttons are disabled; the details panel says why (created by a loop, runs a Lua function, part of a larger statement, or uses an option such as `device`). Edit those in the file
+- With a Lua config, binds that come from code (a loop, a Lua function) show an italic dispatcher and the details panel says where they come from. Editing or deleting one appends an override to the end of the file instead of touching the code
 
 ---
 
@@ -531,7 +531,8 @@ The application uses a **[HashMap](https://doc.rust-lang.org/std/collections/str
 **Lua Configs** (`hyprland.lua`, Hyprland 0.55+):
 - The config is executed in an embedded Lua 5.5 with a recording stand-in for the `hl` API, so every `hl.bind` call is captured with the file and line it came from, whatever code produced it
 - The sandbox has no `io`, no `load`, no `os.execute`, a memory limit, an instruction limit, and `require` limited to files inside the config directory
-- A bind is editable when its line is a single `hl.bind(...)` statement whose action is a dispatcher and no other bind came from that line. The line is rewritten whole; a `mainMod .. " + Q"` key expression is kept when the new keys start with the same value
+- A bind whose line is a single `hl.bind(...)` statement with a dispatcher action is rewritten in place; a `mainMod .. " + Q"` key expression is kept when the new keys start with the same value
+- A bind that comes from code (a loop, a Lua function, a larger statement, or an option the editor cannot write back) is changed by an override: `hl.unbind("<keys>")` and, for an edit, the replacement `hl.bind(...)` are appended to the end of the main file. Hyprland runs the file top to bottom, so the override wins and your loop stays as it is. The list marks such binds and the details panel says where they come from
 - New binds are appended at the end of the main file under a `-- Keybindings added by hypr-keybind-manager` header; new binds inside a submap are refused, add those inside `hl.define_submap` yourself
 - Dispatcher names are `hl.dsp` paths (`window.close`, `focus`, ...); `exec` and `execr` stand for `exec_cmd` and `exec_raw`. Arguments are shown and edited as Lua literals such as `{ direction = "left" }`
 
@@ -573,7 +574,7 @@ The application uses a **[HashMap](https://doc.rust-lang.org/std/collections/str
 ### Live Hyprland Integration
 
 **Apply to Hyprland Button** (Header):
-- Triggers `hyprctl reload` command via IPC
+- Sends `reload` to Hyprland's control socket, the same thing `hyprctl reload` does, without needing `hyprctl` on the PATH
 - Reloads Hyprland configuration instantly (no compositor restart)
 - Changes take effect immediately in Hyprland
 - The status line shows the reload time; a non-zero `hyprctl` exit opens a dialog with its output
@@ -677,7 +678,7 @@ hypr-keybind-manager/
     │       └── validator_tests.rs              # Validator unit tests (150 lines)
     ├── core/                                   # Business logic (~1,839 lines)
     │   ├── types.rs                            # Keybinding, KeyCombo, Modifier, BindType (370 lines)
-    │   ├── lua_config.rs                       # Lua config: sandboxed run, line rewriting (656 lines)
+    │   ├── lua_config.rs                       # Lua config: sandboxed run, line rewriting (677 lines)
     │   ├── lua_prelude.lua                     # Recording hl stub and sandbox environment (173 lines)
     │   ├── parser.rs                           # Parse Hyprland config syntax (nom) (438 lines)
     │   ├── conflict.rs                         # ConflictDetector engine (HashMap) (109 lines)
@@ -686,7 +687,7 @@ hypr-keybind-manager/
     │   ├── mod.rs                              # Core module exports (42 lines)
     │   └── tests/                              # Core tests (extracted) (631 lines)
     │       ├── mod.rs                          # Test module organisation (35 lines)
-    │       ├── lua_config_tests.rs             # Lua config tests (264 lines)
+    │       ├── lua_config_tests.rs             # Lua config tests (305 lines)
     │       ├── conflict_tests.rs               # Conflict detection tests (149 lines)
     │       ├── parser_tests.rs                 # Parser tests (163 lines)
     │       ├── validator_tests.rs              # Validation tests (167 lines)
@@ -700,7 +701,7 @@ hypr-keybind-manager/
     │   │   ├── header.rs                       # Header bar with undo/redo buttons (92 lines)
     │   │   ├── layout.rs                       # Main layout construction (135 lines)
     │   │   └── handlers.rs                     # Event handler wiring (246 lines)
-    │   ├── controller.rs                       # MVC Controller (mediates Model ↔ View) (875 lines)
+    │   ├── controller.rs                       # MVC Controller (mediates Model ↔ View) (879 lines)
     │   ├── file_watcher.rs                     # Live config file monitoring (62 lines)
     │   ├── style.css                           # GTK CSS styling (160 lines)
     │   ├── mod.rs                              # UI module exports (45 lines)
@@ -719,8 +720,8 @@ hypr-keybind-manager/
     │       ├── backup_dialog_tests.rs          # Backup dialog tests (82 lines)
     │       ├── controller_tests.rs             # Controller + undo/redo tests (485 lines)
     │       └── layout_tests.rs                 # Layout tests (41 lines)
-    └── ipc/                                    # Hyprland IPC integration (~564 lines)
-        ├── mod.rs                              # HyprlandClient (add/remove/reload bindings) (334 lines)
+    └── ipc/                                    # Hyprland IPC integration (~407 lines)
+        ├── mod.rs                              # HyprlandClient (add/remove/reload bindings) (177 lines)
         └── tests/                              # IPC tests (extracted) (222 lines)
             └── mod.rs                          # IPC integration tests (230 lines)
 ```
@@ -729,7 +730,7 @@ For detailed architecture documentation, see [ARCHITECTURE.md](docs/ARCHITECTURE
 
 ### Testing
 
-**Rust Tests (197 passing, 7 ignored):**
+**Rust Tests (192 passing, 7 ignored):**
 ```bash
 # Run all Rust tests
 cargo test
@@ -875,7 +876,7 @@ All planned features are implemented and production-ready. The project has compl
 - ✅ **Edit dialog**: key recording, searchable dispatcher list, description and submap fields
 - ✅ **Feedback**: status banner, highlighted conflict rows, list footer, error dialogs for apply and import
 - ✅ **CLI**: `list --json`
-- ✅ **Lua configs**: read through a sandboxed Lua, single-line binds editable, the rest read-only with a reason
+- ✅ **Lua configs**: read through a sandboxed Lua, single-line binds rewritten in place, code-generated binds changed through appended overrides
 
 **Quality Assurance (Phases 7.1-10.0):**
 - ✅ **Phase 7.1**: Code comments audit (100% documentation coverage)
@@ -1016,7 +1017,7 @@ This project stands on the shoulders of giants. Special thanks to:
 ### Key Libraries
 - **[Nom](https://github.com/rust-bakery/nom)**: Geal (Geoffroy Couprie) for the elegant parser combinator library
 - **[gtk4-rs](https://gtk-rs.org/)**: The GTK Rust bindings team for comprehensive Rust GTK4 bindings (gtk4, glib, gio, gdk)
-- **[hyprland-rs](https://github.com/hyprland-community/hyprland-rs)**: For Hyprland IPC communication
+- **[mlua](https://github.com/mlua-rs/mlua)**: Embedded Lua for reading `hyprland.lua` configs
 - **[Clap](https://github.com/clap-rs/clap)**: For the ergonomic command-line argument parsing
 - **[Serde](https://serde.rs/)**: For the powerful serialization framework
 - **[Chrono](https://github.com/chronotope/chrono)**: For date and time handling (timestamp generation)

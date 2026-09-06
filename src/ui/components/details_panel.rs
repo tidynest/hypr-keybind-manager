@@ -160,10 +160,9 @@ impl DetailsPanel {
     pub fn update_binding(&self, binding: Option<&Keybinding>) {
         *self.current_binding.borrow_mut() = binding.cloned();
 
-        let read_only = binding.and_then(|b| self.controller.read_only_reason(b));
-        let editable = binding.is_some() && read_only.is_none();
-        self.edit_button.set_sensitive(editable);
-        self.delete_button.set_sensitive(editable);
+        let origin = binding.and_then(|b| self.controller.origin_note(b));
+        self.edit_button.set_sensitive(binding.is_some());
+        self.delete_button.set_sensitive(binding.is_some());
 
         let Some(b) = binding else {
             for (index, value) in self.values.iter().enumerate() {
@@ -205,8 +204,10 @@ impl DetailsPanel {
             .filter(|cb| cb != b)
             .collect();
 
-        let read_only_note = read_only
-            .map(|reason| format!("Read-only: it {reason}\n"))
+        let read_only_note = origin
+            .map(|reason| {
+                format!("From Lua code: it {reason}. Edit or Delete appends an override at the end of the file.\n")
+            })
             .unwrap_or_default();
 
         if others.is_empty() {

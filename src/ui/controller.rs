@@ -32,7 +32,6 @@ use std::{
     collections::HashMap,
     fs,
     path::{Path, PathBuf},
-    process::Command,
     rc::Rc,
 };
 
@@ -42,6 +41,7 @@ use crate::config::{
 use crate::core::{
     Conflict, ConflictDetector, KeyCombo, Keybinding, Modifier, validator as injection_validator,
 };
+use crate::ipc::{ClientMode, HyprlandClient};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ImportMode {
@@ -81,8 +81,8 @@ pub struct Controller {
     undo_stack: RefCell<Vec<Vec<Keybinding>>>,
     /// Redo history of complete binding snapshots
     redo_stack: RefCell<Vec<Vec<Keybinding>>>,
-    /// Bindings the editor cannot rewrite (Lua configs), with the reason
-    read_only: RefCell<HashMap<Keybinding, String>>,
+    /// Lua bindings that come from code (loops, functions), with where from
+    origin_notes: RefCell<HashMap<Keybinding, String>>,
     /// Hash of the main file as it was after this app last wrote it
     last_written: RefCell<Option<u64>>,
 }
@@ -125,7 +125,7 @@ impl Controller {
             current_search_query: RefCell::new(String::new()),
             undo_stack: RefCell::new(Vec::new()),
             redo_stack: RefCell::new(Vec::new()),
-            read_only: RefCell::new(HashMap::new()),
+            origin_notes: RefCell::new(HashMap::new()),
             last_written: RefCell::new(None),
         })
     }
@@ -155,14 +155,16 @@ impl Controller {
         self.config_manager.borrow().format()
     }
 
-    /// Why `binding` cannot be edited or deleted, `None` when it can
-    pub fn read_only_reason(&self, binding: &Keybinding) -> Option<String> {
-        self.read_only.borrow().get(binding).cloned()
+    /// Where `binding` comes from when Lua code produced it (a loop, a
+    /// function), `None` for a plain `hl.bind` line or a hyprlang binding.
+    /// Changes to such bindings are appended to the config as overrides.
+    pub fn origin_note(&self, binding: &Keybinding) -> Option<String> {
+        self.origin_notes.borrow().get(binding).cloned()
     }
 
-    /// How many loaded bindings are read-only
-    pub fn read_only_count(&self) -> usize {
-        self.read_only.borrow().len()
+    /// How many loaded bindings come from Lua code
+    pub fn origin_note_count(&self) -> usize {
+        self.origin_notes.borrow().len()
     }
 
     /// Gets the config file path
@@ -193,7 +195,7 @@ impl Controller {
     pub fn load_keybindings(&self) -> Result<usize, ConfigError> {
         let loaded = self.config_manager.borrow().load_bindings()?;
         let bindings = loaded.bindings;
-        *self.read_only.borrow_mut() = loaded.read_only;
+        *self.origin_notes.borrow_mut() = loaded.origin_notes;
 
         let count = bindings.len();
 
@@ -208,13 +210,6 @@ impl Controller {
         *self.conflict_detector.borrow_mut() = detector;
 
         Ok(count)
-    }
-
-    fn ensure_editable(&self, binding: &Keybinding) -> Result<(), String> {
-        match self.read_only_reason(binding) {
-            Some(reason) => Err(format!("This binding is read-only: it {reason}")),
-            None => Ok(()),
-        }
     }
 
     fn record_undo_snapshot(&self) {
@@ -561,7 +556,6 @@ impl Controller {
     /// # }
     /// ```
     pub fn delete_keybinding(&self, binding: &Keybinding) -> Result<(), String> {
-        self.ensure_editable(binding)?;
         self.record_undo_snapshot();
         let mut bindings = self.keybindings.borrow_mut();
         bindings.retain(|b| b != binding);
@@ -767,7 +761,6 @@ impl Controller {
     /// }
     /// ```
     pub fn update_keybinding(&self, old: &Keybinding, new: Keybinding) -> Result<(), String> {
-        self.ensure_editable(old)?;
         self.record_undo_snapshot();
         let mut bindings = self.keybindings.borrow_mut();
         let position = bindings.iter().position(|b| b == old);
@@ -857,26 +850,9 @@ impl Controller {
     /// # Ok::<(), String>(())
     /// ```
     pub fn apply_to_hyprland(&self) -> Result<(), String> {
-        let output = Command::new("hyprctl")
-            .arg("reload")
-            .output()
-            .map_err(|e| format!("Failed to run hyprctl: {}", e))?;
-
-        if output.status.success() {
-            Ok(())
-        } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let detail = if stderr.trim().is_empty() {
-                stdout.trim()
-            } else {
-                stderr.trim()
-            };
-            Err(format!(
-                "hyprctl reload exited with {}: {}",
-                output.status, detail
-            ))
-        }
+        HyprlandClient::new(ClientMode::Live)
+            .reload()
+            .map_err(|e| e.to_string())
     }
 }
 

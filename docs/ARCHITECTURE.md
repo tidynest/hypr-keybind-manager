@@ -515,15 +515,27 @@ Rewritten lines are rendered with `Keybinding::to_config_line`, which writes `$n
 
 ---
 
+### `src/ipc/mod.rs` - Hyprland IPC Client
+
+**Responsibility**: Talk to the running compositor over `$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket.sock`, the channel `hyprctl` uses. A request is the command text, the reply is `ok` or an error, and the compositor closes the connection. Standard library only (`UnixStream`), five second timeouts.
+
+**Key Functions**:
+- `HyprlandClient::new(mode)` with `DryRun`, `ReadOnly`, `Live`
+- `reload()` → sends `reload`; used by "Apply to Hyprland"
+- `add_bind(binding)` / `remove_bind(binding)` → `keyword bind... ` / `keyword unbind ...`, after injection validation
+- `request(command)` → raw reply, for read-only queries such as `version` or `j/binds`
+
+---
+
 ### `src/core/lua_config.rs` - Lua Config Reader and Rewriter
 
 **Responsibility**: Read `hyprland.lua` configs (Hyprland 0.55+) and rewrite individual `hl.bind` lines.
 
 **Reading**: The config is a program, so it is run. `parse_lua_config` creates an embedded Lua 5.5 state (mlua, vendored), loads `lua_prelude.lua`, and executes the config with the prelude's sandbox environment. The prelude's `hl.bind` records keys, action, options, submap and the calling file and line (via `Lua::inspect_stack`), and returns a handle whose `remove` marks the record removed. `hl.dsp.*` calls produce descriptors carrying the dispatcher path and its arguments rendered as Lua literals. `hl.define_submap` sets the submap for binds recorded inside it. `require` reads only files inside the config directory.
 
-**Read-only rules** (`mark_read_only`): a bind cannot be rewritten when its action is a Lua function, more than one bind came from its line (a loop), it uses an option the module cannot write back (`device`, `drag`, `auto_consuming`, ...), or its line is not a single `hl.bind(...)` statement.
+**Override rules** (`mark_overrides`): a bind's own line cannot be rewritten when its action is a Lua function, more than one bind came from its line (a loop), it uses an option the module cannot write back (`device`, `drag`, `auto_consuming`, ...), or its line is not a single `hl.bind(...)` statement. Such binds carry an `override_reason`.
 
-**Writing** (`rewrite_lua_files`): the wanted list is diffed against the recorded binds. A removed bind's line is replaced by a new bind of the same submap (keeping a `mainMod .. "..."` key prefix when possible) or deleted; remaining global additions are appended to the main file. Refuses to touch read-only binds and to add binds inside submaps.
+**Writing** (`rewrite_lua_files`): the wanted list is diffed against the recorded binds. A removed bind with a rewritable line has it replaced by a new bind of the same submap (keeping a `mainMod .. "..."` key prefix when possible) or deleted. A removed bind with an `override_reason` gets `hl.unbind("<keys>")`, plus the replacement `hl.bind(...)` for an edit, appended to the main file; on the next run the unbind hides the original and the appended line is an ordinary rewritable bind. Remaining global additions are appended too. Refuses overrides for binds inside submaps and additions inside submaps.
 
 **Safety of written text**: keys, commands and descriptions become Lua string literals through `lua_string`; dispatcher paths are checked against `[a-z0-9_.]`; other arguments must evaluate as a literal in an empty environment.
 

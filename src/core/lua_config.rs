@@ -22,10 +22,15 @@
 //! # Editing
 //! A bind can be rewritten when its line is a single `hl.bind(...)` statement
 //! with a dispatcher action and only that bind came from the line. Such a
-//! line is replaced whole, with literal values. Binds created in loops,
-//! binds whose action is a Lua function, and binds using options this module
-//! cannot write back are reported read-only with a reason. New binds are
-//! appended to the end of the main file.
+//! line is replaced whole, with literal values.
+//!
+//! Binds created in loops, binds whose action is a Lua function, binds that
+//! are part of a larger statement and binds using options this module cannot
+//! write back carry an `override_reason`. Editing or deleting one of those
+//! appends `hl.unbind("<keys>")`, followed by the replacement `hl.bind(...)`
+//! for an edit, to the end of the main file. Hyprland runs the file top to
+//! bottom, so the override wins and the original code stays untouched. New
+//! binds are appended the same way.
 //!
 //! # Security
 //! The config runs with no `io`, no `load`, no `os.execute`, `require`
@@ -47,7 +52,7 @@ const PRELUDE: &str = include_str!("lua_prelude.lua");
 const MEMORY_LIMIT: usize = 64 << 20;
 const INSTRUCTION_LIMIT: u32 = 20_000_000;
 
-/// Header under which added binds are appended to the main file
+/// Header under which added binds and overrides are appended to the main file
 pub const ADDED_HEADER: &str = "-- Keybindings added by hypr-keybind-manager";
 
 /// Lua bind option names and the hyprlang flag letter each maps to
@@ -128,8 +133,11 @@ pub struct LuaBinding {
     pub keys: String,
     pub file: PathBuf,
     pub line: usize,
-    /// Why the bind cannot be rewritten, `None` when it can
-    pub read_only: Option<String>,
+    /// Why the bind's own line cannot be rewritten (it comes from a loop, a
+    /// function, a larger statement or an option the module cannot write
+    /// back). `None` when the line can be replaced in place. Changes to such
+    /// binds are written as overrides at the end of the main file.
+    pub override_reason: Option<String>,
 }
 
 /// Everything recorded while running a Lua config
@@ -226,7 +234,7 @@ pub fn parse_lua_config(path: &Path) -> Result<LuaConfig, String> {
     }
 
     Ok(LuaConfig {
-        bindings: mark_read_only(raw, &source, path),
+        bindings: mark_overrides(raw, &source, path),
         files,
     })
 }
@@ -341,8 +349,8 @@ pub fn parse_keys(keys: &str) -> KeyCombo {
     KeyCombo::new(parsed, key)
 }
 
-/// Decides which recorded binds can be rewritten
-fn mark_read_only(recorded: Vec<Recorded>, main_source: &str, main_path: &Path) -> Vec<LuaBinding> {
+/// Decides which recorded binds can be rewritten in place
+fn mark_overrides(recorded: Vec<Recorded>, main_source: &str, main_path: &Path) -> Vec<LuaBinding> {
     let mut per_line: HashMap<(PathBuf, usize), usize> = HashMap::new();
     for r in &recorded {
         *per_line.entry((r.file.clone(), r.line)).or_default() += 1;
@@ -354,22 +362,20 @@ fn mark_read_only(recorded: Vec<Recorded>, main_source: &str, main_path: &Path) 
         .into_iter()
         .map(|r| {
             let at = format!("{}:{}", r.file.display(), r.line);
-            let read_only = if r.kind == "function" {
-                Some(format!("runs a Lua function; edit it in {at}"))
+            let override_reason = if r.kind == "function" {
+                Some(format!("runs a Lua function at {at}"))
             } else if r.kind != "dispatcher" {
-                Some(format!(
-                    "has an action that is not a dispatcher; edit it in {at}"
-                ))
+                Some(format!("has an action that is not a dispatcher at {at}"))
             } else if per_line
                 .get(&(r.file.clone(), r.line))
                 .copied()
                 .unwrap_or(0)
                 > 1
             {
-                Some(format!("was created by a loop at {at}; edit the Lua code"))
+                Some(format!("was created by a loop at {at}"))
             } else if !r.unsupported_options.is_empty() {
                 Some(format!(
-                    "uses the {} option, which the editor cannot write back; edit it in {at}",
+                    "uses the {} option at {at}, which the editor cannot write back",
                     r.unsupported_options.join(", ")
                 ))
             } else {
@@ -382,14 +388,14 @@ fn mark_read_only(recorded: Vec<Recorded>, main_source: &str, main_path: &Path) 
                     .unwrap_or("")
                     .trim();
                 (!(line.starts_with("hl.bind(") && line.ends_with(')')))
-                    .then(|| format!("is part of a larger statement at {at}; edit the Lua code"))
+                    .then(|| format!("is part of a larger statement at {at}"))
             };
             LuaBinding {
                 binding: r.binding,
                 keys: r.keys,
                 file: r.file,
                 line: r.line,
-                read_only,
+                override_reason,
             }
         })
         .collect()
@@ -548,9 +554,12 @@ fn lua_string(text: &str) -> String {
 /// Works out the new text of every file that has to change
 ///
 /// `bindings` is the wanted list. Each bind recorded in `config` that is
-/// missing from it has its line replaced by a new bind in the same submap,
-/// or removed. New global binds go to the end of the main file. Returns
-/// `(file, new content)` pairs; an empty list means nothing changed.
+/// missing from it is either rewritten on its own line (replaced by a new
+/// bind in the same submap, or removed) or, when the line cannot be touched,
+/// overridden: `hl.unbind("<keys>")` and the replacement `hl.bind(...)` are
+/// appended to the main file. New global binds go to the end of the main
+/// file too. Returns `(file, new content)` pairs; an empty list means nothing
+/// changed.
 pub fn rewrite_lua_files(
     config: &LuaConfig,
     bindings: &[Keybinding],
@@ -568,25 +577,33 @@ pub fn rewrite_lua_files(
     if removed.is_empty() && added.is_empty() {
         return Ok(Vec::new());
     }
-    if let Some(locked) = removed.iter().find(|r| r.read_only.is_some()) {
-        return Err(format!(
-            "{} → {} cannot be changed: it {}",
-            locked.binding.key_combo,
-            locked.binding.dispatcher,
-            locked.read_only.as_deref().unwrap_or("is read-only")
-        ));
-    }
 
     let mut edits: HashMap<&Path, Vec<(usize, Option<Keybinding>)>> = HashMap::new();
+    let mut overrides: Vec<String> = Vec::new();
     for r in removed {
         let replacement = added
             .iter()
             .position(|a| a.submap == r.binding.submap)
             .map(|i| added.remove(i));
-        edits
-            .entry(r.file.as_path())
-            .or_default()
-            .push((r.line, replacement));
+        match &r.override_reason {
+            None => edits
+                .entry(r.file.as_path())
+                .or_default()
+                .push((r.line, replacement)),
+            Some(reason) => {
+                if let Some(submap) = &r.binding.submap {
+                    return Err(format!(
+                        "{} → {} is inside submap '{submap}' and {reason}; an override at the \
+                         end of the file would not reach it. Edit it in the file.",
+                        r.binding.key_combo, r.binding.dispatcher
+                    ));
+                }
+                overrides.push(format!("hl.unbind({})", lua_string(&r.keys)));
+                if let Some(binding) = replacement {
+                    overrides.push(render_lua_bind(&binding)?);
+                }
+            }
+        }
     }
     if let Some(inside) = added.iter().find_map(|a| a.submap.as_deref()) {
         return Err(format!(
@@ -594,13 +611,17 @@ pub fn rewrite_lua_files(
              Add it inside hl.define_submap in the file."
         ));
     }
+    let mut appended: Vec<String> = overrides;
+    for binding in added.drain(..) {
+        appended.push(render_lua_bind(&binding)?);
+    }
 
     let main = config.files.first().ok_or("no config file recorded")?;
     let mut outputs = Vec::new();
     for file in &config.files {
         let file_edits = edits.remove(file.as_path()).unwrap_or_default();
         let is_main = file == main;
-        if file_edits.is_empty() && !(is_main && !added.is_empty()) {
+        if file_edits.is_empty() && !(is_main && !appended.is_empty()) {
             continue;
         }
 
@@ -637,14 +658,12 @@ pub fn rewrite_lua_files(
         }
 
         let mut out: Vec<String> = lines.into_iter().flatten().collect();
-        if is_main && !added.is_empty() {
+        if is_main && !appended.is_empty() {
             if !out.iter().any(|l| l.trim() == ADDED_HEADER) {
                 out.push(String::new());
                 out.push(ADDED_HEADER.to_string());
             }
-            for binding in added.drain(..) {
-                out.push(render_lua_bind(&binding)?);
-            }
+            out.append(&mut appended);
         }
 
         let mut text = out.join("\n");

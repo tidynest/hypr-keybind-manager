@@ -3,9 +3,8 @@
 # licences of the dependency tree are listed here. Add to this list when a new
 # dependency brings a new one; never add a copyleft licence without a decision.
 #
-# Copyleft entries already present before this file existed:
-#   GPL-3.0-or-later:  hyprland@0.3.13,hyprland-macros@0.3.4
-#   LGPL-2.1-or-later: r-efi@5.3.0
+# No copyleft licence is allowed. r-efi is MIT OR Apache-2.0 OR LGPL-2.1, and
+# the MIT alternative satisfies the check.
 
 [licenses]
 allow = [
@@ -14,9 +13,7 @@ allow = [
     "BSD-2-Clause",
     "BSD-3-Clause",
     "CC0-1.0",
-    "GPL-3.0-or-later",
     "ISC",
-    "LGPL-2.1-or-later",
     "MIT",
     "MPL-2.0",
     "Unicode-3.0",

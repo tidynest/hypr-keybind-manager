@@ -716,9 +716,19 @@ pub struct ConfigTransaction<'a> {  // 'a lifetime
 
 **Why not `hyprctl binds`**: The compositor reports Lua binds as dispatcher `__lua` with a function id, so it cannot say what a bind does, and it needs a running Hyprland.
 
-**Why line-based editing**: Rewriting arbitrary Lua is not possible in general. Because every recorded bind knows its file and line, a bind whose line is one `hl.bind(...)` call can be replaced whole. Binds created in loops share a line and are reported read-only with that reason, which is honest about what the editor can do. The `mainMod ..` prefix survives because the recorded keys value and the literal suffix on the line give the variable's value.
+**Why line-based editing plus overrides**: Rewriting arbitrary Lua is not possible in general. Because every recorded bind knows its file and line, a bind whose line is one `hl.bind(...)` call can be replaced whole. Binds created in loops share a line, and closures cannot be rendered, so those are changed the way Hyprland itself allows: `hl.unbind("<keys>")` followed by the replacement `hl.bind(...)` appended to the end of the file. The file runs top to bottom, the override wins, and the user's loop is never edited by a program. On the next run the appended line is an ordinary bind, so a second edit rewrites it in place. The `mainMod ..` prefix survives on rewritten lines because the recorded keys value and the literal suffix on the line give the variable's value.
 
 **Sandbox**: the config gets `hl`, `string`, `table`, `math`, `utf8`, `os.getenv`/`date`/`time` and `require` limited to the config directory. No `io`, no `load`, no `os.execute`; 64 MiB memory limit; 20 million instruction limit. Values written back are Lua string literals or validated literals, so the edit dialog cannot inject code.
+
+---
+
+### IPC Over the Socket, No Compositor Crate
+
+**File**: `src/ipc/mod.rs`
+
+**Decision**: Speak Hyprland's control-socket protocol directly with `std::os::unix::net::UnixStream` instead of depending on the `hyprland` crate.
+
+**Rationale**: The protocol is a text command and a text reply on one Unix socket, which `hyprctl` also uses; a client is forty lines. The crate is GPL-3.0-or-later, which sits badly in an Apache-2.0 project, needed a vendored copy with local fixes to build on edition 2024, and pulled in a deprecated dispatcher API. With the crate gone `cargo deny` allows no copyleft licence at all, and "Apply to Hyprland" no longer shells out to `hyprctl`.
 
 ---
 

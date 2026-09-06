@@ -159,7 +159,7 @@ entry.search {
     font-weight: bold;
 }
 
-/* Lua binds the editor cannot rewrite */
-.readonly-row {
-    opacity: 0.65;
+/* Lua binds produced by code; changes to them become overrides */
+.code-row .list-dispatcher-column {
+    font-style: italic;
 }
