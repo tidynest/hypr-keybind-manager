@@ -828,4 +828,4 @@ For implementation details, see [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md).
 ---
 
 **Last Updated**: 2026-03-27
-**Version**: 1.4.0
+**Version**: 1.4.1
