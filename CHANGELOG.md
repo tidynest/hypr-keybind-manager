@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-09-06
+
 ### Added
 - Lua binds produced by code (loops, functions, larger statements) can now be edited and deleted. The change is appended to the end of the main file as `hl.unbind("<keys>")` plus the replacement `hl.bind(...)`, so the original code stays untouched and Hyprland applies the override.
 
