@@ -78,7 +78,7 @@ This project is likely to be enhanced and further developed in the near future.
 ### 1. Main Interface
 
 ![Main Window](docs/screenshots/main-window.png)  
-*Application launches with clean interface: searchable keybinding list (left), details panel (right), and action buttons*
+*Searchable keybinding list (left), details panel (right), Add, Backups and Apply in the header bar. Rows whose key combination is bound more than once are highlighted, and the footer counts them*
 
 ---
 
@@ -91,13 +91,13 @@ This project is likely to be enhanced and further developed in the near future.
 
 ### 3. Adding a New Keybinding
 
-**Step 1:** Click the "Add Keybinding" button
+**Step 1:** Click "Add" in the header bar or press Ctrl+N
 
 ![Add Dialog](docs/screenshots/add-dialog.png)  
-*Fill in the key combination, dispatcher, and arguments with real-time validation*  
+*Type the key combination or click the record button and press the keys. Pick the dispatcher from a searchable list, add an optional description (saved as `bindd`) and choose the bind type*  
 
 ![Validation Error](docs/screenshots/validation-error.png)  
-*Three-layer security validation prevents dangerous commands and empty values*
+*Empty or invalid values are refused before anything is written; the security layers check commands on save*
 
 ---
 
@@ -108,10 +108,10 @@ This project is likely to be enhanced and further developed in the near future.
 ![Right Panel - Selected Keybinding](docs/screenshots/right-panel-selected.png)  
 *Right panel shows full details and activates Edit/Delete buttons when a binding is selected*
 
-**Step 2:** Click "Edit Keybinding"
+**Step 2:** Press Enter, double-click the row, or click "Edit"
 
 ![Edit Dialog](docs/screenshots/edit-dialog.png)  
-*Modify any field with the same security validation as adding*
+*The dialog says at once whether the combination is free and offers free alternatives when it is not*
 
 ---
 
@@ -119,7 +119,7 @@ This project is likely to be enhanced and further developed in the near future.
 
 **Step 1:** Select a keybinding (same as Edit workflow above)
 
-**Step 2:** Click "Delete Keybinding"
+**Step 2:** Press Delete or click "Delete"
 
 ![Delete Dialog](docs/screenshots/delete-dialog.png)  
 *Confirmation dialog shows binding details before deletion*
@@ -142,7 +142,7 @@ This project is likely to be enhanced and further developed in the near future.
 ### 7. Backup Management
 
 ![Manage Backups](docs/screenshots/manage-backups.png)  
-*View all automatic backups with timestamps, restore previous versions, or delete old backups*
+*View all automatic backups with timestamps, restore previous versions, or delete old backups. A restore can be undone with Ctrl+Z*
 
 ---
 
@@ -152,7 +152,14 @@ This project is likely to be enhanced and further developed in the near future.
 *Access Export, Import, and Quit from the menu button*
 
 ![Import Modes](docs/screenshots/import-dialog.png)  
-*Smart import: choose "Merge" to add new bindings or "Replace" to overwrite entire configuration*
+*After choosing a file: "Merge" adds bindings that are not there yet, "Replace" swaps the whole set. Either can be undone*
+
+---
+
+### 9. Lua Configs
+
+![Lua config](docs/screenshots/lua-config.png)  
+*A `hyprland.lua` config: binds written as single `hl.bind(...)` lines are editable, binds created by loops or Lua functions are dimmed and read-only, and the details panel shows the exact `hl.bind` line*
 
 ---
 
@@ -625,7 +632,7 @@ hypr-keybind-manager/
 │   ├── DESIGN_DECISIONS.md                     # Rationale for architectural choices (1085 lines)
 │   ├── ENTROPY_DETECTION.md                    # Shannon entropy deep-dive (944 lines)
 │   ├── GTK_INSPECTOR_GUIDE.md                  # GTK debugging guide (215 lines)
-│   └── screenshots/                            # Application screenshots (13 images, ~700 KB)
+│   └── screenshots/                            # Application screenshots (14 images, ~1.5 MB)
 │       ├── main-window.png                     # Main interface overview
 │       ├── search-bar-active.png               # Search functionality in action
 │       ├── add-dialog.png                      # Add keybinding dialog
@@ -638,7 +645,8 @@ hypr-keybind-manager/
 │       ├── resolve-conflicts.png               # Conflict resolution dialog
 │       ├── manage-backups.png                  # Backup management dialog
 │       ├── menu-options.png                    # Menu with Export/Import/Quit
-│       └── import-dialog.png                   # Import with Merge/Replace modes
+│       ├── import-dialog.png                   # Import with Merge/Replace modes
+│       └── lua-config.png                      # Lua config with read-only binds
 ├── test-data/                                  # Test configuration files
 │   ├── hyprland-test.conf                      # Safe test config (22 lines)
 │   └── backups/                                # Test backup files

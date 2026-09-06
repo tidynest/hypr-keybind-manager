@@ -138,11 +138,15 @@ impl KeybindList {
         } else {
             String::new()
         };
+        let conflict_note = match conflicts.len() {
+            0 => "no conflicts".to_string(),
+            1 => "1 conflict".to_string(),
+            n => format!("{n} conflicts"),
+        };
         self.footer.set_label(&format!(
-            "{} of {} keybindings shown · {} conflicts{read_only_note}",
+            "{} of {} keybindings shown · {conflict_note}{read_only_note}",
             bindings.len(),
             self.controller.keybinding_count(),
-            conflicts.len()
         ));
     }
 
