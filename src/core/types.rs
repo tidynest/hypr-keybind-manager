@@ -79,9 +79,27 @@ pub const BIND_FLAGS: [(char, &str); 12] = [
 /// The six common variants are available as constants (`BindType::Bind`,
 /// `BindType::BindEL`, ...). Any other combination such as `bindd` or `bindnt`
 /// is represented too, so a config using them still loads.
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub struct BindType {
     flags: u16,
+}
+
+impl Serialize for BindType {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for BindType {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let word = String::deserialize(deserializer)?;
+        word.strip_prefix("bind")
+            .ok_or_else(|| serde::de::Error::custom(format!("expected bind…, got {word}")))
+            .and_then(|flags| {
+                Self::from_flags(flags)
+                    .map_err(|c| serde::de::Error::custom(format!("unknown bind flag '{c}'")))
+            })
+    }
 }
 
 #[allow(non_upper_case_globals)] // enum-style names, kept so call sites read as before

@@ -476,12 +476,14 @@ pub struct ConfigTransaction<'a> {
 - `list_backups()` → `Result<Vec<PathBuf>, ConfigError>`
 - `restore_backup(path)` → `Result<(), ConfigError>`
 
-**Atomic Write Sequence**:
-1. Create backup of current config
-2. Write new content to `.tmp` file
-3. Call `fsync()` to flush to disk
-4. Atomic `rename()` from `.tmp` to actual config
-5. On error: rollback (backup remains, original untouched)
+**In-Place Write Sequence** (`write_bindings`):
+1. Parse the current file tree with `parse_config_tree` (main file plus every `source =` file)
+2. Diff the parsed bindings against the new list as multisets: `removed` and `added`
+3. Scan each file line by line with `scan_lines`. A bind line whose binding is in `removed` is replaced by the first `added` binding of the same submap, or dropped. Every other line is copied through
+4. Whatever is still in `added` is inserted into the main file after the last bind line of its submap, or in a new `submap` block at the end
+5. Each file that changed is written through its own `ConfigTransaction` (backup, temp file, `fsync`, atomic `rename`)
+
+Rewritten lines are rendered with `Keybinding::to_config_line`, which writes `$name` back for modifiers or arguments that equal a variable's value.
 
 ---
 
@@ -489,22 +491,24 @@ pub struct ConfigTransaction<'a> {
 
 **Responsibility**: Parse Hyprland config files using [nom](https://docs.rs/nom/) parser combinators.
 
-**Parsing Strategy**: Two-pass
-1. **Pass 1**: Collect all `$variable = value` definitions
-2. **Pass 2**: Substitute variables and parse keybindings
+**Parsing Strategy**: One sequential scan per file
+- `scan_lines` classifies every line as a binding, a `submap =` change, a `source =` reference or something else, tracking the current submap and the `$variables` defined so far, in file order like Hyprland does
+- Trailing `# comments` are stripped first (`##` is a literal `#`)
+- `parse_config_tree` runs the scanner over the main file and recurses into sourced files, resolving relative paths against the including file. Unreadable sources are skipped with a warning; glob patterns are not expanded
+- The bind keyword is `bind` plus any flag letters (`el`, `d`, `nt`, ...). Unknown letters produce a parse error naming the flag. The `d` flag adds a description field before the dispatcher
 
 **Key Functions**:
-- `parse_config_file(content, base_path)` → `Result<Vec<Keybinding>, ParseError>`
-- `collect_variables(content)` → `HashMap<String, String>`
+- `parse_config_file(content, path)` → `Result<Vec<Keybinding>, ParseError>`
+- `parse_config_tree(content, path)` → `Result<ParsedConfig, ParseError>` (bindings, files visited, variables)
+- `scan_lines(content, &mut variables)` → `Vec<(line, Result<LineKind, ParseError>)>` (shared with the config writer)
 - `substitute_variables(line, vars)` → `String`
 - `parse_bind_line(line)` → `IResult<&str, Keybinding>`
 - `parse_modifiers(input)` → `IResult<&str, Vec<Modifier>>`
 
 **Nom Combinators Used**:
-- `alt()` - Try alternatives (bindel | binde | bind)
-- `tag()` - Match literal string
+- `tag()` + `take_while()` - `bind` and its flag letters, checked with `map_res`
+- `take_until()` - Comma-separated fields
 - `preceded()` - Match and discard prefix
-- `separated_pair()` - Parse `key, dispatcher`
 - `opt()` - Optional arguments
 
 ---
@@ -516,10 +520,11 @@ pub struct ConfigTransaction<'a> {
 **Data Structure** (using [HashMap](https://doc.rust-lang.org/std/collections/struct.HashMap.html)):
 ```rust
 pub struct ConflictDetector {
-    bindings: HashMap<KeyCombo, Vec<Keybinding>>,
+    bindings: HashMap<(Option<String>, KeyCombo), Vec<Keybinding>>,
 }
 
 pub struct Conflict {
+    pub submap: Option<String>,
     pub key_combo: KeyCombo,
     pub conflicting_bindings: Vec<Keybinding>,
 }
@@ -527,10 +532,10 @@ pub struct Conflict {
 
 **Algorithm**:
 ```
-1. Create HashMap<KeyCombo, Vec<Keybinding>>
+1. Create HashMap<(submap, KeyCombo), Vec<Keybinding>>
 2. For each keybinding:
-   - Normalise KeyCombo (sort modifiers, uppercase key)
-   - Hash KeyCombo
+   - Normalise KeyCombo (sort modifiers; the key hashes case-insensitively)
+   - Hash (submap, KeyCombo)
    - Add binding to HashMap[key]
 3. Filter: keys with len(bindings) > 1
 ```

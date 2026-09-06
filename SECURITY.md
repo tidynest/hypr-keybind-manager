@@ -321,6 +321,10 @@ fn shannon_entropy(data: &str) -> f64 {
 
 **Retention**: User-configurable (default: keep all backups).
 
+**Sourced files**: A binding that lives in a `source =` file is written to that file, through the same transaction. Its backups go to a `backups/` directory next to that file.
+
+**Scope of a write**: Only bind lines whose binding changed are rewritten. Every other line is copied through unchanged, which keeps the reviewable diff of a config edit to the lines the user meant to touch.
+
 ### 6. Permission Verification Warnings
 
 On startup, the application checks the target config file and warns when:
