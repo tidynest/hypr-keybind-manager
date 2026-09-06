@@ -30,6 +30,7 @@ mod details_panel;
 mod edit_dialog;
 mod keybind_list;
 mod search_bar;
+mod status_banner;
 
 pub(crate) mod backup_dialog;
 
@@ -38,4 +39,5 @@ pub mod conflict_resolution_dialog;
 pub use {
     backup_dialog::BackupDialog, conflict_panel::ConflictPanel, details_panel::DetailsPanel,
     edit_dialog::EditDialog, keybind_list::KeybindList, search_bar::SearchBar,
+    status_banner::StatusBanner,
 };

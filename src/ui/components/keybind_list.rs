@@ -157,6 +157,8 @@ impl KeybindList {
         if in_conflict {
             row.add_css_class("conflict-row");
             row.set_tooltip_text(Some("This key combination is bound more than once"));
+        } else if let Some(description) = &binding.description {
+            row.set_tooltip_text(Some(description));
         }
 
         let grid = Grid::builder()
@@ -168,8 +170,12 @@ impl KeybindList {
             .hexpand(true)
             .build();
 
+        let key_text = match &binding.submap {
+            Some(submap) => format!("[{submap}] {}", binding.key_combo),
+            None => binding.key_combo.to_string(),
+        };
         let key_label = Label::builder()
-            .label(format!("{}", binding.key_combo))
+            .label(key_text)
             .xalign(0.0)
             .width_request(KEY_COLUMN_WIDTH)
             .build();

@@ -15,346 +15,232 @@
 //! Event handler setup
 //!
 //! Wires up all event handlers for the main UI:
-//! - Row selection
-//! - Keyboard navigation
+//! - Row selection and activation
+//! - Keyboard navigation and shortcuts
 //! - Delete/Edit/Add buttons
 //! - Backup manager
 
 use crate::{
-    core::types::{BindType, KeyCombo, Keybinding},
+    core::types::Keybinding,
     ui::{
         Controller,
+        actions::{refresh_main_view, show_action_error, sync_history_actions},
+        builders::{header::HeaderWidgets, layout::MainLayout},
         components::{BackupDialog, ConflictPanel, DetailsPanel, EditDialog, KeybindList},
     },
 };
-use gtk4::{ApplicationWindow, Button, EventControllerKey, gdk, gio, prelude::*};
+use gtk4::{
+    ApplicationWindow, Button, CallbackAction, EventControllerKey, Shortcut, ShortcutController,
+    ShortcutScope, ShortcutTrigger, gdk, gio, prelude::*,
+};
 use std::rc::Rc;
 
 /// Wires up all event handlers for the main UI
-///
-/// Sets up:
-/// - Row selection in keybind list
-/// - Keyboard navigation (Up/Down/Enter)
-/// - Delete button click handler
-/// - Edit button click handler
-/// - Add button click handler
-/// - Backup button click handler
 pub fn wire_up_handlers(
     window: &ApplicationWindow,
     controller: Rc<Controller>,
+    layout: &MainLayout,
+    header: &HeaderWidgets,
+) {
+    let list_box = layout.keybind_list.list_box().clone();
+    let details_panel = layout.details_panel.clone();
+
+    // Row selection
+    {
+        let details_panel = details_panel.clone();
+        let keybind_list = layout.keybind_list.clone();
+        list_box.connect_row_selected(move |_, row| {
+            let binding = row.and_then(|r| keybind_list.get_binding_at_index(r.index() as usize));
+            details_panel.update_binding(binding.as_ref());
+        });
+    }
+
+    // Keyboard: arrows move, Delete deletes, Enter is left to the ListBox (row-activated)
+    {
+        let list_box_for_keys = list_box.clone();
+        let details_panel = details_panel.clone();
+        let key_controller = EventControllerKey::new();
+        key_controller.connect_key_pressed(move |_, key, _, _| match key {
+            gdk::Key::Up | gdk::Key::Down => {
+                let step = if key == gdk::Key::Up { -1 } else { 1 };
+                let next = list_box_for_keys
+                    .selected_row()
+                    .map(|row| row.index() + step)
+                    .unwrap_or(0);
+                if let Some(row) = list_box_for_keys.row_at_index(next) {
+                    list_box_for_keys.select_row(Some(&row));
+                }
+                glib::Propagation::Stop
+            }
+            gdk::Key::Delete => {
+                details_panel.trigger_delete();
+                glib::Propagation::Stop
+            }
+            _ => glib::Propagation::Proceed,
+        });
+        list_box.add_controller(key_controller);
+        list_box.set_can_focus(true);
+        list_box.grab_focus();
+    }
+
+    // Double-click or Enter on a row opens the editor
+    {
+        let details_panel = details_panel.clone();
+        layout
+            .keybind_list
+            .connect_activate(move |_| details_panel.trigger_edit());
+    }
+
+    // Delete button
+    {
+        let window = window.clone();
+        let controller = controller.clone();
+        let refs = LayoutRefs::from(layout);
+        details_panel.connect_delete(move |binding| {
+            let controller = controller.clone();
+            let refs = refs.clone();
+            let binding = binding.clone();
+            let window = window.clone();
+
+            let dialog = gtk4::AlertDialog::builder()
+                .modal(true)
+                .message("Delete Keybinding?")
+                .detail(format!(
+                    "{} → {} {}",
+                    binding.key_combo,
+                    binding.dispatcher,
+                    binding.args.as_deref().unwrap_or("")
+                ))
+                .buttons(vec!["Cancel", "Delete"])
+                .cancel_button(0)
+                .default_button(0)
+                .build();
+
+            let window_for_inner = window.clone();
+            dialog.choose(Some(&window), None::<&gio::Cancellable>, move |response| {
+                if response != Ok(1) {
+                    return;
+                }
+                match controller.delete_keybinding(&binding) {
+                    Ok(()) => refs.refresh(&window_for_inner, &controller),
+                    Err(e) => show_action_error(&window_for_inner, "Delete Failed", &e),
+                }
+            });
+        });
+    }
+
+    // Edit button
+    {
+        let window = window.clone();
+        let controller = controller.clone();
+        let refs = LayoutRefs::from(layout);
+        details_panel.connect_edit(move |binding| {
+            let dialog =
+                EditDialog::new(&window, controller.clone(), binding, Some(binding.clone()));
+            if let Some(new_binding) = dialog.show_and_wait() {
+                match controller.update_keybinding(binding, new_binding) {
+                    Ok(()) => refs.refresh(&window, &controller),
+                    Err(e) => show_action_error(&window, "Edit Failed", &e),
+                }
+            }
+        });
+    }
+
+    // Add button, also on Ctrl+N
+    {
+        let window = window.clone();
+        let controller = controller.clone();
+        let refs = LayoutRefs::from(layout);
+        header.add_button.connect_clicked(move |_| {
+            let dialog = EditDialog::new(&window, controller.clone(), &Keybinding::default(), None);
+            if let Some(new_binding) = dialog.show_and_wait() {
+                match controller.add_keybinding(new_binding) {
+                    Ok(()) => refs.refresh(&window, &controller),
+                    Err(e) => show_action_error(&window, "Add Failed", &e),
+                }
+            }
+        });
+        bind_shortcut(&header.add_button, "<Control>n", &layout.main_vbox);
+    }
+
+    // Backup manager
+    {
+        let window = window.clone();
+        let controller = controller.clone();
+        let refs = LayoutRefs::from(layout);
+        header.backup_button.connect_clicked(move |_| {
+            let backups = match controller.list_backups() {
+                Ok(b) => b,
+                Err(e) => {
+                    show_action_error(&window, "Backups Unavailable", &e);
+                    return;
+                }
+            };
+
+            let controller_for_restore = controller.clone();
+            let controller_for_delete = controller.clone();
+            let refs = refs.clone();
+            let window_for_restore = window.clone();
+
+            let dialog = BackupDialog::new(
+                window.upcast_ref::<gtk4::Window>(),
+                backups,
+                move |backup_path| {
+                    controller_for_restore.restore_backup(backup_path)?;
+                    refs.refresh(&window_for_restore, &controller_for_restore);
+                    Ok(())
+                },
+                move |backup_path| controller_for_delete.delete_backup(backup_path),
+            );
+            dialog.show();
+        });
+    }
+}
+
+/// Makes `key` press `button` from anywhere in the window containing `scope_widget`
+fn bind_shortcut(button: &Button, key: &str, scope_widget: &impl IsA<gtk4::Widget>) {
+    let controller = ShortcutController::new();
+    controller.set_scope(ShortcutScope::Global);
+    let button = button.clone();
+    let action = CallbackAction::new(move |_, _| {
+        button.emit_clicked();
+        glib::Propagation::Stop
+    });
+    controller.add_shortcut(Shortcut::new(
+        ShortcutTrigger::parse_string(key),
+        Some(action),
+    ));
+    scope_widget.add_controller(controller);
+}
+
+/// The components a change has to refresh, cheap to clone into callbacks
+#[derive(Clone)]
+struct LayoutRefs {
     keybind_list: Rc<KeybindList>,
     details_panel: Rc<DetailsPanel>,
     conflict_panel: Rc<ConflictPanel>,
-    add_button: &Button,
-    backup_button: &Button,
-) {
-    // ============================================================================
-    // Row selection handler
-    // ============================================================================
-    let details_panel_clone = details_panel.clone();
-    let keybind_list_clone = keybind_list.clone();
+}
 
-    keybind_list
-        .list_box()
-        .connect_row_selected(move |_list_box, row| match row {
-            Some(r) => {
-                let index = r.index() as usize;
-                if let Some(binding) = keybind_list_clone.get_binding_at_index(index) {
-                    eprintln!("👆 Selected: {}", binding.key_combo);
-
-                    details_panel_clone.update_binding(Some(&binding));
-                }
-            }
-            None => {
-                eprintln!("👆 Selection cleared");
-                details_panel_clone.update_binding(None);
-            }
-        });
-
-    // ============================================================================
-    // Keyboard navigation
-    // ============================================================================
-    let key_controller = EventControllerKey::new();
-    let list_box_for_keys = keybind_list.list_box().clone();
-    let details_panel_for_keys = details_panel.clone();
-
-    key_controller.connect_key_pressed(move |_controller, key, _code, _modifier| match key {
-        gdk::Key::Up => {
-            if let Some(selected_row) = list_box_for_keys.selected_row() {
-                let current_index = selected_row.index();
-                if current_index > 0 {
-                    if let Some(previous_row) = list_box_for_keys.row_at_index(current_index - 1) {
-                        list_box_for_keys.select_row(Some(&previous_row));
-                    }
-                }
-            }
-            glib::Propagation::Stop
+impl From<&MainLayout> for LayoutRefs {
+    fn from(layout: &MainLayout) -> Self {
+        Self {
+            keybind_list: layout.keybind_list.clone(),
+            details_panel: layout.details_panel.clone(),
+            conflict_panel: layout.conflict_panel.clone(),
         }
-        gdk::Key::Down => {
-            if let Some(selected_row) = list_box_for_keys.selected_row() {
-                let current_index = selected_row.index();
-                if let Some(next_row) = list_box_for_keys.row_at_index(current_index + 1) {
-                    list_box_for_keys.select_row(Some(&next_row));
-                }
-            } else if let Some(first_row) = list_box_for_keys.row_at_index(0) {
-                list_box_for_keys.select_row(Some(&first_row));
-            }
-            glib::Propagation::Stop
-        }
-        gdk::Key::Delete => {
-            details_panel_for_keys.trigger_delete();
-            glib::Propagation::Stop
-        }
-        // Return is left to the ListBox, which emits row-activated
-        _ => glib::Propagation::Proceed,
-    });
+    }
+}
 
-    keybind_list.list_box().add_controller(key_controller);
-
-    // Double-click or Enter on a row opens the editor
-    let details_panel_for_activate = details_panel.clone();
-    keybind_list.connect_activate(move |_| details_panel_for_activate.trigger_edit());
-    keybind_list.list_box().set_can_focus(true);
-    keybind_list.list_box().grab_focus();
-
-    // ============================================================================
-    // Delete button handler
-    // ============================================================================
-    let window_for_delete = window.clone();
-    let controller_for_delete = controller.clone();
-    let keybind_list_for_delete = keybind_list.clone();
-    let details_panel_for_delete = details_panel.clone();
-    let conflict_panel_for_delete = conflict_panel.clone();
-
-    details_panel.connect_delete(move |binding| {
-        eprintln!("🗑️  Delete button clicked for: {}", binding.key_combo);
-
-        let controller_clone = controller_for_delete.clone();
-        let keybind_list_clone = keybind_list_for_delete.clone();
-        let details_panel_clone = details_panel_for_delete.clone();
-        let conflict_panel_clone = conflict_panel_for_delete.clone();
-        let binding_clone = binding.clone();
-        let window_clone = window_for_delete.clone();
-
-        let dialog = gtk4::AlertDialog::builder()
-            .modal(true)
-            .message("Delete Keybinding?")
-            .detail(format!(
-                "Are you sure you want to delete:\n\n{} → {} {}",
-                binding.key_combo,
-                binding.dispatcher,
-                binding.args.as_deref().unwrap_or("(no args)")
-            ))
-            .buttons(vec!["Cancel", "Delete"])
-            .cancel_button(0)
-            .default_button(0)
-            .build();
-
-        let window_for_inner = window_clone.clone();
-
-        dialog.choose(
-            Some(&window_clone),
-            None::<&gio::Cancellable>,
-            move |response| match response {
-                Ok(1) => match controller_clone.delete_keybinding(&binding_clone) {
-                    Ok(()) => {
-                        let updated = controller_clone.get_current_view();
-                        keybind_list_clone.update_with_bindings(updated);
-                        details_panel_clone.update_binding(None);
-                        conflict_panel_clone.refresh();
-                        if let Some(app) = window_for_inner.application() {
-                            crate::ui::actions::sync_history_actions(&app, &controller_clone);
-                        }
-                        eprintln!("✅ Keybinding deleted successfully");
-                    }
-                    Err(e) => {
-                        eprintln!("❌ Failed to delete: {}", e);
-
-                        let error_dialog = gtk4::AlertDialog::builder()
-                            .modal(true)
-                            .message("Delete Failed")
-                            .detail(format!("Failed to delete keybinding:\n{}", e))
-                            .buttons(vec!["OK"])
-                            .build();
-                        error_dialog.show(Some(&window_for_inner));
-                    }
-                },
-                Ok(0) => {
-                    eprintln!("🚫 Delete cancelled");
-                }
-                Ok(_other) => {
-                    eprintln!("? Unexpected button index");
-                }
-                Err(_e) => {
-                    eprintln!("❌ Delete dialog error");
-                }
-            },
+impl LayoutRefs {
+    fn refresh(&self, window: &ApplicationWindow, controller: &Controller) {
+        refresh_main_view(
+            controller,
+            &self.keybind_list,
+            &self.details_panel,
+            &self.conflict_panel,
         );
-    });
-
-    // ============================================================================
-    // Edit button handler
-    // ============================================================================
-    let window_for_edit = window.clone();
-    let controller_for_edit = controller.clone();
-    let keybind_list_for_edit = keybind_list.clone();
-    let details_panel_for_edit = details_panel.clone();
-    let conflict_panel_for_edit = conflict_panel.clone();
-
-    details_panel.connect_edit(move |binding| {
-        eprintln!("✏️  Edit button clicked for: {}", binding.key_combo);
-
-        let controller_clone = controller_for_edit.clone();
-        let keybind_list_clone = keybind_list_for_edit.clone();
-        let details_panel_clone = details_panel_for_edit.clone();
-        let conflict_panel_clone = conflict_panel_for_edit.clone();
-        let binding_clone = binding.clone();
-        let window_clone = window_for_edit.clone();
-        let edit_dialog = EditDialog::new(
-            &window_clone,
-            controller_clone.clone(),
-            &binding_clone,
-            Some(binding_clone.clone()),
-        );
-
-        if let Some(new_binding) = edit_dialog.show_and_wait() {
-            match controller_clone.update_keybinding(&binding_clone, new_binding) {
-                Ok(()) => {
-                    details_panel_clone.update_binding(None);
-                    let updated_bindings = controller_clone.get_current_view();
-                    keybind_list_clone.update_with_bindings(updated_bindings);
-                    conflict_panel_clone.refresh();
-                    if let Some(app) = window_clone.application() {
-                        crate::ui::actions::sync_history_actions(&app, &controller_clone);
-                    }
-                    eprintln!("✅ Keybinding updated successfully");
-                }
-                Err(e) => {
-                    eprintln!("❌ Failed to update: {}", e);
-
-                    let error_dialog = gtk4::AlertDialog::builder()
-                        .modal(true)
-                        .message("Edit Failed")
-                        .detail(format!("Failed to update keybinding:\n\n{}", e))
-                        .buttons(vec!["OK"])
-                        .build();
-                    error_dialog.show(Some(&window_clone));
-                }
-            }
-        } else {
-            eprintln!("🚫 Edit cancelled");
+        if let Some(app) = window.application() {
+            sync_history_actions(&app, controller);
         }
-    });
-
-    // ============================================================================
-    // Add button handler
-    // ============================================================================
-    let window_for_add = window.clone();
-    let controller_for_add = controller.clone();
-    let keybind_list_for_add = keybind_list.clone();
-    let details_panel_for_add = details_panel.clone();
-    let conflict_panel_for_add = conflict_panel.clone();
-
-    add_button.connect_clicked(move |_| {
-        eprintln!("➕ Add button clicked");
-
-        let controller_clone = controller_for_add.clone();
-        let keybind_list_clone = keybind_list_for_add.clone();
-        let details_panel_clone = details_panel_for_add.clone();
-        let conflict_panel_clone = conflict_panel_for_add.clone();
-        let window_clone = window_for_add.clone();
-
-        let empty_binding = Keybinding {
-            bind_type: BindType::Bind,
-            key_combo: KeyCombo::new(vec![], ""),
-            dispatcher: String::new(),
-            args: None,
-            description: None,
-            submap: None,
-        };
-
-        let edit_dialog = EditDialog::new(
-            &window_clone,
-            controller_clone.clone(),
-            &empty_binding,
-            None,
-        );
-
-        if let Some(new_binding) = edit_dialog.show_and_wait() {
-            match controller_clone.add_keybinding(new_binding) {
-                Ok(()) => {
-                    details_panel_clone.update_binding(None);
-                    let updated_bindings = controller_clone.get_current_view();
-                    keybind_list_clone.update_with_bindings(updated_bindings);
-                    conflict_panel_clone.refresh();
-                    if let Some(app) = window_clone.application() {
-                        crate::ui::actions::sync_history_actions(&app, &controller_clone);
-                    }
-                    eprintln!("✅ Keybinding added successfully");
-                }
-                Err(e) => {
-                    eprintln!("❌ Failed to add: {}", e);
-                    let error_dialog = gtk4::AlertDialog::builder()
-                        .modal(true)
-                        .message("Add Failed")
-                        .detail(format!("Failed to add keybinding:\n\n{}", e))
-                        .buttons(vec!["OK"])
-                        .build();
-                    error_dialog.show(Some(&window_clone));
-                }
-            }
-        } else {
-            eprintln!("🚫 Add cancelled");
-        }
-    });
-
-    // ============================================================================
-    // Backup button handler
-    // ============================================================================
-    let window_for_backup = window.clone();
-    let controller_for_backup = controller.clone();
-    let keybind_list_for_backup = keybind_list.clone();
-    let details_panel_for_backup = details_panel.clone();
-    let conflict_panel_for_backup = conflict_panel.clone();
-
-    backup_button.connect_clicked(move |_| {
-        eprintln!("📦 Backup manager opened");
-
-        let backups = match controller_for_backup.list_backups() {
-            Ok(b) => b,
-            Err(e) => {
-                eprintln!("❌ Failed to list backups: {}", e);
-                return;
-            }
-        };
-
-        let controller_clone = controller_for_backup.clone();
-        let keybind_list_clone = keybind_list_for_backup.clone();
-        let details_panel_clone = details_panel_for_backup.clone();
-        let conflict_panel_clone = conflict_panel_for_backup.clone();
-        let window_for_history_sync = window_for_backup.clone();
-
-        let controller_for_delete = controller_for_backup.clone();
-
-        let dialog = BackupDialog::new(
-            window_for_backup.upcast_ref::<gtk4::Window>(),
-            backups,
-            move |backup_path| match controller_clone.restore_backup(backup_path) {
-                Ok(()) => {
-                    let updated_bindings = controller_clone.get_current_view();
-
-                    keybind_list_clone.update_with_bindings(updated_bindings);
-                    details_panel_clone.update_binding(None);
-                    conflict_panel_clone.refresh();
-                    if let Some(app) = window_for_history_sync.application() {
-                        crate::ui::actions::sync_history_actions(&app, &controller_clone);
-                    }
-                    Ok(())
-                }
-                Err(e) => Err(e),
-            },
-            move |backup_path| controller_for_delete.delete_backup(backup_path),
-        );
-        dialog.show();
-    });
+    }
 }

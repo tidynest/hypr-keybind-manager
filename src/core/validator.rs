@@ -51,7 +51,8 @@ pub enum ValidationError {
 ///
 /// Source: https://wiki.hyprland.org/Configuring/Dispatchers/
 /// Last verified: October 2025
-const ALLOWED_DISPATCHERS: &[&str] = &[
+/// Dispatchers the validator accepts; also the choices offered by the edit dialog
+pub const ALLOWED_DISPATCHERS: &[&str] = &[
     "exec",
     "execr",
     "killactive",

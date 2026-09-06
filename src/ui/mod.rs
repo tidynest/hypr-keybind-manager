@@ -32,9 +32,9 @@
 //! └── components/     // Reusable UI widgets
 //! ```
 
-mod actions;
+pub mod actions;
 pub mod app;
-mod builders;
+pub mod builders;
 pub mod components;
 pub mod controller;
 pub mod file_watcher;

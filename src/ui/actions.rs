@@ -14,8 +14,8 @@
 
 //! GTK Action setup for the application
 //!
-//! This module contains all GTK action definitions (quit, export, import)
-//! and their setup functions
+//! This module contains all GTK action definitions (quit, export, import,
+//! undo, redo, apply) and their setup functions
 
 use gtk4::{
     Application, ApplicationWindow, Box as GtkBox, Button, CheckButton, EventControllerKey,
@@ -25,7 +25,12 @@ use gtk4::{
 };
 use std::{cell::Cell, rc::Rc};
 
-use crate::ui::{Controller, controller::ImportMode};
+use crate::ui::{
+    Controller,
+    builders::layout::MainLayout,
+    components::{ConflictPanel, DetailsPanel, KeybindList},
+    controller::ImportMode,
+};
 
 /// Sets up the quit action
 ///
@@ -42,13 +47,12 @@ pub fn setup_quit_action(app: &Application) {
     app.set_accels_for_action("app.quit", &["<Primary>q"]);
 }
 
+/// Sets up undo and redo, enabled only while there is something to undo or redo
 pub fn setup_history_actions(
     app: &Application,
     window: &ApplicationWindow,
     controller: Rc<Controller>,
-    keybind_list: Rc<crate::ui::components::KeybindList>,
-    details_panel: Rc<crate::ui::components::DetailsPanel>,
-    conflict_panel: Rc<crate::ui::components::ConflictPanel>,
+    layout: &MainLayout,
 ) {
     let undo_action = SimpleAction::new("undo", None);
     undo_action.set_enabled(controller.can_undo());
@@ -56,55 +60,38 @@ pub fn setup_history_actions(
     let redo_action = SimpleAction::new("redo", None);
     redo_action.set_enabled(controller.can_redo());
 
-    let controller_for_undo = controller.clone();
-    let keybind_list_for_undo = keybind_list.clone();
-    let details_panel_for_undo = details_panel.clone();
-    let conflict_panel_for_undo = conflict_panel.clone();
-    let window_for_undo = window.clone();
-    let redo_action_for_undo = redo_action.clone();
-    let undo_action_for_undo = undo_action.clone();
+    for (action, is_undo) in [(&undo_action, true), (&redo_action, false)] {
+        let controller = controller.clone();
+        let keybind_list = layout.keybind_list.clone();
+        let details_panel = layout.details_panel.clone();
+        let conflict_panel = layout.conflict_panel.clone();
+        let window = window.clone();
+        let undo_action = undo_action.clone();
+        let redo_action = redo_action.clone();
 
-    undo_action.connect_activate(move |_, _| match controller_for_undo.undo() {
-        Ok(()) => {
-            refresh_main_view(
-                &controller_for_undo,
-                &keybind_list_for_undo,
-                &details_panel_for_undo,
-                &conflict_panel_for_undo,
-            );
-            update_history_action_state(
-                &undo_action_for_undo,
-                &redo_action_for_undo,
-                &controller_for_undo,
-            );
-        }
-        Err(e) => show_action_error(&window_for_undo, "Undo Failed", &e),
-    });
-
-    let controller_for_redo = controller.clone();
-    let keybind_list_for_redo = keybind_list.clone();
-    let details_panel_for_redo = details_panel.clone();
-    let conflict_panel_for_redo = conflict_panel.clone();
-    let window_for_redo = window.clone();
-    let redo_action_for_redo = redo_action.clone();
-    let undo_action_for_redo = undo_action.clone();
-
-    redo_action.connect_activate(move |_, _| match controller_for_redo.redo() {
-        Ok(()) => {
-            refresh_main_view(
-                &controller_for_redo,
-                &keybind_list_for_redo,
-                &details_panel_for_redo,
-                &conflict_panel_for_redo,
-            );
-            update_history_action_state(
-                &undo_action_for_redo,
-                &redo_action_for_redo,
-                &controller_for_redo,
-            );
-        }
-        Err(e) => show_action_error(&window_for_redo, "Redo Failed", &e),
-    });
+        action.connect_activate(move |_, _| {
+            let result = if is_undo {
+                controller.undo()
+            } else {
+                controller.redo()
+            };
+            match result {
+                Ok(()) => {
+                    refresh_main_view(&controller, &keybind_list, &details_panel, &conflict_panel);
+                    update_history_action_state(&undo_action, &redo_action, &controller);
+                }
+                Err(e) => show_action_error(
+                    &window,
+                    if is_undo {
+                        "Undo Failed"
+                    } else {
+                        "Redo Failed"
+                    },
+                    &e,
+                ),
+            }
+        });
+    }
 
     app.add_action(&undo_action);
     app.add_action(&redo_action);
@@ -135,36 +122,26 @@ pub fn setup_export_action(
     controller: Rc<Controller>,
 ) {
     let export_action = SimpleAction::new("export", None);
-    let controller_for_export = controller.clone();
     let window_for_export = window.clone();
 
     export_action.connect_activate(move |_, _| {
-        eprintln!("💾 Export clicked");
-
         let file_dialog = FileDialog::builder()
             .title("Export Keybindings")
             .initial_name("hyprland-keybindings.conf")
             .build();
 
-        let controller_clone = controller_for_export.clone();
-        let window_clone = window_for_export.clone();
+        let controller = controller.clone();
+        let window = window_for_export.clone();
 
-        file_dialog.save(
-            Some(&window_clone),
-            None::<&Cancellable>,
-            move |result| match result {
-                Ok(file) => {
-                    let path = file.path().unwrap();
-                    eprintln!("💾 Exporting to: {:?}", path);
-
-                    match controller_clone.export_to(&path) {
-                        Ok(()) => eprintln!("✅ Export successful!"),
-                        Err(e) => eprintln!("❌ Export failed: {}", e),
-                    }
-                }
-                Err(_) => eprintln!("🚫 Export cancelled"),
-            },
-        );
+        let parent = window.clone();
+        file_dialog.save(Some(&parent), None::<&Cancellable>, move |result| {
+            let Some(path) = result.ok().and_then(|file| file.path()) else {
+                return;
+            };
+            if let Err(e) = controller.export_to(&path) {
+                show_action_error(&window, "Export Failed", &e);
+            }
+        });
     });
 
     app.add_action(&export_action);
@@ -173,210 +150,169 @@ pub fn setup_export_action(
 
 /// Sets up the import action
 ///
-/// Creates a GTK action that opens a file open dialog and imports
-/// keybindings from the selected file. Refreshes the UI after import.
+/// Opens a file chooser first, then asks whether to replace or merge, and
+/// refreshes the UI after the import.
 pub fn setup_import_action(
     app: &Application,
     window: &ApplicationWindow,
     controller: Rc<Controller>,
-    keybind_list: Rc<crate::ui::components::KeybindList>,
-    details_panel: Rc<crate::ui::components::DetailsPanel>,
-    conflict_panel: Rc<crate::ui::components::ConflictPanel>,
+    layout: &MainLayout,
 ) {
     let import_action = SimpleAction::new("import", None);
-    let controller_for_import = controller.clone();
     let window_for_import = window.clone();
-    let keybind_list_for_import = keybind_list.clone();
-    let details_panel_for_import = details_panel.clone();
-    let conflict_panel_for_import = conflict_panel.clone();
+    let keybind_list = layout.keybind_list.clone();
+    let details_panel = layout.details_panel.clone();
+    let conflict_panel = layout.conflict_panel.clone();
+    let status_banner = layout.status_banner.clone();
 
     import_action.connect_activate(move |_, _| {
-        eprintln!("📥 Import clicked");
-
-        // Step 1: Show mode selection dialog
-        let mode_choice = show_import_mode_dialog(&window_for_import);
-
-        let chosen_mode = match mode_choice.get() {
-            Some(mode) => mode,
-            None => {
-                eprintln!("🚫 Import cancelled (no mode selected)");
-                return;
-            }
-        };
-
-        eprintln!("📋 Import mode: {:?}", chosen_mode);
-
-        // Step 2: Show file picker
         let file_dialog = FileDialog::builder().title("Import Keybindings").build();
 
-        let controller_clone = controller_for_import.clone();
-        let keybind_list_clone = keybind_list_for_import.clone();
-        let details_panel_clone = details_panel_for_import.clone();
-        let conflict_panel_clone = conflict_panel_for_import.clone();
-        let window_clone = window_for_import.clone();
-        let window_for_state_sync = window_for_import.clone();
+        let controller = controller.clone();
+        let keybind_list = keybind_list.clone();
+        let details_panel = details_panel.clone();
+        let conflict_panel = conflict_panel.clone();
+        let status_banner = status_banner.clone();
+        let window = window_for_import.clone();
 
-        file_dialog.open(
-            Some(&window_clone),
-            None::<&Cancellable>,
-            move |result| match result {
-                Ok(file) => {
-                    let path = file.path().unwrap();
-                    eprintln!("📥 Importing from: {:?}", path);
+        let parent = window.clone();
+        file_dialog.open(Some(&parent), None::<&Cancellable>, move |result| {
+            let Some(path) = result.ok().and_then(|file| file.path()) else {
+                return;
+            };
 
-                    match controller_clone.import_from(&path, chosen_mode) {
-                        Ok(()) => {
-                            eprintln!("✅ Import successful!");
-                            refresh_main_view(
-                                &controller_clone,
-                                &keybind_list_clone,
-                                &details_panel_clone,
-                                &conflict_panel_clone,
-                            );
-                            if let Some(app) = window_for_state_sync.application() {
-                                sync_history_actions(&app, &controller_clone);
-                            }
-                        }
-                        Err(e) => eprintln!("❌ Import failed: {}", e),
+            let Some(mode) = show_import_mode_dialog(&window).get() else {
+                return;
+            };
+
+            match controller.import_from(&path, mode) {
+                Ok(()) => {
+                    refresh_main_view(&controller, &keybind_list, &details_panel, &conflict_panel);
+                    if let Some(app) = window.application() {
+                        sync_history_actions(&app, &controller);
                     }
+                    status_banner.show(&format!(
+                        "Imported {} ({}). Undo reverts it.",
+                        path.display(),
+                        match mode {
+                            ImportMode::Replace => "replaced existing bindings",
+                            ImportMode::Merge => "merged with existing bindings",
+                        }
+                    ));
                 }
-                Err(_) => eprintln!("🚫 Import cancelled"),
-            },
-        );
+                Err(e) => show_action_error(&window, "Import Failed", &e),
+            }
+        });
     });
 
     app.add_action(&import_action);
     app.set_accels_for_action("app.import", &["<Primary>o"]);
-
-    /// Shows a dialog asking user to choose import mode
-    ///
-    /// Returns the chosen ImportMode wrapped in Rc<std::cell::Cell<Option<ImportMode>>>
-    /// so it can be shared across GTK callbacks
-    fn show_import_mode_dialog(parent: &ApplicationWindow) -> Rc<Cell<Option<ImportMode>>> {
-        let response = Rc::new(Cell::new(None));
-
-        // Create dialog window
-        let dialog = Window::builder()
-            .title("Import keybindings")
-            .modal(true)
-            .transient_for(parent)
-            .default_width(400)
-            .default_height(200)
-            .build();
-
-        let key_controller = EventControllerKey::new();
-        let dialog_for_escape = dialog.clone();
-        let response_for_escape = response.clone();
-        key_controller.connect_key_pressed(move |_, key, _, _| {
-            if key == gdk::Key::Escape {
-                response_for_escape.set(None);
-                dialog_for_escape.close();
-                glib::Propagation::Stop
-            } else {
-                glib::Propagation::Proceed
-            }
-        });
-        dialog.add_controller(key_controller);
-
-        // Main container
-        let vbox = GtkBox::new(Orientation::Vertical, 12);
-        vbox.set_margin_top(20);
-        vbox.set_margin_bottom(20);
-        vbox.set_margin_start(20);
-        vbox.set_margin_end(20);
-
-        // Instruction label
-        let label = Label::new(Some("How would you like to import keybindings?"));
-        label.set_wrap(true);
-        vbox.append(&label);
-
-        // Radio button: Replace
-        let replace_radio = CheckButton::with_label("Replace - Delete all existing bindings");
-        replace_radio.set_tooltip_text(Some(
-            "Replace all current keybindings with the imported file",
-        ));
-        vbox.append(&replace_radio);
-
-        // Radio button: Merge
-        let merge_radio =
-            CheckButton::with_label("Merge - Keep existing, add imported (skip duplicates)");
-        merge_radio.set_group(Some(&replace_radio));
-        merge_radio.set_tooltip_text(Some(
-            "Keep existing keybindings and only add new ones from the import",
-        ));
-        vbox.append(&merge_radio);
-
-        // Button container
-        let button_box = GtkBox::new(Orientation::Horizontal, 12);
-        button_box.set_halign(gtk4::Align::End);
-        button_box.set_margin_top(20);
-
-        // Cancel button
-        let cancel_button = Button::with_label("Cancel");
-        let dialog_for_cancel = dialog.clone();
-        cancel_button.connect_clicked(move |_| {
-            dialog_for_cancel.close();
-        });
-        button_box.append(&cancel_button);
-
-        // Import button
-        let import_button = Button::with_label("Continue");
-        import_button.add_css_class("suggested-action");
-        import_button.set_receives_default(true);
-        let dialog_for_import = dialog.clone();
-        let response_clone = response.clone();
-        let replace_clone = replace_radio.clone();
-        import_button.connect_clicked(move |_| {
-            let mode = if replace_clone.is_active() {
-                ImportMode::Replace
-            } else {
-                ImportMode::Merge
-            };
-            response_clone.set(Some(mode));
-            dialog_for_import.close();
-        });
-        button_box.append(&import_button);
-        vbox.append(&button_box);
-        dialog.set_child(Some(&vbox));
-        dialog.set_default_widget(Some(&import_button));
-        dialog.present();
-
-        // Run modal loop
-        let main_context = glib::MainContext::default();
-        while response.get().is_none() && dialog.is_visible() {
-            main_context.iteration(true);
-        }
-
-        response
-    }
 }
 
-/// Sets up the "apply to Hyprland action"
+/// Asks whether to replace or merge; `None` when cancelled
+fn show_import_mode_dialog(parent: &ApplicationWindow) -> Rc<Cell<Option<ImportMode>>> {
+    let response = Rc::new(Cell::new(None));
+
+    let dialog = Window::builder()
+        .title("Import keybindings")
+        .modal(true)
+        .transient_for(parent)
+        .default_width(400)
+        .default_height(200)
+        .build();
+
+    let key_controller = EventControllerKey::new();
+    let dialog_for_escape = dialog.clone();
+    key_controller.connect_key_pressed(move |_, key, _, _| {
+        if key == gdk::Key::Escape {
+            dialog_for_escape.close();
+            glib::Propagation::Stop
+        } else {
+            glib::Propagation::Proceed
+        }
+    });
+    dialog.add_controller(key_controller);
+
+    let vbox = GtkBox::new(Orientation::Vertical, 12);
+    vbox.set_margin_top(20);
+    vbox.set_margin_bottom(20);
+    vbox.set_margin_start(20);
+    vbox.set_margin_end(20);
+
+    let label = Label::new(Some("How should the imported keybindings be applied?"));
+    label.set_wrap(true);
+    vbox.append(&label);
+
+    let merge_radio = CheckButton::with_label("Merge: keep existing bindings, add new ones");
+    merge_radio.set_active(true);
+    merge_radio.set_tooltip_text(Some(
+        "Bindings whose key combination already exists are skipped",
+    ));
+    vbox.append(&merge_radio);
+
+    let replace_radio = CheckButton::with_label("Replace: remove all existing bindings first");
+    replace_radio.set_group(Some(&merge_radio));
+    replace_radio.set_tooltip_text(Some(
+        "Every current keybinding is removed, then the file is imported",
+    ));
+    vbox.append(&replace_radio);
+
+    let button_box = GtkBox::new(Orientation::Horizontal, 12);
+    button_box.set_halign(gtk4::Align::End);
+    button_box.set_margin_top(20);
+
+    let cancel_button = Button::with_label("Cancel");
+    let dialog_for_cancel = dialog.clone();
+    cancel_button.connect_clicked(move |_| dialog_for_cancel.close());
+    button_box.append(&cancel_button);
+
+    let import_button = Button::with_label("Import");
+    import_button.add_css_class("suggested-action");
+    let dialog_for_import = dialog.clone();
+    let response_clone = response.clone();
+    import_button.connect_clicked(move |_| {
+        let mode = if replace_radio.is_active() {
+            ImportMode::Replace
+        } else {
+            ImportMode::Merge
+        };
+        response_clone.set(Some(mode));
+        dialog_for_import.close();
+    });
+    button_box.append(&import_button);
+    vbox.append(&button_box);
+    dialog.set_child(Some(&vbox));
+    dialog.set_default_widget(Some(&import_button));
+    dialog.present();
+
+    let main_context = glib::MainContext::default();
+    while response.get().is_none() && dialog.is_visible() {
+        main_context.iteration(true);
+    }
+
+    response
+}
+
+/// Sets up the "apply to Hyprland" action
 ///
-/// Creates a GTK action that triggers Hyprland to reload its configuration,
-/// applying all pending changes immediately without restart.
+/// Runs `hyprctl reload`, reports the outcome in the status banner and shows
+/// a dialog when it fails.
 pub fn setup_apply_action(
     app: &Application,
     window: &ApplicationWindow,
     controller: Rc<Controller>,
+    layout: &MainLayout,
 ) {
     let apply_action = SimpleAction::new("apply-to-hyprland", None);
-    let controller_for_apply = controller.clone();
     let window_for_apply = window.clone();
+    let status_banner = layout.status_banner.clone();
 
-    apply_action.connect_activate(move |_, _| {
-        eprintln!("🔄 Applying changes to Hyprland...");
-
-        match controller_for_apply.apply_to_hyprland() {
-            Ok(()) => {
-                eprintln!("✅ Hyprland reloaded successfully!");
-                window_for_apply.set_title(Some(&format!(
-                    "Hyprland Keybinding Manager · applied {}",
-                    chrono::Local::now().format("%H:%M:%S")
-                )));
-            }
-            Err(e) => show_action_error(&window_for_apply, "Apply Failed", &e),
-        }
+    apply_action.connect_activate(move |_, _| match controller.apply_to_hyprland() {
+        Ok(()) => status_banner.show(&format!(
+            "Hyprland reloaded at {}.",
+            chrono::Local::now().format("%H:%M:%S")
+        )),
+        Err(e) => show_action_error(&window_for_apply, "Apply Failed", &e),
     });
 
     app.add_action(&apply_action);
@@ -385,12 +321,11 @@ pub fn setup_apply_action(
 
 pub fn refresh_main_view(
     controller: &Controller,
-    keybind_list: &crate::ui::components::KeybindList,
-    details_panel: &crate::ui::components::DetailsPanel,
-    conflict_panel: &crate::ui::components::ConflictPanel,
+    keybind_list: &KeybindList,
+    details_panel: &DetailsPanel,
+    conflict_panel: &ConflictPanel,
 ) {
-    let updated_bindings = controller.get_current_view();
-    keybind_list.update_with_bindings(updated_bindings);
+    keybind_list.update_with_bindings(controller.get_current_view());
     details_panel.update_binding(None);
     conflict_panel.refresh();
 }
@@ -404,7 +339,7 @@ fn update_history_action_state(
     redo_action.set_enabled(controller.can_redo());
 }
 
-fn show_action_error(window: &ApplicationWindow, title: &str, message: &str) {
+pub fn show_action_error(window: &ApplicationWindow, title: &str, message: &str) {
     let error_dialog = gtk4::AlertDialog::builder()
         .modal(true)
         .message(title)

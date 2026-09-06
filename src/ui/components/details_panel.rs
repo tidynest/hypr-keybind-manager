@@ -14,9 +14,8 @@
 
 //! Details panel component for displaying selected keybinding information.
 //!
-//! This component shows comprehensive details about a selected keybinding,
-//! including its key combination, dispatcher, arguments, bind type, and
-//! conflict status.
+//! Shows the selected binding's fields, the exact config line that
+//! represents it, and which other bindings it conflicts with.
 
 use gtk4::{
     Align, Box as GtkBox, Button, Frame, Grid, Label, Orientation, Separator,
@@ -24,30 +23,30 @@ use gtk4::{
 };
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{core::types::Keybinding, ui::Controller};
+use crate::{
+    core::types::{BIND_FLAGS, Keybinding},
+    ui::{Controller, builders::header::icon_button},
+};
+
+/// Field rows in display order
+const FIELDS: [&str; 7] = [
+    "Key combo",
+    "Dispatcher",
+    "Arguments",
+    "Bind type",
+    "Description",
+    "Submap",
+    "Config line",
+];
 
 /// A panel that displays detailed information about a selected keybinding.
-///
-/// The panel shows:
-/// - Key combination (e.g., "SUPER+K")
-/// - Dispatcher (e.g., "exec")
-/// - Arguments (e.g., "firefox")
-/// - Bind type (e.g., "bind")
-/// - Conflict status (whether this binding conflicts with others)
-/// - Delete button (disabled when nothing selected)
 ///
 /// The panel width is enforced by the parent Paned widget in app.rs
 pub struct DetailsPanel {
     /// Root widget (Frame)
     widget: Frame,
-    /// Label displaying the key combination
-    key_label: Label,
-    /// Label displaying the dispatcher
-    dispatcher_label: Label,
-    /// Label displaying the arguments
-    args_label: Label,
-    /// Label displaying the bind type
-    bind_type_label: Label,
+    /// Value labels in `FIELDS` order
+    values: Vec<Label>,
     /// Label displaying conflict status
     status_label: Label,
     /// Edit button
@@ -56,347 +55,202 @@ pub struct DetailsPanel {
     delete_button: Button,
     /// Controller for accessing conflict information
     controller: Rc<Controller>,
-    /// Currently displayed binding (for delete operation)
+    /// Currently displayed binding (for edit and delete)
     current_binding: Rc<RefCell<Option<Keybinding>>>,
 }
 
 impl DetailsPanel {
-    /// Helper to create a label row (header + value) for the details grid
-    ///
-    /// Creates a consistent header/value label pair with proper styling and alignment.
-    ///
-    /// # Arguments
-    ///
-    /// * `header_text` - Text for the header label (e.g., "🎹 Key Combo:")
-    /// * `initial_value` - Initial text for the value label
-    ///
-    /// # Returns
-    ///
-    /// Tuple of (header_label, value_label)
-    fn create_label_row(header_text: &str, initial_value: &str) -> (Label, Label) {
+    /// Creates a header/value label pair for one row of the details grid
+    fn create_label_row(header_text: &str) -> (Label, Label) {
         let header = Label::builder()
             .label(header_text)
             .halign(Align::End)
+            .valign(Align::Start)
             .xalign(1.0)
             .build();
         header.add_css_class("field-header");
 
         let value = Label::builder()
-            .label(initial_value)
             .halign(Align::Start)
             .xalign(0.0)
             .wrap(true)
             .wrap_mode(WordChar)
-            .max_width_chars(20)
+            .max_width_chars(28)
+            .selectable(true)
             .build();
+        value.add_css_class("field-value");
 
         (header, value)
     }
 
-    /// Helper to create a preview of arguments (truncated to 30 chars if needed)
-    ///
-    /// # Arguments
-    /// * `args` - Optional arguments string
-    ///
-    /// # Returns
-    /// Truncated preview string (empty if no args)
-    fn format_args_preview(args: &Option<String>) -> String {
-        if let Some(args) = args {
-            if args.len() > 30 {
-                format!("({}", &args[0..30])
-            } else {
-                args.clone()
-            }
-        } else {
-            String::new()
-        }
-    }
-
     /// Create a new details panel.
-    ///
-    /// # Arguments
-    ///
-    /// * `controller` - Reference to the Controller for accessing keybinding data
-    ///
-    /// # Returns
-    ///
-    /// A new `DetailsPanel` instance
     pub fn new(controller: Rc<Controller>) -> Self {
-        // Create the FRAME (content container)
         let frame = Frame::builder()
             .label("Selected Keybinding")
             .margin_start(10)
             .margin_end(10)
             .margin_top(10)
             .margin_bottom(10)
-            .width_request(280)
+            .width_request(300)
             .build();
 
-        // Create main vertical box to hold grid + button
         let vbox = GtkBox::new(Orientation::Vertical, 10);
         vbox.set_margin_start(15);
         vbox.set_margin_end(15);
         vbox.set_margin_top(15);
         vbox.set_margin_bottom(15);
 
-        // Create grid for two-column layout (label / value)
         let grid = Grid::builder().row_spacing(10).column_spacing(15).build();
 
-        // Row 0: Key Combo
-        let (key_header, key_label) =
-            Self::create_label_row("🎹 Key Combo:", "Select a keybinding...");
-        grid.attach(&key_header, 0, 0, 1, 1);
-        grid.attach(&key_label, 1, 0, 1, 1);
+        let mut values = Vec::with_capacity(FIELDS.len());
+        for (row, field) in FIELDS.iter().enumerate() {
+            let (header, value) = Self::create_label_row(field);
+            grid.attach(&header, 0, row as i32, 1, 1);
+            grid.attach(&value, 1, row as i32, 1, 1);
+            values.push(value);
+        }
+        if let Some(config_line) = values.last() {
+            config_line.add_css_class("config-line");
+        }
 
-        // Row 1: Dispatcher
-        let (dispatcher_header, dispatcher_label) = Self::create_label_row("⚡ Dispatcher:", "");
-        grid.attach(&dispatcher_header, 0, 1, 1, 1);
-        grid.attach(&dispatcher_label, 1, 1, 1, 1);
+        let (status_header, status_label) = Self::create_label_row("Status");
+        grid.attach(&status_header, 0, FIELDS.len() as i32, 1, 1);
+        grid.attach(&status_label, 1, FIELDS.len() as i32, 1, 1);
 
-        // Row 2: Arguments
-        let (args_header, args_label) = Self::create_label_row("📝 Arguments:", "");
-        grid.attach(&args_header, 0, 2, 1, 1);
-        grid.attach(&args_label, 1, 2, 1, 1);
-
-        // Row 3: Bind Type
-        let (bind_type_header, bind_type_label) = Self::create_label_row("🔗 Bind Type:", "");
-        grid.attach(&bind_type_header, 0, 3, 1, 1);
-        grid.attach(&bind_type_label, 1, 3, 1, 1);
-
-        // Row 4: Status
-        let (status_header, status_label) = Self::create_label_row("📊 Status:", "");
-        grid.attach(&status_header, 0, 4, 1, 1);
-        grid.attach(&status_label, 1, 4, 1, 1);
-
-        // Add grid to vbox
         vbox.append(&grid);
 
-        // Add separator
         let separator = Separator::new(Orientation::Horizontal);
         separator.set_margin_top(10);
         separator.set_margin_bottom(10);
         vbox.append(&separator);
 
-        // Add edit button
-        let edit_button = Button::builder()
-            .label("✏️ Edit Keybinding")
-            .sensitive(false) // Disabled until a binding is selected
-            .build();
-        edit_button.set_tooltip_text(Some("Edit the selected keybinding"));
+        let edit_button = icon_button("document-edit-symbolic", "Edit");
+        edit_button.set_sensitive(false);
+        edit_button.set_tooltip_text(Some("Edit the selected keybinding (Enter)"));
         vbox.append(&edit_button);
 
-        // Add delete button
-        let delete_button = Button::builder()
-            .label("🗑️  Delete Keybinding")
-            .sensitive(false) // Disabled until a binding is selected
-            .build();
+        let delete_button = icon_button("user-trash-symbolic", "Delete");
+        delete_button.set_sensitive(false);
         delete_button.add_css_class("destructive-action");
-        delete_button.set_tooltip_text(Some("Delete the selected keybinding"));
+        delete_button.set_tooltip_text(Some("Delete the selected keybinding (Delete)"));
         vbox.append(&delete_button);
 
-        // Add vbox to frame
         frame.set_child(Some(&vbox));
 
-        Self {
+        let panel = Self {
             widget: frame,
-            key_label,
-            dispatcher_label,
-            args_label,
-            bind_type_label,
+            values,
             status_label,
             edit_button,
             delete_button,
             controller,
             current_binding: Rc::new(RefCell::new(None)),
-        }
+        };
+        panel.update_binding(None);
+        panel
     }
 
     /// Update the panel to display information about a specific keybinding.
     ///
-    /// If `None` is passed, the panel shows a "Select a keybinding..." message.
-    ///
-    /// # Arguments
-    ///
-    /// * `binding` - The keybinding to display, or `None` to clear
+    /// If `None` is passed, the panel shows a placeholder.
     pub fn update_binding(&self, binding: Option<&Keybinding>) {
-        // Store the current binding for delete operation
         *self.current_binding.borrow_mut() = binding.cloned();
 
-        // Enable/disable buttons based on selection
         self.edit_button.set_sensitive(binding.is_some());
         self.delete_button.set_sensitive(binding.is_some());
 
-        match binding {
-            Some(b) => {
-                // Display binding information
-                let key_combo_text = format!("{}", b.key_combo);
-                self.key_label.set_label(&key_combo_text);
-                self.key_label.set_can_target(true);
-                self.key_label.set_has_tooltip(true);
-                self.key_label.set_tooltip_text(Some(&key_combo_text));
-
-                self.dispatcher_label.set_label(&b.dispatcher);
-                self.dispatcher_label.set_can_target(true);
-                self.dispatcher_label.set_has_tooltip(true);
-                self.dispatcher_label.set_tooltip_text(Some(&b.dispatcher));
-
-                let args_text = b.args.as_deref().unwrap_or("(none)");
-                self.args_label.set_label(args_text);
-                self.args_label.set_can_target(true);
-                self.args_label.set_has_tooltip(true);
-                self.args_label.set_tooltip_text(Some(args_text));
-
-                self.bind_type_label.set_label(&b.bind_type.to_string());
-
-                // Check for conflicts and show which bindings conflict
-                let conflicts = self.controller.get_conflicts();
-
-                // Find conflicts involving this binding
-                let mut conflicting_bindings = Vec::new();
-
-                for conflict in conflicts.iter() {
-                    // Check if this binding is part of this conflict
-                    let is_involved = conflict
-                        .conflicting_bindings
-                        .iter()
-                        .any(|cb| cb.key_combo == b.key_combo && cb.dispatcher == b.dispatcher);
-
-                    if is_involved {
-                        // Collect all other bindings in this conflict
-                        for cb in conflict.conflicting_bindings.iter() {
-                            // Skip the current binding itself
-                            if cb.key_combo == b.key_combo && cb.dispatcher == b.dispatcher {
-                                continue;
-                            }
-                            conflicting_bindings.push(cb.clone());
-                        }
-                    }
-                }
-
-                // Format the status message based on conflicts found
-                if conflicting_bindings.is_empty() {
-                    self.status_label.set_label("✅ No conflicts");
-                    self.status_label
-                        .set_tooltip_text(Some("This keybinding has no conflicts"));
-                } else if conflicting_bindings.len() == 1 {
-                    // Single conflict - show the full details
-                    let other = &conflicting_bindings[0];
-                    let args_preview = Self::format_args_preview(&other.args);
-
-                    let conflict_description = format!(
-                        "⚠️ Conflicts with:\n{} → {} {}",
-                        other.key_combo, other.dispatcher, args_preview
-                    );
-
-                    let full_conflict = format!(
-                        "Conflicts with:  {} → {} {}",
-                        other.key_combo,
-                        other.dispatcher,
-                        other.args.as_deref().unwrap_or("")
-                    );
-
-                    self.status_label.set_label(&conflict_description);
-                    self.status_label.set_tooltip_text(Some(&full_conflict));
-                } else {
-                    // Multiple conflicts - show first one and count
-                    let first_conflict = &conflicting_bindings[0];
-                    let args_preview = Self::format_args_preview(&first_conflict.args);
-
-                    let conflict_description = format!(
-                        "⚠️  {}\n   {} {}\n   (and {} more)",
-                        first_conflict.key_combo,
-                        first_conflict.dispatcher,
-                        args_preview,
-                        conflicting_bindings.len() - 1
-                    );
-
-                    let mut full_conflicts = String::from("Conflicts with:\n");
-                    for (i, cb) in conflicting_bindings.iter().enumerate() {
-                        full_conflicts.push_str(&format!(
-                            "{}. {} → {} {}\n",
-                            i + 1,
-                            cb.key_combo,
-                            cb.dispatcher,
-                            cb.args.as_deref().unwrap_or("")
-                        ));
-                    }
-
-                    self.status_label.set_label(&conflict_description);
-                    self.status_label.set_tooltip_text(Some(&full_conflicts));
-                }
+        let Some(b) = binding else {
+            for (index, value) in self.values.iter().enumerate() {
+                value.set_label(if index == 0 { "Select a binding" } else { "" });
+                value.set_tooltip_text(None);
             }
-            None => {
-                // Show friendly placeholder when nothing is selected
-                self.key_label.set_label("👈 Select a binding");
-                self.key_label.set_tooltip_text(None);
+            self.status_label.set_label("");
+            self.status_label.set_tooltip_text(None);
+            return;
+        };
 
-                self.dispatcher_label.set_label("");
-                self.dispatcher_label.set_tooltip_text(None);
-
-                self.args_label.set_label("");
-                self.args_label.set_tooltip_text(None);
-
-                self.bind_type_label.set_label("");
-
-                self.status_label.set_label("");
-                self.status_label.set_tooltip_text(None);
-            }
+        let texts = [
+            b.key_combo.to_string(),
+            b.dispatcher.clone(),
+            b.args.clone().unwrap_or_else(|| "(none)".to_string()),
+            format!("{}{}", b.bind_type, describe_flags(&b.bind_type.flags())),
+            b.description
+                .clone()
+                .unwrap_or_else(|| "(none)".to_string()),
+            b.submap.clone().unwrap_or_else(|| "(global)".to_string()),
+            b.to_string(),
+        ];
+        for (value, text) in self.values.iter().zip(texts) {
+            value.set_tooltip_text(Some(&text));
+            value.set_label(&text);
         }
+
+        let others: Vec<Keybinding> = self
+            .controller
+            .get_conflicts()
+            .into_iter()
+            .filter(|c| c.submap == b.submap && c.key_combo == b.key_combo)
+            .flat_map(|c| c.conflicting_bindings)
+            .filter(|cb| cb != b)
+            .collect();
+
+        if others.is_empty() {
+            self.status_label.set_label("No conflicts");
+            self.status_label
+                .set_tooltip_text(Some("This key combination is bound once"));
+            return;
+        }
+
+        let lines: Vec<String> = others
+            .iter()
+            .map(|cb| {
+                format!("{} {}", cb.dispatcher, cb.args.as_deref().unwrap_or(""))
+                    .trim()
+                    .to_string()
+            })
+            .collect();
+        let shown = lines.iter().take(2).cloned().collect::<Vec<_>>().join("\n");
+        let more = if lines.len() > 2 {
+            format!("\n(and {} more)", lines.len() - 2)
+        } else {
+            String::new()
+        };
+        self.status_label
+            .set_label(&format!("Conflicts with:\n{shown}{more}"));
+        self.status_label
+            .set_tooltip_text(Some(&format!("Conflicts with:\n{}", lines.join("\n"))));
     }
 
     /// Connects the delete button to a callback
-    ///
-    /// This should be called from the app after creating the panel,
-    /// passing in a closure that handles the deletion and UI refresh.
-    ///
-    /// # Arguments
-    /// * `callback` - Function to call when delete is clicked
     pub fn connect_delete<F>(&self, callback: F)
     where
         F: Fn(&Keybinding) + 'static,
     {
         let current_binding = self.current_binding.clone();
-
-        self.delete_button.connect_clicked(move |_button| {
-            // Extract the binding COMPLETELY before calling callback
-            // This ensures no borrow is held when callback triggers UI refresh
-            let binding = current_binding.borrow();
-            let binding_to_delete = binding.as_ref();
-
-            if let Some(binding) = binding_to_delete {
-                // No borrow is held here - safe to call callback which may trigger UI refresh
-                callback(binding);
+        self.delete_button.connect_clicked(move |_| {
+            // Clone out first so no borrow is held while the callback refreshes the UI
+            let binding = current_binding.borrow().clone();
+            if let Some(binding) = binding {
+                callback(&binding);
             }
         });
     }
 
     /// Connects a callback to the edit button
-    ///
-    /// The callback receives a reference to the currently selected keybinding
-    /// when the edit button is clicked.
     pub fn connect_edit<F>(&self, callback: F)
     where
         F: Fn(&Keybinding) + 'static,
     {
         let current_binding = self.current_binding.clone();
-
-        self.edit_button.connect_clicked(move |_button| {
-            // Extract the binding COMPLETELY before calling callback
-            // This ensures no borrow is held when callback triggers UI refresh
-            let binding_to_edit = current_binding.borrow().as_ref().cloned();
-
-            if let Some(binding) = binding_to_edit {
-                // No borrow is held here - safe to call callback which may trigger UI refresh
+        self.edit_button.connect_clicked(move |_| {
+            let binding = current_binding.borrow().clone();
+            if let Some(binding) = binding {
                 callback(&binding);
             }
         });
     }
 
     /// Get the root widget for adding to a container.
-    ///
-    /// # Returns
-    ///
-    /// Reference to the root `Frame` widget
     pub fn widget(&self) -> &Frame {
         &self.widget
     }
@@ -413,5 +267,19 @@ impl DetailsPanel {
         if self.delete_button.is_sensitive() {
             self.delete_button.emit_clicked();
         }
+    }
+}
+
+/// Short explanation of flag letters, e.g. " (repeat while held, works on the lock screen)"
+fn describe_flags(flags: &str) -> String {
+    let parts: Vec<&str> = BIND_FLAGS
+        .iter()
+        .filter(|(c, _)| flags.contains(*c))
+        .map(|(_, text)| *text)
+        .collect();
+    if parts.is_empty() {
+        String::new()
+    } else {
+        format!(" ({})", parts.join(", "))
     }
 }

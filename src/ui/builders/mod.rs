@@ -23,4 +23,8 @@ pub mod handlers;
 pub mod header;
 pub mod layout;
 
-pub use {handlers::wire_up_handlers, header::build_header_bar, layout::build_main_layout};
+pub use {
+    handlers::wire_up_handlers,
+    header::{HeaderWidgets, build_header_bar},
+    layout::{MainLayout, build_main_layout},
+};

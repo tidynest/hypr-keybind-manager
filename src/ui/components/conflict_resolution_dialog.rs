@@ -89,7 +89,12 @@ impl ConflictResolutionDialog {
             group_box.set_margin_start(20);
 
             // Header showing conflicted key combo
-            let header = Label::new(Some(&format!("⚠️ Conflict: {}", conflict.key_combo)));
+            let where_ = conflict
+                .submap
+                .as_deref()
+                .map(|s| format!(" in submap {s}"))
+                .unwrap_or_default();
+            let header = Label::new(Some(&format!("Conflict: {}{where_}", conflict.key_combo)));
             header.set_halign(Align::Start);
             header.add_css_class("conflict-header");
             group_box.append(&header);

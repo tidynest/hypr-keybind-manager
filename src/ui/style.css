@@ -140,3 +140,21 @@ entry.search {
 .suggested-action:hover {
     background-color: shade(@theme_selected_bg_color, 1.05);
 }
+
+/* Transient notice under the header bar */
+.status-banner {
+    background-color: alpha(@theme_selected_bg_color, 0.15);
+    border-left: 4px solid @theme_selected_bg_color;
+    border-radius: 8px;
+    padding: 6px 10px;
+}
+
+/* The rendered config line in the details panel */
+.config-line {
+    font-family: monospace;
+    font-size: 0.9em;
+}
+
+.conflict-header {
+    font-weight: bold;
+}
