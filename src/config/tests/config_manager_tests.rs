@@ -640,3 +640,63 @@ fn test_restore_preserves_exact_content() {
     );
     assert!(restored.contains("\n\n"), "Should preserve empty lines");
 }
+
+#[test]
+fn test_backup_keeps_the_config_permissions() {
+    let (_temp_dir, config_path) = create_test_config();
+    fs::set_permissions(&config_path, fs::Permissions::from_mode(0o600)).unwrap();
+    let manager = ConfigManager::new(config_path).unwrap();
+
+    let backup = manager.create_timestamped_backup().unwrap();
+
+    assert_eq!(
+        fs::metadata(backup).unwrap().permissions().mode() & 0o777,
+        0o600
+    );
+}
+
+#[test]
+fn test_list_backups_skips_other_files_and_symlinks() {
+    let (temp_dir, config_path) = create_test_config();
+    let manager = ConfigManager::new(config_path).unwrap();
+    let own = manager.create_timestamped_backup().unwrap();
+
+    // A sourced file in the same directory shares the backup directory
+    let backup_dir = temp_dir.path().join("backups");
+    fs::write(
+        backup_dir.join("gaming.conf.2026-01-01_120000"),
+        "other file",
+    )
+    .unwrap();
+    symlink(
+        "/etc/hostname",
+        backup_dir.join("hyprland.conf.2026-01-02_120000"),
+    )
+    .unwrap();
+
+    assert_eq!(manager.list_backups().unwrap(), vec![own]);
+}
+
+#[test]
+fn test_lua_export_keeps_unrenderable_binds_inside_comments() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_path = temp_dir.path().join("hyprland.lua");
+    fs::write(
+        &config_path,
+        "hl.bind(\"SUPER + K\", function() end, { description = \"a\\nos.exit()\" })\n",
+    )
+    .unwrap();
+    let manager = ConfigManager::new(config_path.clone()).unwrap();
+    let bindings = load_bindings_from(&config_path).unwrap().bindings;
+    let export_path = temp_dir.path().join("export.lua");
+
+    manager.export_to(&export_path, &bindings).unwrap();
+
+    let exported = fs::read_to_string(&export_path).unwrap();
+    assert!(
+        exported
+            .lines()
+            .all(|line| line.is_empty() || line.starts_with("-- ")),
+        "{exported}"
+    );
+}

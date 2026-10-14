@@ -257,37 +257,35 @@ impl ConfigValidator {
                 continue;
             }
 
-            // Layer 2: Danger assessment (only for exec dispatcher)
-            if binding.dispatcher == "exec" {
-                if let Some(args) = &binding.args {
-                    let danger = self.danger_detector.assess_command(args);
+            // Layer 2: Danger assessment (exec and execr, which run a shell)
+            if let Some(args) = binding.shell_command() {
+                let danger = self.danger_detector.assess_command(args);
 
-                    match danger.danger_level {
-                        DangerLevel::Critical => {
-                            // Critical dangers - block commits
-                            report.record_danger(binding_index, danger.clone());
-                            // Records danger
-                        }
-                        DangerLevel::Dangerous => {
-                            // Dangerous commands - warn but allow
-                            report.record_danger(binding_index, danger.clone());
-                            report.add_warning(
-                                binding_index,
-                                format!("Dangerous command: {}", danger.reason),
-                                Some(danger.recommendation.clone()),
-                            );
-                        }
-                        DangerLevel::Suspicious => {
-                            // Suspicious commands - warn but allow
-                            report.add_warning(
-                                binding_index,
-                                format!("Suspicious command: {}", danger.reason),
-                                Some(danger.recommendation.clone()),
-                            );
-                        }
-                        DangerLevel::Safe => {
-                            // Safe - no action needed
-                        }
+                match danger.danger_level {
+                    DangerLevel::Critical => {
+                        // Critical dangers - block commits
+                        report.record_danger(binding_index, danger.clone());
+                        // Records danger
+                    }
+                    DangerLevel::Dangerous => {
+                        // Dangerous commands - warn but allow
+                        report.record_danger(binding_index, danger.clone());
+                        report.add_warning(
+                            binding_index,
+                            format!("Dangerous command: {}", danger.reason),
+                            Some(danger.recommendation.clone()),
+                        );
+                    }
+                    DangerLevel::Suspicious => {
+                        // Suspicious commands - warn but allow
+                        report.add_warning(
+                            binding_index,
+                            format!("Suspicious command: {}", danger.reason),
+                            Some(danger.recommendation.clone()),
+                        );
+                    }
+                    DangerLevel::Safe => {
+                        // Safe - no action needed
                     }
                 }
             }

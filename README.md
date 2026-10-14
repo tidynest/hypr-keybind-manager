@@ -6,7 +6,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.83+-orange.svg)](https://www.rust-lang.org/)
 [![GTK4](https://img.shields.io/badge/GTK-4.0-blue.svg)](https://www.gtk.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-188%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-206%20passing-brightgreen.svg)](#testing)
 
 ---
 
@@ -60,7 +60,7 @@
 - **Both Config Languages**: `hyprland.conf` (hyprlang) and `hyprland.lua` (Hyprland 0.55+). Lua configs are run in a sandbox to find every bind, including ones built in loops; hand-written `hl.bind` lines are editable
 - **Complete Hyprland Syntax**: Every bind flag (`bindd`, `bindel`, `bindnt`, ...), `bindd` descriptions, submaps and sourced files
 - **Real-Time Conflict Detection**: Instantly identifies duplicate key combinations per submap with [O(1)](https://en.wikipedia.org/wiki/Time_complexity#Constant_time) performance
-- **Defence-in-Depth Security Validation**: Prevents shell injection, dangerous commands, encoded payloads, and optionally sandboxes `exec` bindings
+- **Checks Before Every Save**: Refuses binds whose text Hyprland would misread and commands rated critical, and writes Lua arguments back as plain data. `exec` bindings can be sandboxed with Bubblewrap
 - **Automatic Backup System**: Every change creates timestamped backups with [atomic write operations](https://en.wikipedia.org/wiki/Atomicity_(database_systems))
 - **Search & Filter**: Real-time search across key combinations, dispatchers, and arguments with persistent filtering
 - **Keyboard Navigation**: Arrows move, Enter edits, Delete deletes, Ctrl+N adds, Ctrl+F searches, Escape closes dialogs
@@ -223,40 +223,39 @@ graph TB
            │
            ↓
 ┌──────────────────────┐
-│  Security Validator  │
+│  Security Checks     │
 │----------------------│
-│  Layer 1: Injection  │
-│  Layer 2: Danger     │
-│  Layer 3: Config     │
+│  Danger detection    │
+│  Format guards       │
 └──────────────────────┘
 ```
 </details>
 
 ### Security Architecture
 
-The application implements **[defence in depth](https://en.wikipedia.org/wiki/Defense_in_depth_(computing))** with four independent validation layers:
+Every binding you add, edit or import is checked before it is written:
 
 ```mermaid
 graph LR
-    Input[User Input] --> L1[Layer 1<br/>Injection Prevention]
-    L1 --> L2[Layer 2<br/>Danger Detection]
-    L2 --> L3[Layer 3<br/>Config Validation]
-    L3 --> L4[Layer 4<br/>Execution Sandbox]
-    L4 --> Accept[✅ Accept]
-    L4 --> Reject[❌ Reject]
+    Input[Binding from the dialog<br/>or an imported file] --> D[Danger detection<br/>add, edit, import]
+    D -->|critical| Reject[❌ Refused]
+    D --> F[Format guards<br/>every write]
+    F -->|would be misread| Reject
+    F --> T[Backup + atomic write]
+    T --> Accept[✅ Saved]
 
-L1 -.->|Blocks| Inject[Shell Metacharacters<br/>$, ;, pipe, &, backticks]
-    L2 -.->|Detects| Danger[Critical Patterns<br/>rm -rf /, dd, fork bombs]
-    L3 -.->|Validates| Config[Dispatcher Whitelist<br/>Argument Length<br/>Encoding Detection]
-    L4 -.->|Wraps| Sandbox[Bubblewrap Isolation<br/>Read-only FS, No Network]
+    D -.->|Refuses| Danger[rm -rf /, dd to a disk,<br/>fork bombs]
+    F -.->|Refuses| Format[Line breaks in any field,<br/>commas before the arguments]
+    F -.->|Rewrites| Lua[Lua arguments as plain data,<br/>hash signs doubled]
 
-    style L1 fill:#ffe1e1,color:#000
-    style L2 fill:#fff4e1,color:#000
-    style L3 fill:#e1ffe1,color:#000
-    style L4 fill:#e1e1ff,color:#000
+    style D fill:#fff4e1,color:#000
+    style F fill:#ffe1e1,color:#000
+    style T fill:#e1ffe1,color:#000
     style Accept fill:#d4f1d4,color:#000
     style Reject fill:#ffd4d4,color:#000
 ```
+
+The edit dialog can also wrap an `exec` binding in Bubblewrap, with no network access and read-only system directories. The whole command line runs inside it.
 
 For detailed security information, see [SECURITY.md](SECURITY.md).
 
@@ -492,29 +491,24 @@ The application uses a **[HashMap](https://doc.rust-lang.org/std/collections/str
 
 ### Security Validation
 
-**Layer 1: Injection Prevention** (`core/validator.rs`)
-- Whitelist-based dispatcher validation (only known-good dispatchers)
-- Shell metacharacter detection (blocks `;`, `|`, `&`, `$`, backticks)
-- Argument length limits (max 1000 characters)
-- Key name validation (alphanumeric + safe special chars)
+**Danger detection** (`config/danger/`, called from `ui/controller.rs`)
+- Runs on the command of every `exec` and `execr` binding you add, edit or import
+- Regex pattern matching for critical commands (`rm -rf /`, `dd if=/dev/zero of=/dev/sda`, fork bombs) refuses the binding; an import with one stops before anything is written
+- HashSet lookup for dangerous executables (`sudo`, `chmod 777`, `mkfs`), context-aware analysis and [Shannon entropy](https://en.wikipedia.org/wiki/Entropy_(information_theory)) detection for base64/hex payloads (thresholds: 4.0 bits for base64, 3.0 bits for hex) rate a command without blocking it. The GUI does not show those ratings yet
 
-**Layer 2: Dangerous Command Detection** (`config/danger/`)
-- Regex pattern matching for critical commands (`rm -rf /`, `dd if=/dev/zero of=/dev/sda`)
-- HashSet lookup for dangerous executables (`sudo`, `chmod 777`, `mkfs`)
-- Context-aware analysis (`chmod 644` flagged but explained)
-- [Shannon entropy](https://en.wikipedia.org/wiki/Entropy_(information_theory)) detection for base64/hex encoded payloads (thresholds: 4.0 bits for base64, 3.0 bits for hex)
+**Format guards** (`core/types.rs`, `core/lua_config.rs`)
+- In `hyprland.conf`, a line break in any field or a comma before the arguments would make Hyprland read another directive or another dispatcher, so the binding is refused; `#` is written as `##`
+- In `hyprland.lua`, strings are written as escaped literals, and dispatcher arguments are evaluated with no globals and written back from the resulting values, so typed text never becomes code
 
-**Layer 3: Config Validation** (`config/validator.rs`)
-- Coordinates Layers 1-2 and produces unified validation report
-- Severity levels: Error (blocks), Warning (allows with notice), Info
-- Transaction integration (validation before commit)
+**Injection checks for IPC** (`core/validator.rs`)
+- Dispatcher whitelist, shell metacharacter detection, argument length limit and key name validation for binds sent over Hyprland's socket. Config writes do not use them, because ordinary binds contain `"`, `|` or dispatchers outside the list
 
 ### Backup System
 
 **Automatic Backups**:
 - Created before every write operation
 - Timestamped: `hyprland.conf.YYYY-MM-DD_HHMMSS`
-- Stored in `~/.config/hypr/backups/`
+- Stored in `~/.config/hypr/backups/`, with the same permissions as the config
 - No user intervention required
 
 **Atomic Writes**:
@@ -523,7 +517,7 @@ The application uses a **[HashMap](https://doc.rust-lang.org/std/collections/str
 - Never corrupts config file, even on power loss
 
 **Backup Management UI**:
-- View all backups with formatted timestamps
+- View the backups of the open config with formatted timestamps; backups of other files in the same directory and symlinks are not listed
 - Restore any backup with one click, and undo the restore with Ctrl+Z
 - Delete old backups to save space
 - Safety backup created before restore
@@ -534,7 +528,7 @@ The application uses a **[HashMap](https://doc.rust-lang.org/std/collections/str
 - A bind whose line is a single `hl.bind(...)` statement with a dispatcher action is rewritten in place; a `mainMod .. " + Q"` key expression is kept when the new keys start with the same value
 - A bind that comes from code (a loop, a Lua function, a larger statement, or an option the editor cannot write back) is changed by an override: `hl.unbind("<keys>")` and, for an edit, the replacement `hl.bind(...)` are appended to the end of the main file. Hyprland runs the file top to bottom, so the override wins and your loop stays as it is. The list marks such binds and the details panel says where they come from
 - New binds are appended at the end of the main file under a `-- Keybindings added by hypr-keybind-manager` header; new binds inside a submap are refused, add those inside `hl.define_submap` yourself
-- Dispatcher names are `hl.dsp` paths (`window.close`, `focus`, ...); `exec` and `execr` stand for `exec_cmd` and `exec_raw`. Arguments are shown and edited as Lua literals such as `{ direction = "left" }`
+- Dispatcher names are `hl.dsp` paths (`window.close`, `focus`, ...); `exec` and `execr` stand for `exec_cmd` and `exec_raw`. Arguments are shown and edited as Lua literals such as `{ direction = "left" }`. On save they are evaluated as data and written back from the resulting values, so `os and os.execute("...") or 1` is saved as `1`
 
 **In-Place Writes** (hyprlang):
 - The current file and every file it sources are scanned line by line
@@ -612,26 +606,31 @@ The application uses a **[HashMap](https://doc.rust-lang.org/std/collections/str
 
 ```
 hypr-keybind-manager/
-├── README.md                                   # Project overview and documentation hub (1067 lines)
+├── README.md                                   # Project overview and documentation hub (1091 lines)
 ├── LICENSE                                     # Apache 2.0 license (201 lines)
 ├── CONTRIBUTING.md                             # Contribution guidelines (308 lines)
-├── SECURITY.md                                 # Security policy and threat model (503 lines)
-├── CHANGELOG.md                                # Release history (80 lines)
+├── SECURITY.md                                 # Security policy and threat model (515 lines)
+├── CHANGELOG.md                                # Release history (112 lines)
 ├── CONTRIBUTORS.md                             # Contributor recognition (15 lines)
-├── Cargo.toml                                  # Rust dependencies and metadata (60 lines)
-├── PKGBUILD                                    # Arch Linux package build script (39 lines)
+├── Cargo.toml                                  # Rust dependencies and metadata (58 lines)
+├── clippy.toml                                 # Lets tests use unwrap, expect and panic (5 lines)
+├── PKGBUILD                                    # Arch Linux package build script (42 lines)
 ├── install.sh                                  # Installation script for manual builds (96 lines)
 ├── .cargo/                                     # Project-specific cargo configuration
 │   ├── config.toml                             # Custom runner for filtered output (7 lines)
-│   └── runner.sh                               # Output filter script (5 lines)
+│   └── runner.sh                               # Output filter script (9 lines)
+├── .github/                                    # GitHub configuration
+│   ├── dependabot.yml                          # Monthly updates for the pinned actions (9 lines)
+│   └── workflows/                              # CI workflows
+│       └── release.yml                         # Tagged release build, actions pinned by SHA (55 lines)
 ├── scripts/                                    # Development and release scripts
 │   ├── sync-version.sh                         # Sync version numbers across docs (37 lines)
 │   ├── tag-release.sh                          # Automated release tagging (98 lines)
 │   └── test-escape-key.sh                      # Escape key implementation verification (109 lines)
 ├── docs/                                       # Technical documentation
-│   ├── ARCHITECTURE.md                         # System design and data flow (798 lines)
-│   ├── DESIGN_DECISIONS.md                     # Rationale for architectural choices (1085 lines)
-│   ├── ENTROPY_DETECTION.md                    # Shannon entropy deep-dive (944 lines)
+│   ├── ARCHITECTURE.md                         # System design and data flow (828 lines)
+│   ├── DESIGN_DECISIONS.md                     # Rationale for architectural choices (1137 lines)
+│   ├── ENTROPY_DETECTION.md                    # Shannon entropy deep-dive (945 lines)
 │   ├── GTK_INSPECTOR_GUIDE.md                  # GTK debugging guide (215 lines)
 │   └── screenshots/                            # Application screenshots (14 images, ~1.5 MB)
 │       ├── main-window.png                     # Main interface overview
@@ -654,75 +653,76 @@ hypr-keybind-manager/
 ├── test-file-watcher.sh                        # File watcher test script (315 lines)
 ├── test-sync-version.sh                        # Version sync test script (340 lines)
 ├── test-tag-release.sh                         # Release automation test script (436 lines)
-└── src/                                        # Source code (~12,700 lines total)
+└── src/                                        # Source code (~14,223 lines total)
     ├── bin/                                    # Binary utilities
     │   ├── measure_entropy.rs                  # Entropy measurement tool (57 lines)
     │   └── test_manual.rs                      # Manual testing utility (86 lines)
-    ├── main.rs                                 # CLI entry point (285 lines)
+    ├── main.rs                                 # CLI entry point (296 lines)
     ├── lib.rs                                  # Library root (100 lines)
-    ├── config/                                 # Config file I/O (~4,599 lines)
-    │   ├── mod.rs                              # ConfigManager (reads/writes with backups) (668 lines)
+    ├── config/                                 # Config file I/O (~4,854 lines)
+    │   ├── mod.rs                              # ConfigManager (reads/writes with backups) (803 lines)
     │   ├── error.rs                            # ConfigError types (62 lines)
-    │   ├── transaction.rs                      # Atomic write transactions (353 lines)
-    │   ├── validator.rs                        # Config validation (Layer 3) (298 lines)
-    │   ├── danger/                             # Dangerous command detection (Layer 2) (~927 lines)
-    │   │   ├── mod.rs                          # DangerDetector core (412 lines)
+    │   ├── transaction.rs                      # Atomic write transactions (352 lines)
+    │   ├── validator.rs                        # Config validation (Layer 3) (296 lines)
+    │   ├── danger/                             # Dangerous command detection (Layer 2) (~1727 lines)
+    │   │   ├── mod.rs                          # DangerDetector core (413 lines)
     │   │   ├── types.rs                        # DangerLevel, DangerAssessment (41 lines)
-    │   │   ├── patterns.rs                     # Pattern builders (183 lines)
+    │   │   ├── patterns.rs                     # Pattern builders (187 lines)
     │   │   ├── entropy.rs                      # Shannon entropy detection (291 lines)
-    │   │   └── tests/                          # Modular test suite (786 lines)
-    │   └── tests/                              # Config tests (1,506 lines)
+    │   │   └── tests/                          # Modular test suite (795 lines)
+    │   └── tests/                              # Config tests (1,614 lines)
     │       ├── mod.rs                          # Test module organisation (29 lines)
-    │       ├── config_manager_tests.rs         # ConfigManager tests (640 lines)
-    │       ├── transaction_tests.rs            # Transaction tests (685 lines)
+    │       ├── config_manager_tests.rs         # ConfigManager tests (702 lines)
+    │       ├── transaction_tests.rs            # Transaction tests (733 lines)
     │       └── validator_tests.rs              # Validator unit tests (150 lines)
-    ├── core/                                   # Business logic (~1,839 lines)
-    │   ├── types.rs                            # Keybinding, KeyCombo, Modifier, BindType (370 lines)
-    │   ├── lua_config.rs                       # Lua config: sandboxed run, line rewriting (677 lines)
-    │   ├── lua_prelude.lua                     # Recording hl stub and sandbox environment (173 lines)
+    ├── core/                                   # Business logic (~3,152 lines)
+    │   ├── types.rs                            # Keybinding, KeyCombo, Modifier, BindType (406 lines)
+    │   ├── lua_config.rs                       # Lua config: sandboxed run, line rewriting (700 lines)
+    │   ├── lua_prelude.lua                     # Recording hl stub and sandbox environment (151 lines)
+    │   ├── lua_literal.lua                     # Renders Lua values as one-line source (46 lines)
     │   ├── parser.rs                           # Parse Hyprland config syntax (nom) (438 lines)
     │   ├── conflict.rs                         # ConflictDetector engine (HashMap) (109 lines)
     │   ├── validator.rs                        # Injection prevention (Layer 1) (186 lines)
-    │   ├── sandbox.rs                          # Bubblewrap sandbox helpers (63 lines)
-    │   ├── mod.rs                              # Core module exports (42 lines)
-    │   └── tests/                              # Core tests (extracted) (631 lines)
-    │       ├── mod.rs                          # Test module organisation (35 lines)
-    │       ├── lua_config_tests.rs             # Lua config tests (305 lines)
+    │   ├── sandbox.rs                          # Bubblewrap sandbox helpers (67 lines)
+    │   ├── mod.rs                              # Core module exports (43 lines)
+    │   └── tests/                              # Core tests (extracted) (1006 lines)
+    │       ├── mod.rs                          # Test module organisation (36 lines)
+    │       ├── lua_config_tests.rs             # Lua config tests (341 lines)
     │       ├── conflict_tests.rs               # Conflict detection tests (149 lines)
     │       ├── parser_tests.rs                 # Parser tests (163 lines)
     │       ├── validator_tests.rs              # Validation tests (167 lines)
     │       ├── types_tests.rs                  # Type system tests (82 lines)
-    │       └── sandbox_tests.rs                # Sandbox wrap/unwrap tests (35 lines)
-    ├── ui/                                     # GTK4 GUI (MVC pattern) (~5,104 lines)
-    │   ├── app.rs                              # Main window coordination (298 lines)
+    │       └── sandbox_tests.rs                # Sandbox wrap/unwrap tests (68 lines)
+    ├── ui/                                     # GTK4 GUI (MVC pattern) (~5,271 lines)
+    │   ├── app.rs                              # Main window coordination (299 lines)
     │   ├── actions.rs                          # GTK action setup + undo/redo wiring (350 lines)
     │   ├── builders/                           # UI builder modules (503 lines total)
     │   │   ├── mod.rs                          # Module exports (30 lines)
     │   │   ├── header.rs                       # Header bar with undo/redo buttons (92 lines)
     │   │   ├── layout.rs                       # Main layout construction (135 lines)
     │   │   └── handlers.rs                     # Event handler wiring (246 lines)
-    │   ├── controller.rs                       # MVC Controller (mediates Model ↔ View) (879 lines)
-    │   ├── file_watcher.rs                     # Live config file monitoring (62 lines)
-    │   ├── style.css                           # GTK CSS styling (160 lines)
+    │   ├── controller.rs                       # MVC Controller (mediates Model ↔ View) (875 lines)
+    │   ├── file_watcher.rs                     # Live config file monitoring (77 lines)
+    │   ├── style.css                           # GTK CSS styling (165 lines)
     │   ├── mod.rs                              # UI module exports (45 lines)
-    │   ├── components/                         # Reusable UI widgets (2,197 lines)
-    │   │   ├── keybind_list.rs                 # Scrollable list (297 lines)
+    │   ├── components/                         # Reusable UI widgets (2,265 lines)
+    │   │   ├── keybind_list.rs                 # Scrollable list (303 lines)
     │   │   ├── search_bar.rs                   # Real-time search (73 lines)
     │   │   ├── conflict_panel.rs               # Warning banner (245 lines)
-    │   │   ├── conflict_resolution_dialog.rs   # Conflict resolver with Escape support (170 lines)
-    │   │   ├── details_panel.rs                # Shows selected binding (292 lines)
+    │   │   ├── conflict_resolution_dialog.rs   # Conflict resolver with Escape support (175 lines)
+    │   │   ├── details_panel.rs                # Shows selected binding (302 lines)
     │   │   ├── status_banner.rs                # Self-hiding status line (95 lines)
-│   │   ├── edit_dialog.rs                  # Edit/Add dialog with key recording, sandbox toggle (686 lines)
+    │   │   ├── edit_dialog.rs                  # Edit/Add dialog with key recording, sandbox toggle (689 lines)
     │   │   ├── backup_dialog.rs                # Backup management with Escape support (340 lines)
     │   │   └── mod.rs                          # Component exports (43 lines)
-    │   └── tests/                              # UI component tests (extracted) (635 lines)
+    │   └── tests/                              # UI component tests (extracted) (692 lines)
     │       ├── mod.rs                          # Test module organisation (27 lines)
     │       ├── backup_dialog_tests.rs          # Backup dialog tests (82 lines)
-    │       ├── controller_tests.rs             # Controller + undo/redo tests (485 lines)
+    │       ├── controller_tests.rs             # Controller + undo/redo tests (542 lines)
     │       └── layout_tests.rs                 # Layout tests (41 lines)
     └── ipc/                                    # Hyprland IPC integration (~407 lines)
         ├── mod.rs                              # HyprlandClient (add/remove/reload bindings) (177 lines)
-        └── tests/                              # IPC tests (extracted) (222 lines)
+        └── tests/                              # IPC tests (extracted) (230 lines)
             └── mod.rs                          # IPC integration tests (230 lines)
 ```
 
@@ -730,7 +730,7 @@ For detailed architecture documentation, see [ARCHITECTURE.md](docs/ARCHITECTURE
 
 ### Testing
 
-**Rust Tests (192 passing, 7 ignored):**
+**Rust Tests (206 passing, 7 ignored):**
 ```bash
 # Run all Rust tests
 cargo test
@@ -795,16 +795,16 @@ git push origin main && git push origin v1.1.0
 **Test Coverage**:
 - ✅ Parser: 42 tests (handles comments, includes, multi-line, edge cases)
 - ✅ Conflict Detection: 18 tests (HashMap correctness, normalisation)
-- ✅ Security Validation: 50 tests (all three layers, entropy detection, edge cases)
+- ✅ Security Validation: 50 tests (danger detection, format guards, entropy detection, edge cases)
 - ✅ Config Management: 38 tests (atomic writes, backups, transactions)
 - ✅ UI Components: 10 tests (controller, helper functions)
 - ✅ Utilities: 7 tests (timestamp formatting, helpers)
 
 ### Code Quality Standards
 
-- **100% Safe Rust**: No `unsafe` blocks in entire codebase
-- **Safe Unwrap Usage**: One safe `unwrap()` in production (validated with preceding check), all other `unwrap()` calls in tests only
-- **Clippy Clean**: Zero warnings with strict lints enabled
+- **100% Safe Rust**: No `unsafe` blocks, enforced by `unsafe_code = "forbid"`
+- **No Panicking Shortcuts**: `unwrap`, `expect` and `panic!` are denied by clippy in production code; `clippy.toml` allows them in tests
+- **Clippy Clean**: Zero warnings with these lints applied through `[lints] workspace = true`
 - **British English**: Consistent spelling in code, comments, and documentation
 - **Comprehensive Documentation**: All public APIs documented with examples
 

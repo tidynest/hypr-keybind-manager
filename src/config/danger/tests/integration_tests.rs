@@ -107,3 +107,12 @@ fn test_real_world_attack_vectors() {
         );
     }
 }
+
+#[test]
+fn test_safe_first_word_does_not_hide_a_critical_command() {
+    let detector = DangerDetector::new();
+
+    let assessment = detector.assess_command("kitty -e rm -rf /");
+
+    assert_eq!(assessment.danger_level, DangerLevel::Critical);
+}

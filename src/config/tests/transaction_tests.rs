@@ -487,6 +487,54 @@ fn test_write_bindings_keeps_variables_comments_and_order() {
 }
 
 #[test]
+fn test_write_bindings_refuses_fields_hyprland_would_misread() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_path = temp_dir.path().join("hyprland.conf");
+    let initial = "bind = SUPER, Q, exec, kitty\n";
+    fs::write(&config_path, initial).unwrap();
+    let mut manager = ConfigManager::new(config_path.clone()).unwrap();
+
+    let line_break = Keybinding {
+        args: Some("true\nexec-once = touch /tmp/pwned".to_string()),
+        ..create_test_binding()
+    };
+    let shifted_fields = Keybinding {
+        dispatcher: "killactive".to_string(),
+        args: None,
+        description: Some("x, exec, touch /tmp/pwned".to_string()),
+        ..create_test_binding()
+    };
+    for added in [line_break, shifted_fields] {
+        assert!(manager.write_bindings(&[added]).is_err());
+        assert_eq!(fs::read_to_string(&config_path).unwrap(), initial);
+    }
+}
+
+#[test]
+fn test_write_bindings_escapes_hash_signs() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_path = temp_dir.path().join("hyprland.conf");
+    fs::write(&config_path, "bind = SUPER, Q, exec, kitty\n").unwrap();
+    let mut manager = ConfigManager::new(config_path.clone()).unwrap();
+
+    let hashed = Keybinding {
+        args: Some("notify-send '#1'".to_string()),
+        ..create_test_binding()
+    };
+    manager
+        .write_bindings(std::slice::from_ref(&hashed))
+        .unwrap();
+
+    // A lone `#` would comment out the rest of the command
+    let written = fs::read_to_string(&config_path).unwrap();
+    assert_eq!(written, "bind = SUPER, M, exec, notify-send '##1'\n");
+    assert_eq!(
+        crate::core::parser::parse_config_file(&written, &config_path).unwrap(),
+        vec![hashed]
+    );
+}
+
+#[test]
 fn test_write_bindings_edits_sourced_file_in_place() {
     let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("hyprland.conf");

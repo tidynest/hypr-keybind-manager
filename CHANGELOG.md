@@ -6,6 +6,27 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 ## [Unreleased]
 
+### Security
+Fixes from an internal audit on 2026-10-14. Upgrade if you import bind files from other people.
+
+- High: dispatcher arguments written into `hyprland.lua` could run code when Hyprland loaded the file. The check evaluated them without globals, so `os and os.execute("...") or 1` passed as the number 1, and then the typed text was written. Arguments are now evaluated as data and the resulting values are written back by `src/core/lua_literal.lua`, never the typed text.
+- High: an imported bind could add lines to `hyprland.conf`. A Lua string with a line break became a second directive, such as `exec-once`, and a comma in a key or description moved the following fields, so another dispatcher ran. The writer and the export now refuse both.
+- High: none of the validation described in SECURITY.md ran when a bind was saved. Adding, editing and importing now refuse commands the danger detector rates critical, for `exec` and `execr`. An import with such a bind stops before anything is written.
+- Medium: the Bubblewrap toggle only sandboxed the first command of `a; b`, because Hyprland hands exec text to a shell. The command line now goes, quoted, to a shell inside the sandbox. The sandbox also mounts `/lib` and `/lib64`, without which no dynamically linked program could start inside it.
+- Medium: a `#` in an edited bind was written as is and commented out the rest of the line. It is written as `##` now.
+- Medium: backups were created with default permissions, so a `0600` config got world-readable copies. They keep the config's permissions now.
+- Medium: the restore list offered backups of other files in the same directory, so restoring could put `gaming.lua` over `hyprland.lua`. Only the edited file's backups are listed, and symlinks are skipped.
+- Medium: in a Lua export, a bind that runs Lua code is written as a comment, and a line break in its description ended that comment early, leaving the rest as code. Line breaks are flattened.
+- Medium: the Lua argument check had no instruction limit, so an endless loop froze the GUI. It has the config parser's limit.
+- Low: the danger detector let a known safe first word hide a critical command (`kitty -e rm -rf /`), and never looked at `execr`.
+- Low: `list` and `check` printed control characters from the config as they were, so listing someone else's config could send escape sequences to the terminal.
+- Low: Lua keywords as table keys and non-finite numbers in arguments came back as invalid Lua.
+- Low: the workspace lints in `Cargo.toml` were never applied, because the package had no `[lints] workspace = true`. They are now, which removed an `unsafe` block in `main.rs` and two `expect` calls that could abort on an unusual config path.
+- Low: the release workflow used actions by mutable tag and gave the whole workflow a write token. Actions are pinned to commit SHAs, credentials are not kept after checkout, the build uses `--locked`, and Dependabot proposes action updates.
+
+### Fixed
+- `cargo test` could not fail in this repository. `.cargo/runner.sh`, which filters GTK warnings, runs test binaries too, and it returned the status of the last command in its pipeline, `awk`. A failing test run therefore exited 0, in the pre-push gate and in the PKGBUILD's `check()` as well. The runner now exits with the program's own status. The suite was green when this was found.
+
 ## [1.4.1] - 2026-09-06
 
 ### Added

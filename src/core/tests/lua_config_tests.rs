@@ -215,6 +215,42 @@ fn test_render_lua_bind_escapes_and_validates() {
 }
 
 #[test]
+fn test_render_lua_bind_writes_arguments_as_data() {
+    // Without globals this is 1; written as typed, Hyprland would run the command
+    let short_circuit = binding(
+        vec![],
+        "X",
+        "workspace",
+        Some(r#"os and os.execute("rm") or 1"#),
+    );
+    assert_eq!(
+        render_lua_bind(&short_circuit).unwrap(),
+        r#"hl.bind("X", hl.dsp.workspace(1))"#
+    );
+
+    for args in [
+        r#"os and os.execute("rm")"#,
+        "{ run = function() end }",
+        "(function() while true do end end)()",
+    ] {
+        let refused = binding(vec![], "X", "workspace", Some(args));
+        assert!(render_lua_bind(&refused).is_err(), "{args}");
+    }
+
+    // Keywords as keys, line breaks and NaN all come back as valid one-line Lua
+    let awkward = binding(
+        vec![],
+        "X",
+        "window.move",
+        Some(r#"{ 0/0, ["end"] = 1, note = "a\nb" }"#),
+    );
+    assert_eq!(
+        render_lua_bind(&awkward).unwrap(),
+        r#"hl.bind("X", hl.dsp.window.move({ (0/0), ["end"] = 1, note = "a\nb" }))"#
+    );
+}
+
+#[test]
 fn test_rewrite_lua_files_edits_lines_in_place() {
     let dir = TempDir::new().unwrap();
     let path = write_config(&dir, CONFIG);

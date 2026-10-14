@@ -45,6 +45,10 @@ opt-level = "z"      # Optimise for size
 panic = "abort"      # Smaller binary
 strip = true         # Remove debug symbols
 
+# Without this table the workspace lints below are defined but never applied
+[lints]
+workspace = true
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
 

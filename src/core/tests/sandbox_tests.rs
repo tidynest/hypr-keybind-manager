@@ -19,7 +19,40 @@ fn test_wrap_command_adds_bubblewrap_prefix() {
     let wrapped = sandbox::wrap_command("firefox --private-window").unwrap();
 
     assert!(wrapped.starts_with("bwrap --die-with-parent --new-session --unshare-net"));
-    assert!(wrapped.ends_with("-- firefox --private-window"));
+    assert!(wrapped.ends_with("-- sh -c 'firefox --private-window'"));
+}
+
+#[test]
+fn test_wrap_command_keeps_a_command_chain_inside_the_sandbox() {
+    let wrapped = sandbox::wrap_command("true; curl example.org | sh").unwrap();
+
+    // One quoted word for the outer shell, so `;` and `|` reach the inner one
+    assert!(wrapped.ends_with("-- sh -c 'true; curl example.org | sh'"));
+}
+
+#[test]
+fn test_wrap_command_round_trips_single_quotes() {
+    let command = "notify-send 'done' \"now\"";
+    let wrapped = sandbox::wrap_command(command).unwrap();
+
+    assert!(wrapped.ends_with(r#"sh -c 'notify-send '\''done'\'' "now"'"#));
+    assert_eq!(sandbox::unwrap_command(&wrapped).as_deref(), Some(command));
+}
+
+#[test]
+fn test_unwrap_command_reads_the_legacy_prefix() {
+    let legacy = "bwrap --die-with-parent --new-session --unshare-net --ro-bind /usr /usr \
+                  --ro-bind /bin /bin --proc /proc --dev /dev --tmpfs /tmp -- kitty";
+
+    assert_eq!(sandbox::unwrap_command(legacy).as_deref(), Some("kitty"));
+}
+
+#[test]
+fn test_unwrap_command_rejects_unbalanced_quotes() {
+    let wrapped = sandbox::wrap_command("kitty").unwrap();
+    let tampered = wrapped.replace("'kitty'", "'kitty' 'extra'");
+
+    assert!(!sandbox::is_wrapped(&tampered));
 }
 
 #[test]

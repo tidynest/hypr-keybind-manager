@@ -347,7 +347,43 @@ impl Keybinding {
         }
 
         let bind_type = self.bind_type.with_description(self.description.is_some());
-        format!("{} = {}", bind_type, parts.join(", "))
+        // A lone `#` starts a comment in Hyprland, `##` is the character itself
+        format!("{} = {}", bind_type, parts.join(", ").replace('#', "##"))
+    }
+
+    /// Refuses fields that Hyprland would read differently from what is shown
+    ///
+    /// A config line holds one directive and a bind splits on commas, so a line
+    /// break in any field, or a comma before the arguments, would turn part of
+    /// a field into another directive or another dispatcher.
+    pub fn check_config_line(&self) -> Result<(), String> {
+        let breaks_line = |text: &str| text.contains(|c: char| c.is_control() && c != '\t');
+        let leading = [
+            Some(self.key_combo.key.as_str()),
+            self.description.as_deref(),
+            Some(self.dispatcher.as_str()),
+        ];
+        let trailing = [self.args.as_deref(), self.submap.as_deref()];
+        let misread = leading
+            .into_iter()
+            .flatten()
+            .any(|text| text.contains(',') || breaks_line(text))
+            || trailing.into_iter().flatten().any(breaks_line);
+        if misread {
+            return Err(format!(
+                "The binding for {} contains a line break or a comma that Hyprland would misread",
+                self.key_combo
+            ));
+        }
+        Ok(())
+    }
+
+    /// The command line of an `exec` or `execr` bind, which Hyprland runs in a shell
+    pub fn shell_command(&self) -> Option<&str> {
+        match self.dispatcher.as_str() {
+            "exec" | "execr" => self.args.as_deref(),
+            _ => None,
+        }
     }
 }
 

@@ -1,41 +1,19 @@
 -- Recording stand-in for Hyprland's `hl` Lua API.
 --
--- Loaded by lua_config.rs with two arguments: a function that reads a module
--- from the config directory, and one that reports the file and line of the
--- code calling `hl.bind`. Returns the sandbox environment the config runs in,
--- the recorded binds and the files that were required.
+-- Loaded by lua_config.rs with three arguments: a function that reads a module
+-- from the config directory, one that reports the file and line of the code
+-- calling `hl.bind`, and `literal` from lua_literal.lua. Returns the sandbox
+-- environment the config runs in, the recorded binds and the files that were
+-- required.
 --
 -- Every `hl.bind` call is recorded with the file and line it came from, so
 -- binds created in loops are found and can be told apart from ones written
 -- out by hand. Everything else in `hl` is a no-op.
 
-local read_module, locate = ...
+local read_module, locate, literal = ...
 
 local records, files = {}, {}
 local current_submap = nil
-
--- Renders a Lua value back as source text, for dispatcher arguments.
-local function literal(value, depth)
-    local kind = type(value)
-    if kind == "string" then return string.format("%q", value) end
-    if kind == "number" or kind == "boolean" then return tostring(value) end
-    if kind ~= "table" or depth > 8 then return "nil" end
-
-    local parts, n = {}, #value
-    for i = 1, n do parts[#parts + 1] = literal(value[i], depth + 1) end
-    local keys = {}
-    for k in pairs(value) do
-        if not (math.type(k) == "integer" and k >= 1 and k <= n) then keys[#keys + 1] = k end
-    end
-    table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
-    for _, k in ipairs(keys) do
-        local name = (type(k) == "string" and k:match("^[%a_][%w_]*$")) and k
-            or ("[" .. literal(k, depth + 1) .. "]")
-        parts[#parts + 1] = name .. " = " .. literal(value[k], depth + 1)
-    end
-    if #parts == 0 then return "{}" end
-    return "{ " .. table.concat(parts, ", ") .. " }"
-end
 
 -- `hl.dsp.window.close()` walks a chain of nodes and ends in a descriptor.
 local DISPATCHER = {}

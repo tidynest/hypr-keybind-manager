@@ -19,7 +19,7 @@
 //! - Load keybindings from ConfigManager
 //! - Filter/search keybindings
 //! - Detect conflicts using ConflictDetector
-//! - Validate commands using ConfigValidator
+//! - Refuse commands the danger detector rates critical
 //! - Provide data to View in UI-friendly format
 //!
 //! # Architecture
@@ -36,11 +36,11 @@ use std::{
 };
 
 use crate::config::{
-    ConfigError, ConfigFormat, ConfigManager, load_bindings_from, validator::ConfigValidator,
+    ConfigError, ConfigFormat, ConfigManager,
+    danger::{DangerDetector, DangerLevel},
+    load_bindings_from,
 };
-use crate::core::{
-    Conflict, ConflictDetector, KeyCombo, Keybinding, Modifier, validator as injection_validator,
-};
+use crate::core::{Conflict, ConflictDetector, KeyCombo, Keybinding, Modifier};
 use crate::ipc::{ClientMode, HyprlandClient};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -85,6 +85,8 @@ pub struct Controller {
     origin_notes: RefCell<HashMap<Keybinding, String>>,
     /// Hash of the main file as it was after this app last wrote it
     last_written: RefCell<Option<u64>>,
+    /// Rates the commands of bindings before they are written
+    danger_detector: DangerDetector,
 }
 
 const HISTORY_LIMIT: usize = 20;
@@ -127,6 +129,7 @@ impl Controller {
             redo_stack: RefCell::new(Vec::new()),
             origin_notes: RefCell::new(HashMap::new()),
             last_written: RefCell::new(None),
+            danger_detector: DangerDetector::new(),
         })
     }
 
@@ -471,39 +474,27 @@ impl Controller {
         self.conflict_detector.borrow().find_conflicts()
     }
 
-    /// Validates a keybinding using all security layers
+    /// Refuses a binding whose command the danger detector rates critical
     ///
-    /// Runs:
-    /// - Layer 1: Injection prevention (core/validator.rs)
-    /// - Layer 2: Danger detection (config/danger)
-    /// - Layer 3: Config validation (config/validator.rs)
-    ///
-    /// # Arguments
-    ///
-    /// * `binding` - Keybinding to validate
+    /// Runs before every binding the user adds, edits or imports is written.
+    /// Lesser ratings are allowed: the detector matches known patterns and
+    /// cannot tell a cleanup script from an attack.
     ///
     /// # Returns
     ///
-    /// * `Ok(())` - Binding is safe
-    /// * `Err(String)` - Validation failed with reason
+    /// * `Ok(())` - The binding may be written
+    /// * `Err(String)` - Why it was refused
     pub fn validate_keybinding(&self, binding: &Keybinding) -> Result<(), String> {
-        // Layer 1: Injection check
-        injection_validator::validate_keybinding(binding)
-            .map_err(|e| format!("Security violation: {}", e))?;
-
-        // Layer 2 & 3: Danger + config validation
-        let validator = ConfigValidator::new();
-        let binding_str = format!("{}", binding);
-        let report = validator.validate_config(&binding_str);
-
-        if report.has_errors() {
-            return Err("Validation errors detected".to_string());
+        let Some(command) = binding.shell_command() else {
+            return Ok(());
+        };
+        let assessment = self.danger_detector.assess_command(command);
+        if assessment.danger_level == DangerLevel::Critical {
+            return Err(format!(
+                "Refused {}: {}",
+                binding.key_combo, assessment.reason
+            ));
         }
-
-        if report.has_critical_dangers() {
-            return Err("Critical dangers detected".to_string());
-        }
-
         Ok(())
     }
 
@@ -597,6 +588,7 @@ impl Controller {
     /// }
     /// ```
     pub fn add_keybinding(&self, binding: Keybinding) -> Result<(), String> {
+        self.validate_keybinding(&binding)?;
         self.record_undo_snapshot();
         let mut bindings = self.keybindings.borrow_mut();
         bindings.push(binding.clone());
@@ -692,12 +684,15 @@ impl Controller {
     }
 
     pub fn import_from(&self, import_path: &Path, mode: ImportMode) -> Result<(), String> {
-        self.record_undo_snapshot();
-
         // Either format can be imported; read-only Lua binds still copy as plain bindings
         let imported_bindings = load_bindings_from(import_path)
             .map_err(|e| format!("Failed to read import file: {}", e))?
             .bindings;
+        // The file may come from anyone; one refused binding stops the whole import
+        for binding in &imported_bindings {
+            self.validate_keybinding(binding)?;
+        }
+        self.record_undo_snapshot();
 
         // Handle import mode
         match mode {
@@ -761,6 +756,7 @@ impl Controller {
     /// }
     /// ```
     pub fn update_keybinding(&self, old: &Keybinding, new: Keybinding) -> Result<(), String> {
+        self.validate_keybinding(&new)?;
         self.record_undo_snapshot();
         let mut bindings = self.keybindings.borrow_mut();
         let position = bindings.iter().position(|b| b == old);

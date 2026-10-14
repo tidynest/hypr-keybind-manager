@@ -27,6 +27,10 @@ use regex::Regex;
 /// - Pattern 0-1: `rm -rf /` variants (filesystem destruction)
 /// - Pattern 2: `dd` to disk devices (partition table destruction)
 /// - Pattern 3: Fork bomb (resource exhaustion)
+#[expect(
+    clippy::expect_used,
+    reason = "literal patterns; a typo fails every danger test, while skipping one would hide a check"
+)]
 pub fn build_critical_patterns() -> Vec<Regex> {
     vec![
         // Pattern 0a: rm -rf / (r before f)

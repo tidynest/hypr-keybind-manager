@@ -14,50 +14,54 @@
 
 //! Bubblewrap sandbox helpers for exec bindings.
 
-const BWRAP_PREFIX: &[&str] = &[
-    "bwrap",
-    "--die-with-parent",
-    "--new-session",
-    "--unshare-net",
-    "--ro-bind",
-    "/usr",
-    "/usr",
-    "--ro-bind",
-    "/bin",
-    "/bin",
-    "--proc",
-    "/proc",
-    "--dev",
-    "/dev",
-    "--tmpfs",
-    "/tmp",
-    "--",
-];
+/// Starts the sandbox: no network, read-only system dirs, no home directory
+const BWRAP_PREFIX: &str = concat!(
+    "bwrap --die-with-parent --new-session --unshare-net ",
+    "--ro-bind /usr /usr --ro-bind /bin /bin --ro-bind-try /lib /lib --ro-bind-try /lib64 /lib64 ",
+    "--proc /proc --dev /dev --tmpfs /tmp --",
+);
 
+/// The prefix written before 1.4.2. It left out the loader in /lib64, so
+/// nothing could start, and it handed the command to bwrap directly, so in
+/// `a; b` the shell Hyprland starts ran `b` outside the sandbox.
+const LEGACY_PREFIX: &str = concat!(
+    "bwrap --die-with-parent --new-session --unshare-net ",
+    "--ro-bind /usr /usr --ro-bind /bin /bin --proc /proc --dev /dev --tmpfs /tmp --",
+);
+
+/// Hyprland runs exec text with `sh -c`, so the whole command line goes,
+/// quoted as one word, to a second shell that starts inside the sandbox
 pub fn wrap_command(command_line: &str) -> Result<String, String> {
     let trimmed = command_line.trim();
     if trimmed.is_empty() {
         return Err("Sandboxed exec bindings need a command to run".to_string());
     }
 
-    let mut tokens = BWRAP_PREFIX
-        .iter()
-        .map(|token| token.to_string())
-        .collect::<Vec<_>>();
-    tokens.extend(trimmed.split_whitespace().map(str::to_string));
-
-    Ok(tokens.join(" "))
+    Ok(format!(
+        "{BWRAP_PREFIX} sh -c '{}'",
+        trimmed.replace('\'', r"'\''")
+    ))
 }
 
+/// The command inside a wrapper written by `wrap_command`, or by an older version
 pub fn unwrap_command(command_line: &str) -> Option<String> {
-    let tokens = command_line.split_whitespace().collect::<Vec<_>>();
-    if tokens.len() <= BWRAP_PREFIX.len() || !tokens.starts_with(BWRAP_PREFIX) {
-        return None;
+    let line = command_line.trim();
+    if let Some(rest) = after_prefix(line, BWRAP_PREFIX) {
+        let quoted = rest.strip_prefix("sh -c '")?.strip_suffix('\'')?;
+        let escaped_quote = r"'\''";
+        return (!quoted.replace(escaped_quote, "").contains('\''))
+            .then(|| quoted.replace(escaped_quote, "'"));
     }
-
-    Some(tokens[BWRAP_PREFIX.len()..].join(" "))
+    // Saving the binding again wraps it in the current form
+    after_prefix(line, LEGACY_PREFIX).map(str::to_string)
 }
 
 pub fn is_wrapped(command_line: &str) -> bool {
     unwrap_command(command_line).is_some()
+}
+
+/// The non-empty text after `prefix` and the space that follows it
+fn after_prefix<'a>(line: &'a str, prefix: &str) -> Option<&'a str> {
+    let rest = line.strip_prefix(prefix)?.strip_prefix(' ')?.trim_start();
+    (!rest.is_empty()).then_some(rest)
 }

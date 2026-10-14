@@ -35,7 +35,7 @@ use clap::{Parser, Subcommand};
 use colored::*;
 use hypr_keybind_manager::{
     config::{default_config_path, load_bindings_from},
-    core::conflict::ConflictDetector,
+    core::{Keybinding, conflict::ConflictDetector},
     ui::App,
 };
 use std::path::{Path, PathBuf};
@@ -84,20 +84,12 @@ enum Commands {
 /// Main entry point for the CLI application.
 ///
 /// Parses command-line arguments and dispatches to the appropriate subcommand handler.
-/// Suppresses GTK debug output to keep terminal clean.
 ///
 /// # Returns
 ///
 /// * `Ok(())` - Command executed successfully
 /// * `Err(_)` - Command failed with error details
 fn main() -> anyhow::Result<(), Box<dyn std::error::Error>> {
-    // Suppress GTK warnings and debug messages
-    // SAFETY: called before any threads are spawned
-    unsafe {
-        std::env::set_var("G_MESSAGES_DEBUG", "");
-        std::env::set_var("GTK_DEBUG", "");
-    }
-
     let cli = Cli::parse();
 
     match cli.command {
@@ -141,7 +133,11 @@ fn resolve_config_path(config: Option<PathBuf>) -> anyhow::Result<PathBuf> {
 fn check_conflicts(path: &Path) -> anyhow::Result<()> {
     println!("{} Parsing config: {}", "→".cyan(), path.display());
 
-    let bindings = load_bindings_from(path)?.bindings;
+    let bindings: Vec<_> = load_bindings_from(path)?
+        .bindings
+        .into_iter()
+        .map(terminal_safe)
+        .collect();
 
     println!("{} Found {} keybindings\n", "✓".green(), bindings.len());
 
@@ -202,6 +198,21 @@ fn check_conflicts(path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Replaces control characters, so printing a config someone else wrote
+/// cannot send escape sequences, such as a clipboard write, to the terminal
+fn terminal_safe(mut binding: Keybinding) -> Keybinding {
+    let texts = [&mut binding.key_combo.key, &mut binding.dispatcher];
+    let optional = [
+        &mut binding.args,
+        &mut binding.description,
+        &mut binding.submap,
+    ];
+    for text in texts.into_iter().chain(optional.into_iter().flatten()) {
+        *text = text.replace(char::is_control, "\u{fffd}");
+    }
+    binding
+}
+
 /// Lists all keybindings from the configuration file.
 ///
 /// Parses the Hyprland config and displays all keybindings with
@@ -232,7 +243,7 @@ fn list_keybindings(path: &Path, json: bool) -> anyhow::Result<()> {
     let total = bindings.len();
 
     // Display each binding
-    for binding in bindings {
+    for binding in bindings.into_iter().map(terminal_safe) {
         let key_combo = format!("{}", binding.key_combo).cyan().bold();
         let dispatcher = binding.dispatcher.green();
         let args = binding.args.unwrap_or_default();

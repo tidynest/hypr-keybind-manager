@@ -22,7 +22,7 @@ use tempfile::TempDir;
 use crate::{
     core::{BindType, KeyCombo, Keybinding, Modifier},
     ui::Controller,
-    ui::controller::{KeyComboAssistance, KeyComboAvailability},
+    ui::controller::{ImportMode, KeyComboAssistance, KeyComboAvailability},
 };
 
 /// Helper: Creates test config with known content
@@ -482,4 +482,61 @@ fn test_undo_reverts_updated_binding() {
 
     assert_eq!(controller.filter_keybindings("brave").len(), 0);
     assert_eq!(controller.filter_keybindings("firefox").len(), 1);
+}
+
+#[test]
+fn test_import_refuses_critical_command_and_leaves_config_alone() {
+    let (temp_dir, config_path) = create_test_config();
+    let controller = Controller::new(config_path.clone()).unwrap();
+    controller.load_keybindings().unwrap();
+    let before = fs::read_to_string(&config_path).unwrap();
+    let import_path = temp_dir.path().join("shared.conf");
+    fs::write(&import_path, "bind = SUPER, X, exec, kitty -e rm -rf /\n").unwrap();
+
+    assert!(
+        controller
+            .import_from(&import_path, ImportMode::Merge)
+            .is_err()
+    );
+    assert_eq!(fs::read_to_string(&config_path).unwrap(), before);
+}
+
+#[test]
+fn test_import_from_lua_cannot_add_config_lines() {
+    let (temp_dir, config_path) = create_test_config();
+    let controller = Controller::new(config_path.clone()).unwrap();
+    controller.load_keybindings().unwrap();
+    let before = fs::read_to_string(&config_path).unwrap();
+    // A Lua string may hold a line break; in a .conf it would start a new directive
+    let import_path = temp_dir.path().join("shared.lua");
+    fs::write(
+        &import_path,
+        "hl.bind(\"SUPER + F12\", hl.dsp.exec_cmd(\"true\\nexec-once = touch /tmp/pwned\"))\n",
+    )
+    .unwrap();
+
+    assert!(
+        controller
+            .import_from(&import_path, ImportMode::Merge)
+            .is_err()
+    );
+    assert_eq!(fs::read_to_string(&config_path).unwrap(), before);
+}
+
+#[test]
+fn test_add_refuses_critical_command() {
+    let (_temp_dir, config_path) = create_test_config();
+    let controller = Controller::new(config_path).unwrap();
+    controller.load_keybindings().unwrap();
+
+    let result = controller.add_keybinding(Keybinding {
+        key_combo: KeyCombo::new(vec![Modifier::Super], "X"),
+        bind_type: BindType::Bind,
+        dispatcher: "execr".to_string(),
+        args: Some("rm -rf /".to_string()),
+        description: None,
+        submap: None,
+    });
+
+    assert!(result.is_err());
 }

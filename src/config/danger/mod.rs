@@ -154,21 +154,8 @@ impl DangerDetector {
     /// assert_eq!(assessment.danger_level, DangerLevel::Dangerous);
     /// ```
     pub fn assess_command(&self, command: &str) -> DangerAssessment {
-        // Step 1: Fast path - Check safe whitelist first
-        // This is O(1) and avoids unnecessary checks for common commands
-        let words: Vec<&str> = command.split_whitespace().collect();
-        if let Some(first_word) = words.first() {
-            if self.safe_commands.contains(*first_word) {
-                return DangerAssessment {
-                    danger_level: DangerLevel::Safe,
-                    reason: "Known safe command".to_string(),
-                    recommendation: String::new(),
-                    matched_pattern: None,
-                };
-            }
-        }
-
-        // Step 2: Check critical patterns (Round 1 - system destruction)
+        // Step 1: Check critical patterns (Round 1 - system destruction)
+        // Before the safe list: `kitty -e rm -rf /` starts with a safe word
         for (i, pattern) in self.critical_patterns.iter().enumerate() {
             if pattern.is_match(command) {
                 return match i {
@@ -199,6 +186,20 @@ impl DangerDetector {
                     _ => unreachable!("Pattern index out of range."),
                 };
             }
+        }
+
+        // Step 2: Fast path for the first word of common safe commands
+        let words: Vec<&str> = command.split_whitespace().collect();
+        if words
+            .first()
+            .is_some_and(|first| self.safe_commands.contains(*first))
+        {
+            return DangerAssessment {
+                danger_level: DangerLevel::Safe,
+                reason: "Known safe command".to_string(),
+                recommendation: String::new(),
+                matched_pattern: None,
+            };
         }
 
         // Step 3: Check for dangerous argument patterns (secondary analysis)

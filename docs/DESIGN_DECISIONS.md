@@ -340,17 +340,7 @@ Layer 4 (core/sandbox.rs + UI): Optional Bubblewrap sandbox for exec bindings
 - **Fail-Safe**: Deny by default, allow explicitly
 - **Pragmatic Isolation**: Higher-risk `exec` bindings can be sandboxed without changing other dispatchers
 
-**Example Attack Caught by Multiple Layers**:
-```bash
-# Attack: Base64-encoded rm -rf /
-bind = SUPER, K, exec, echo 'cm0gLXJmIC8=' | base64 -d | sh
-
-# Layer 1: Blocks pipe character "|"  ✅
-# Layer 2: Detects high entropy in 'cm0gLXJmIC8='  ✅
-# Layer 3: Aggregates both errors  ✅
-# Layer 4: Can remove network access for exec bindings  ✅
-# Result: Attack blocked by multiple independent checks
-```
+**What runs on a config write** (2026-10-14): the layers were built and tested, but until 1.4.2 none of them ran when a binding was saved. Wiring Layer 1 in was not an option. It refuses `"`, `|` and dispatchers outside its list, which ordinary binds such as `{ direction = "left" }`, `sh -c "a | b"` or `resizewindow` use. So Layer 1 stays with IPC, where its strictness fits, and a write now goes through two checks. Layer 2 refuses critical commands, called from the controller on add, edit and import. The writer refuses text Hyprland would misread, see [Write the Rendering, Not the Input](#write-the-rendering-not-the-input). A base64 pipe such as `echo 'cm0gLXJmIC8=' | base64 -d | sh` is rated suspicious and saved. That is the honest result for a blocklist, which cannot tell that pipe from a legitimate one.
 
 **Alternatives Considered**:
 1. **Single monolithic validator** (Rejected)
@@ -722,6 +712,24 @@ pub struct ConfigTransaction<'a> {  // 'a lifetime
 
 ---
 
+### Write the Rendering, Not the Input
+
+**Files**: `src/core/types.rs` (`check_config_line`, `to_config_line`), `src/core/lua_config.rs` (`lua_literal_args`), `src/core/lua_literal.lua`, `src/ui/controller.rs` (`validate_keybinding`)
+
+**Decision**: What reaches the config file is text this app generated from parsed values, or a field it checked against the exact rule Hyprland reads it by. A typed string is never checked and then written as typed.
+
+**Rationale**:
+- The old Lua argument check evaluated the text with no globals and then wrote the text. The two readers disagreed: `os and os.execute("...") or 1` is the number 1 to the checker and a command to Hyprland. Evaluating the arguments and writing `literal()`'s rendering of the values removes the second reader. Whatever was typed, the file holds a table, string, number or boolean
+- hyprlang has no escape for a line break or a comma inside a bind field, so those are refused rather than escaped. `#` does have one, `##`, so it is escaped
+- Format guards sit in the writer, because they are about the file format and every write path, the GUI, imports and the library API, passes through it
+- The danger policy sits in the controller, because it is a decision about what the user may add. It runs only on bindings being added, never on lines already in the file, so an odd line in a hand-written config cannot lock the editor
+
+**Alternatives Considered**:
+1. **Escape everything** (Rejected): no escape exists for the hyprlang cases, and an escaped Lua expression is still an expression
+2. **Run every layer on the whole file before each write** (Rejected): `commit_with_validation` does this, and it would refuse writes to any config that uses a dispatcher outside the whitelist
+
+---
+
 ### IPC Over the Socket, No Compositor Crate
 
 **File**: `src/ipc/mod.rs`
@@ -734,20 +742,20 @@ pub struct ConfigTransaction<'a> {  // 'a lifetime
 
 ### Backup Naming Convention
 
-**File**: `src/config/mod.rs:250`
+**File**: `src/config/mod.rs:337`
 
 **Decision**: `{filename}.YYYY-MM-DD_HHMMSS` format.
 
 ```rust
-pub fn create_backup(&self) -> Result<PathBuf, ConfigError> {
-    let timestamp = Local::now().format("%Y-%m-%d_%H-%M-%S");
-    let filename = format!(
-        "{}.{}",
-        self.config_path.file_name().unwrap().to_str().unwrap(),
-        timestamp
-    );
-    let backup_path = self.backup_dir.join(filename);
+fn create_timestamped_backup(&self) -> Result<PathBuf, ConfigError> {
+    let timestamp = Local::now().format("%Y-%m-%d_%H%M%S");
+    let backup_path = self
+        .backup_dir
+        .join(format!("{}.{timestamp}", self.file_name()?));
+
+    // fs::copy keeps the permission bits, so a private config stays private
     fs::copy(&self.config_path, &backup_path)?;
+
     Ok(backup_path)
 }
 ```
@@ -757,6 +765,7 @@ pub fn create_backup(&self) -> Result<PathBuf, ConfigError> {
 - **Human-Readable**: User can identify backup by timestamp
 - **Collision-Free**: Second-level granularity sufficient (user can't modify config twice per second)
 - **No Manual Naming**: Automatic, no user input required
+- **The name is the filter**: sourced files in the same directory share `backups/`, so `list_backups` keeps only regular files that start with `<config file name>.`. Before 1.4.2 it accepted any `name.ext.timestamp`, and restoring could put `gaming.lua` over `hyprland.lua`
 
 **Example**:
 ```

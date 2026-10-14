@@ -36,10 +36,11 @@
 //! The config runs with no `io`, no `load`, no `os.execute`, `require`
 //! limited to files inside the config directory, a memory limit and an
 //! instruction limit. Values written back are rendered as Lua string
-//! literals or validated as literals, so text from the edit dialog cannot
-//! inject code.
+//! literals, and dispatcher arguments are evaluated as data and rendered
+//! again by `lua_literal.lua`, so text from the edit dialog or an imported
+//! file never reaches the config as code.
 
-use mlua::{HookTriggers, Lua, Table, Value};
+use mlua::{Function, HookTriggers, Lua, MultiValue, Table, Value};
 use std::{
     collections::HashMap,
     fs,
@@ -49,7 +50,9 @@ use std::{
 use crate::core::types::{BindType, KeyCombo, Keybinding, Modifier};
 
 const PRELUDE: &str = include_str!("lua_prelude.lua");
+const LITERAL: &str = include_str!("lua_literal.lua");
 const MEMORY_LIMIT: usize = 64 << 20;
+const ARGS_MEMORY_LIMIT: usize = 1 << 20;
 const INSTRUCTION_LIMIT: u32 = 20_000_000;
 
 /// Header under which added binds and overrides are appended to the main file
@@ -148,6 +151,33 @@ pub struct LuaConfig {
     pub files: Vec<PathBuf>,
 }
 
+/// A Lua state that stops at `memory` bytes or after an endless loop
+fn limited_lua(memory: usize) -> Result<Lua, String> {
+    let lua = Lua::new();
+    lua.set_memory_limit(memory).map_err(|e| e.to_string())?;
+    lua.set_hook(
+        HookTriggers {
+            every_nth_instruction: Some(INSTRUCTION_LIMIT),
+            ..HookTriggers::default()
+        },
+        |_, _| {
+            Err(mlua::Error::runtime(
+                "the Lua code executed too many instructions; is there an endless loop?",
+            ))
+        },
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(lua)
+}
+
+/// The `literal` renderer from `lua_literal.lua`
+fn load_literal(lua: &Lua) -> Result<Function, String> {
+    lua.load(LITERAL)
+        .set_name("=hypr-keybind-manager literal")
+        .eval()
+        .map_err(|e| format!("literal renderer failed: {e}"))
+}
+
 /// Runs the Lua config at `path` and collects its binds
 pub fn parse_lua_config(path: &Path) -> Result<LuaConfig, String> {
     let source =
@@ -158,21 +188,7 @@ pub fn parse_lua_config(path: &Path) -> Result<LuaConfig, String> {
         .canonicalize()
         .map_err(|e| format!("cannot resolve config directory: {e}"))?;
 
-    let lua = Lua::new();
-    lua.set_memory_limit(MEMORY_LIMIT)
-        .map_err(|e| e.to_string())?;
-    lua.set_hook(
-        HookTriggers {
-            every_nth_instruction: Some(INSTRUCTION_LIMIT),
-            ..HookTriggers::default()
-        },
-        |_, _| {
-            Err(mlua::Error::runtime(
-                "the config executed too many instructions; is there an endless loop?",
-            ))
-        },
-    )
-    .map_err(|e| e.to_string())?;
+    let lua = limited_lua(MEMORY_LIMIT)?;
 
     let read_module = {
         let dir = dir.clone();
@@ -203,7 +219,7 @@ pub fn parse_lua_config(path: &Path) -> Result<LuaConfig, String> {
     let prelude: Table = lua
         .load(PRELUDE)
         .set_name("=hypr-keybind-manager prelude")
-        .call((read_module, locate))
+        .call((read_module, locate, load_literal(&lua)?))
         .map_err(|e| format!("prelude failed: {e}"))?;
     let env: Table = prelude.get("env").map_err(|e| e.to_string())?;
 
@@ -471,8 +487,7 @@ fn render_lua_bind_with_keys(binding: &Keybinding, keys: &str) -> Result<String,
         }
         path => {
             validate_dispatcher_path(path)?;
-            validate_lua_args(args)?;
-            format!("hl.dsp.{path}({args})")
+            format!("hl.dsp.{path}({})", lua_literal_args(args)?)
         }
     };
 
@@ -510,26 +525,34 @@ fn validate_dispatcher_path(path: &str) -> Result<(), String> {
     }
 }
 
-/// Accepts only text that is a Lua literal (table, string, number, boolean)
-fn validate_lua_args(args: &str) -> Result<(), String> {
+/// Dispatcher arguments as Lua literals (tables, strings, numbers, booleans)
+///
+/// The text is evaluated with no globals and its values are rendered again by
+/// `literal`, so only data reaches the file. Writing the text itself is not
+/// safe even when it evaluates to data here: `os and os.execute("...") or 1`
+/// is 1 without globals, but runs the command once Hyprland loads the file.
+fn lua_literal_args(args: &str) -> Result<String, String> {
     if args.trim().is_empty() {
-        return Ok(());
+        return Ok(String::new());
     }
-    let lua = Lua::new();
-    lua.set_memory_limit(1 << 20).map_err(|e| e.to_string())?;
+    let invalid = |e: mlua::Error| {
+        format!("Arguments must be a Lua literal such as {{ direction = \"left\" }}: {e}")
+    };
+    let lua = limited_lua(ARGS_MEMORY_LIMIT)?;
+    let literal = load_literal(&lua)?;
     let empty = lua.create_table().map_err(|e| e.to_string())?;
-    let value: Value = lua
+    let values: MultiValue = lua
         .load(format!("return {args}"))
         .set_name("=arguments")
         .set_environment(empty)
         .eval()
-        .map_err(|e| {
-            format!("Arguments must be a Lua literal such as {{ direction = \"left\" }}: {e}")
-        })?;
-    if matches!(value, Value::Function(_)) {
-        return Err("Arguments cannot be a function".into());
-    }
-    Ok(())
+        .map_err(invalid)?;
+    values
+        .into_iter()
+        .map(|value| literal.call::<String>((value, 0, true)))
+        .collect::<mlua::Result<Vec<_>>>()
+        .map(|parts| parts.join(", "))
+        .map_err(invalid)
 }
 
 /// A double-quoted Lua string literal

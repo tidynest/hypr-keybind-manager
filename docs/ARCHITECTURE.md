@@ -282,50 +282,38 @@ flowchart TD
 
 ### 4. Security Validation Flow
 
+Every binding added, edited or imported goes through this before it is written. Bind lines that do not change are not rewritten and not checked again.
+
 ```mermaid
 flowchart TD
-    Input([User Input]) --> Layer1{Layer 1:<br/>Injection Prevention}
+    Input([Binding from the edit dialog<br/>or an imported file]) --> Shell{exec or execr?}
 
-    Layer1 -->|Check Dispatcher| WhitelistCheck{In whitelist?}
-    WhitelistCheck -->|No| RejectDispatcher[❌ Reject:<br/>Invalid dispatcher]
-    WhitelistCheck -->|Yes| MetaCheck{Has metacharacters?}
+    Shell -->|Yes| PatternCheck{Danger detector<br/>rates it critical?}
+    Shell -->|No| Format
+    PatternCheck -->|Yes| RejectPattern[❌ Refused:<br/>dangerous command]
+    PatternCheck -->|No| Format{Config format}
 
-    MetaCheck -->|Yes| RejectMeta[❌ Reject:<br/>Shell injection attempt]
-    MetaCheck -->|No| LengthCheck{Length > 1000?}
+    Format -->|hyprland.conf| FieldCheck{Line break in a field,<br/>or comma before the arguments?}
+    FieldCheck -->|Yes| RejectField[❌ Refused:<br/>Hyprland would misread it]
+    FieldCheck -->|No| Escape[Render the line,<br/>hash signs doubled]
 
-    LengthCheck -->|Yes| RejectLength[❌ Reject:<br/>Argument too long]
-    LengthCheck -->|No| Layer2{Layer 2:<br/>Danger Detection}
+    Format -->|hyprland.lua| LuaArgs{Arguments evaluate<br/>to plain data?}
+    LuaArgs -->|No| RejectLua[❌ Refused:<br/>not a Lua literal]
+    LuaArgs -->|Yes| Render[Render strings and<br/>the evaluated values]
 
-    Layer2 --> PatternCheck{Matches critical pattern?}
-    PatternCheck -->|Yes| RejectPattern[❌ Reject:<br/>Dangerous command]
-    PatternCheck -->|No| HashCheck{In danger HashSet?}
+    Escape --> Commit[Backup, then atomic write]
+    Render --> Commit
+    Commit --> Accept([✅ Saved])
 
-    HashCheck -->|Yes| WarnDanger[⚠️ Warn:<br/>Potentially dangerous]
-    HashCheck -->|No| EntropyCheck{High entropy?}
+    RejectPattern --> End([User sees the reason])
+    RejectField --> End
+    RejectLua --> End
 
-    EntropyCheck -->|Yes| RejectEntropy[❌ Reject:<br/>Encoded payload detected]
-    EntropyCheck -->|No| Layer3{Layer 3:<br/>Config Validation}
-
-    Layer3 --> UnifiedReport[Generate unified report]
-    UnifiedReport --> FinalCheck{Has errors?}
-
-    FinalCheck -->|Yes| Reject[❌ Reject + Show errors]
-    FinalCheck -->|No| Accept[✅ Accept]
-    WarnDanger --> Accept
-
-    RejectDispatcher --> End([User sees error])
-    RejectMeta --> End
-    RejectLength --> End
-    RejectPattern --> End
-    RejectEntropy --> End
-    Reject --> End
-    Accept --> Success([Proceed with operation])
-
-    style Layer1 fill:#ffe1e1,color:#000
-    style Layer2 fill:#fff4e1,color:#000
-    style Layer3 fill:#e1ffe1,color:#000
+    style PatternCheck fill:#fff4e1,color:#000
+    style FieldCheck fill:#ffe1e1,color:#000
+    style LuaArgs fill:#ffe1e1,color:#000
     style Accept fill:#d4f1d4,color:#000
-    style Reject fill:#ffd4d4,color:#000
+    style End fill:#ffd4d4,color:#000
 ```
 
 ### 5. Backup and Restore Flow
@@ -381,6 +369,7 @@ Parse args → Create App → Run GTK main loop
 
 **Key Functions**:
 - `main()` - Entry point, error handling
+- `terminal_safe(binding)` - replaces control characters before `list` and `check` print a config, so a config from someone else cannot send escape sequences to the terminal; `list --json` prints the raw data, which JSON escapes
 
 ---
 
@@ -422,6 +411,7 @@ pub struct Controller {
     conflict_detector: RefCell<ConflictDetector>,
     undo_stack: RefCell<Vec<Vec<Keybinding>>>,
     redo_stack: RefCell<Vec<Vec<Keybinding>>>,
+    danger_detector: DangerDetector,
 }
 ```
 
@@ -434,6 +424,8 @@ pub struct Controller {
 - `add_keybinding(binding)` → `Result<(), String>`
 - `update_keybinding(old, new)` → `Result<(), String>`
 - `delete_keybinding(binding)` → `Result<(), String>`
+- `import_from(path, mode)` → `Result<(), String>`. Reads either format; every imported binding is validated before anything changes
+- `validate_keybinding(binding)` → `Result<(), String>`. Refuses an `exec` or `execr` command the danger detector rates critical; called by add, update and import before the undo snapshot is taken
 - `undo()` → `Result<(), String>`
 - `redo()` → `Result<(), String>`
 - `can_undo()` → `bool`
@@ -480,12 +472,14 @@ pub struct ConfigTransaction<'a> {
 
 **In-Place Write Sequence** (`write_bindings`, hyprlang):
 1. Parse the current file tree with `parse_config_tree` (main file plus every `source =` file)
-2. Diff the parsed bindings against the new list as multisets: `removed` and `added`
+2. Diff the parsed bindings against the new list as multisets: `removed` and `added`. Every `added` binding must pass `Keybinding::check_config_line`: no line break in any field and no comma in the key, description or dispatcher, or Hyprland would read another directive or another dispatcher
 3. Scan each file line by line with `scan_lines`. A bind line whose binding is in `removed` is replaced by the first `added` binding of the same submap, or dropped. Every other line is copied through
 4. Whatever is still in `added` is inserted into the main file after the last bind line of its submap, or in a new `submap` block at the end
 5. Each file that changed is written through its own `ConfigTransaction` (backup, temp file, `fsync`, atomic `rename`)
 
-Rewritten lines are rendered with `Keybinding::to_config_line`, which writes `$name` back for modifiers or arguments that equal a variable's value.
+Rewritten lines are rendered with `Keybinding::to_config_line`, which writes `$name` back for modifiers or arguments that equal a variable's value, and `#` as `##`, since a lone `#` starts a comment.
+
+**Backups**: `create_timestamped_backup` copies the config with `fs::copy`, which keeps its permission bits. `list_backups` returns only regular files named `<config file name>.<timestamp>`, because sourced files in the same directory share `backups/` and a symlink could point a restore anywhere.
 
 ---
 
@@ -537,7 +531,9 @@ Rewritten lines are rendered with `Keybinding::to_config_line`, which writes `$n
 
 **Writing** (`rewrite_lua_files`): the wanted list is diffed against the recorded binds. A removed bind with a rewritable line has it replaced by a new bind of the same submap (keeping a `mainMod .. "..."` key prefix when possible) or deleted. A removed bind with an `override_reason` gets `hl.unbind("<keys>")`, plus the replacement `hl.bind(...)` for an edit, appended to the main file; on the next run the unbind hides the original and the appended line is an ordinary rewritable bind. Remaining global additions are appended too. Refuses overrides for binds inside submaps and additions inside submaps.
 
-**Safety of written text**: keys, commands and descriptions become Lua string literals through `lua_string`; dispatcher paths are checked against `[a-z0-9_.]`; other arguments must evaluate as a literal in an empty environment.
+**Safety of written text**: keys, commands and descriptions become Lua string literals through `lua_string`, and dispatcher paths are checked against `[a-z0-9_.]`. Other arguments go through `lua_literal_args`: they are evaluated with no globals in a `limited_lua` state (1 MiB, the same instruction limit as the parser), and each resulting value is rendered by `literal` from `lua_literal.lua` in strict mode, which refuses functions and nil. Only that rendering is written. Writing the checked text itself let `os and os.execute("...") or 1` through, since it is 1 without globals.
+
+**`lua_literal.lua`**: renders a Lua value as source on one line. The prelude uses it to record the arguments of parsed binds, in lenient mode. Strings go through `%q` with the newline escape kept on one line, Lua keywords used as table keys are bracketed, and non-finite numbers are written as `1e9999` and `(0/0)`.
 
 ---
 
@@ -575,9 +571,9 @@ pub struct Conflict {
 
 ---
 
-### `src/config/validator.rs` - Config Validator (Layer 3)
+### `src/config/validator.rs` - Config Validator
 
-**Responsibility**: Coordinate all validation layers and produce unified report.
+**Responsibility**: Check a whole config text against all checks and produce a unified report. Used by `ConfigTransaction::commit_with_validation`; the GUI's write path checks only the bindings it adds, through `Controller::validate_keybinding` and the format guards.
 
 **Structure**:
 ```rust
@@ -594,7 +590,7 @@ pub struct ValidationReport {
 
 **Validation Sequence**:
 1. Call Layer 1 (core/validator.rs) → injection check
-2. Call Layer 2 (config/danger.rs) → danger detection
+2. Call Layer 2 (config/danger/) → danger detection, for `exec` and `execr` (`Keybinding::shell_command`)
 3. Aggregate results into ValidationReport
 4. Classify by severity (Error | Warning | Info)
 
@@ -604,14 +600,14 @@ pub struct ValidationReport {
 
 **Responsibility**: Detect dangerous commands using multiple techniques.
 
-**Modular Structure** (927 lines across 4 modules):
+**Modular Structure** (932 lines across 4 modules):
 ```
 src/config/danger/
-├── mod.rs (412 lines)         - DangerDetector core, assess_command()
+├── mod.rs (413 lines)         - DangerDetector core, assess_command()
 ├── types.rs (41 lines)        - DangerLevel, DangerAssessment
-├── patterns.rs (183 lines)    - Pattern builders (critical/dangerous/suspicious/safe)
+├── patterns.rs (187 lines)    - Pattern builders (critical/dangerous/suspicious/safe)
 ├── entropy.rs (291 lines)     - Shannon entropy calculation and detection
-└── tests/ (786 lines)         - Comprehensive test suite (27 tests)
+└── tests/ (795 lines)         - Comprehensive test suite (28 tests)
 ```
 
 **Detection Techniques**:
@@ -664,7 +660,7 @@ src/config/danger/
 
 ### `src/core/validator.rs` - Injection Prevention (Layer 1)
 
-**Responsibility**: Block shell injection attempts using whitelist validation.
+**Responsibility**: Block shell injection attempts using whitelist validation, for binds sent over IPC (`HyprlandClient::add_bind`). Config writes do not use it: an ordinary bind uses `"`, `|` or a dispatcher outside the list.
 
 **Checks**:
 1. **Dispatcher Whitelist**: Only 41 allowed dispatchers
@@ -685,8 +681,8 @@ src/config/danger/
 **Responsibility**: Wrap `exec` binding commands in a Bubblewrap sandbox with no network access and a read-only filesystem view.
 
 **Key Functions**:
-- `wrap_command(command_line)` → `Result<String, String>` — prepends Bubblewrap flags
-- `unwrap_command(command_line)` → `Option<String>` — recovers the original command
+- `wrap_command(command_line)` → `Result<String, String>`. Writes `bwrap <flags> -- sh -c '<command>'`. Hyprland runs exec text with `sh -c`, so the command line is quoted as one word and a shell inside the sandbox runs all of it; given to bwrap directly, `a; b` would run `b` outside
+- `unwrap_command(command_line)` → `Option<String>`. Recovers the original command, also from the pre-1.4.2 form without the inner shell
 - `is_wrapped(command_line)` → `bool` — checks if already sandboxed
 
 **Sandbox Flags**:
@@ -694,6 +690,7 @@ src/config/danger/
 - `--new-session` — new session ID
 - `--unshare-net` — no network access
 - `--ro-bind /usr /usr`, `--ro-bind /bin /bin` — read-only system paths
+- `--ro-bind-try /lib /lib`, `--ro-bind-try /lib64 /lib64`: the dynamic loader, without which no program can start
 - `--proc /proc`, `--dev /dev`, `--tmpfs /tmp` — minimal mounts
 
 **UI Integration**: The edit dialog includes a Switch widget (enabled only when dispatcher is `exec`) that toggles sandboxing. Args are transparently wrapped/unwrapped so the user sees only the original command.
@@ -817,7 +814,7 @@ where
 ## Conclusion
 
 The architecture emphasises:
-- **Security**: Three-layer defence with fail-safe defaults
+- **Security**: Danger detection and format guards on every saved binding, fail-safe defaults
 - **Performance**: O(1) conflict detection, efficient parsing
 - **Reliability**: Atomic operations, automatic backups, no data loss
 - **Maintainability**: Clear module boundaries, comprehensive documentation

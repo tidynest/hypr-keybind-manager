@@ -320,30 +320,29 @@ impl ConfigManager {
         load_bindings_from(&self.config_path)
     }
 
-    #[allow(dead_code)]
-    fn create_timestamped_backup(&self) -> Result<PathBuf, ConfigError> {
-        // Read the current config content
-        let content = fs::read_to_string(&self.config_path)?;
-
-        // Generate timestamp in YYYY-MM-DD_HHMMSS format
-        let timestamp = Local::now().format("%Y-%m-%d_%H%M%S");
-
-        // Build the backup filename
-        // Extract the original filename (e.g., "hyprland.conf")
-        let original_name = self
-            .config_path
+    /// The config's file name, which every one of its backups starts with
+    fn file_name(&self) -> Result<&str, ConfigError> {
+        self.config_path
             .file_name()
-            .expect("Config path should have a file name")
-            .to_str()
-            .expect("Filename should be valid UTF-8");
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| {
+                ConfigError::BackupFailed(format!(
+                    "{} has no UTF-8 file name",
+                    self.config_path.display()
+                ))
+            })
+    }
 
-        let backup_filename = format!("{}.{}", original_name, timestamp);
-        let backup_path = self.backup_dir.join(&backup_filename);
+    /// Copies the config to `backups/<file name>.YYYY-MM-DD_HHMMSS`
+    fn create_timestamped_backup(&self) -> Result<PathBuf, ConfigError> {
+        let timestamp = Local::now().format("%Y-%m-%d_%H%M%S");
+        let backup_path = self
+            .backup_dir
+            .join(format!("{}.{timestamp}", self.file_name()?));
 
-        // Write the backup file
-        fs::write(&backup_path, &content)?;
+        // fs::copy keeps the permission bits, so a private config stays private
+        fs::copy(&self.config_path, &backup_path)?;
 
-        // Return the path so caller can verify or log it
         Ok(backup_path)
     }
 
@@ -368,7 +367,8 @@ impl ConfigManager {
     /// # Ok::<(), hypr_keybind_manager::config::ConfigError>(())
     /// ```
     pub fn list_backups(&self) -> Result<Vec<PathBuf>, ConfigError> {
-        // Read the backup directory
+        // Sourced files share the directory; only this file's backups may be restored over it
+        let prefix = format!("{}.", self.file_name()?);
         let entries = fs::read_dir(&self.backup_dir).map_err(ConfigError::Io)?;
 
         // Collect valid backups with their timestamps
@@ -380,27 +380,20 @@ impl ConfigManager {
                 Err(_) => continue, // Skip unreadable entries
             };
 
-            let path = entry.path();
-
-            // Only process files (not directories)
-            if !path.is_file() {
+            // Regular files only; a symlink could point a restore at any file
+            if !entry.file_type().is_ok_and(|kind| kind.is_file()) {
                 continue;
             }
 
-            // Extract filename
-            let filename = match path.file_name().and_then(|n| n.to_str()) {
-                Some(name) => name,
-                None => continue, // Skip if filename is invalid UTF-8
+            let path = entry.path();
+            let Some(timestamp_str) = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .and_then(|name| name.strip_prefix(&prefix))
+            else {
+                continue;
             };
 
-            // Parse the filename: expect "basename.ext.YYYY-MM-DD_HHMMSS"
-            let parts: Vec<&str> = filename.split('.').collect();
-            if parts.len() != 3 {
-                continue; // Not a valid backup filename
-            }
-
-            // Extract and parse the timestamp (3rd part)
-            let timestamp_str = parts[2];
             match chrono::NaiveDateTime::parse_from_str(timestamp_str, "%Y-%m-%d_%H%M%S") {
                 Ok(timestamp) => {
                     backups.push((path, timestamp));
@@ -591,6 +584,11 @@ impl ConfigManager {
         if removed.is_empty() && added.is_empty() {
             return Ok(());
         }
+        for binding in &added {
+            binding
+                .check_config_line()
+                .map_err(ConfigError::ValidationFailed)?;
+        }
 
         // Main file first so its removed lines are consumed before sourced
         // files are looked at; whatever is still new lands in the main file.
@@ -649,7 +647,11 @@ impl ConfigManager {
             for binding in bindings {
                 match render_lua_bind(binding) {
                     Ok(line) => content.push_str(&line),
-                    Err(reason) => content.push_str(&format!("-- {binding}: {reason}")),
+                    // A line break would end the comment and leave the rest as code
+                    Err(reason) => content.push_str(&format!(
+                        "-- {}: {reason}",
+                        binding.to_string().replace(['\n', '\r'], " ")
+                    )),
                 }
                 content.push('\n');
             }
@@ -661,6 +663,9 @@ impl ConfigManager {
         let mut current_submap: Option<&str> = None;
 
         for binding in bindings {
+            binding
+                .check_config_line()
+                .map_err(ConfigError::ValidationFailed)?;
             if binding.submap.as_deref() != current_submap {
                 current_submap = binding.submap.as_deref();
                 content.push_str(&format!("submap = {}\n", current_submap.unwrap_or("reset")));

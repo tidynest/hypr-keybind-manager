@@ -1,0 +1,5 @@
+# The workspace lints deny unwrap, expect and panic in production code.
+# Tests may still use them: a failed unwrap there is a failed test.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
