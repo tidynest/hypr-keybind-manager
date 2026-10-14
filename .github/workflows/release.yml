@@ -5,11 +5,14 @@ on:
     tags:
       - 'v*'
 
-permissions:
-  contents: write
+# Actions are pinned to full commit SHAs: this job holds a token that can
+# rewrite releases, and a tag can be moved to other code, a SHA cannot.
+permissions: {}
 
 jobs:
   build-release:
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -21,7 +24,9 @@ jobs:
     runs-on: ${{ matrix.runner }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install GTK4 dependencies
         run: |
@@ -29,10 +34,12 @@ jobs:
           sudo apt-get install -y libgtk-4-dev pkg-config
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable, 2026-10-09
+        with:
+          toolchain: stable
 
       - name: Build release binary
-        run: cargo build --release
+        run: cargo build --release --locked
 
       - name: Create archive
         run: |
@@ -40,7 +47,7 @@ jobs:
           tar -czf "hypr-keybind-manager-${{ matrix.archive_suffix }}.tar.gz" hypr-keybind-manager
 
       - name: Upload release binary
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           files: target/release/hypr-keybind-manager-${{ matrix.archive_suffix }}.tar.gz
           generate_release_notes: true

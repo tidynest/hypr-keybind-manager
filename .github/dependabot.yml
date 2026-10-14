@@ -1,0 +1,9 @@
+# Workflow actions are pinned to commit SHAs; this opens a PR when a pinned
+# action has a new release. Cargo security updates are enabled in the repo
+# settings and need no entry here.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
