@@ -1134,4 +1134,4 @@ For questions or discussions about design decisions, please open an issue on Git
 ---
 
 **Last Updated**: 2026-03-27
-**Version**: 1.4.1
+**Version**: 1.4.2

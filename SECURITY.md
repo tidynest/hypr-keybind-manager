@@ -512,4 +512,4 @@ The author thanks:
 ---
 
 **Last Updated**: 2026-10-14
-**Version**: 1.4.1
+**Version**: 1.4.2
