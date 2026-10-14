@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-10-14
+
 ### Security
 Fixes from an internal audit on 2026-10-14. Upgrade if you import bind files from other people.
 
