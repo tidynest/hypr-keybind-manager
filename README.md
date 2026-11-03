@@ -6,7 +6,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.83+-orange.svg)](https://www.rust-lang.org/)
 [![GTK4](https://img.shields.io/badge/GTK-4.0-blue.svg)](https://www.gtk.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-206%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-218%20passing-brightgreen.svg)](#testing)
 
 ---
 
@@ -57,7 +57,7 @@
 
 - **Full [CRUD](https://en.wikipedia.org/wiki/Create,_read,_update_and_delete) Operations**: Create, read, update, and delete keybindings through an intuitive GUI
 - **In-Place Config Editing**: Only the changed lines are rewritten. `$mainMod`, comments, indentation, ordering and `source =` files stay as you wrote them
-- **Both Config Languages**: `hyprland.conf` (hyprlang) and `hyprland.lua` (Hyprland 0.55+). Lua configs are run in a sandbox to find every bind, including ones built in loops; hand-written `hl.bind` lines are editable
+- **Both Config Languages**: `hyprland.conf` (hyprlang) and `hyprland.lua` (Hyprland 0.55+). Lua configs are run in a sandboxed child process to find every bind, including ones built in loops; hand-written `hl.bind` lines are editable
 - **Complete Hyprland Syntax**: Every bind flag (`bindd`, `bindel`, `bindnt`, ...), `bindd` descriptions, submaps and sourced files
 - **Real-Time Conflict Detection**: Instantly identifies duplicate key combinations per submap with [O(1)](https://en.wikipedia.org/wiki/Time_complexity#Constant_time) performance
 - **Checks Before Every Save**: Refuses binds whose text Hyprland would misread and commands rated critical, and writes Lua arguments back as plain data. `exec` bindings can be sandboxed with Bubblewrap
@@ -443,7 +443,8 @@ Global Options:
 
 Subcommand Options (available on check, list, and gui):
   -c, --config <FILE>  Path to Hyprland config file
-                       [default: ~/.config/hypr/hyprland.conf]
+                       [default: ~/.config/hypr/hyprland.lua, or
+                       hyprland.conf when there is no hyprland.lua]
 
 List Options:
       --json           Print the bindings as JSON instead of a table
@@ -525,6 +526,7 @@ The application uses a **[HashMap](https://doc.rust-lang.org/std/collections/str
 **Lua Configs** (`hyprland.lua`, Hyprland 0.55+):
 - The config is executed in an embedded Lua 5.5 with a recording stand-in for the `hl` API, so every `hl.bind` call is captured with the file and line it came from, whatever code produced it
 - The sandbox has no `io`, no `load`, no `os.execute`, a memory limit, an instruction limit, and `require` limited to files inside the config directory
+- The file runs in a separate copy of the program that is stopped after 2 seconds and may use at most 512 MiB, so a config that loops forever or fills memory, your own or an imported one, ends in an error message instead of freezing the app
 - A bind whose line is a single `hl.bind(...)` statement with a dispatcher action is rewritten in place; a `mainMod .. " + Q"` key expression is kept when the new keys start with the same value
 - A bind that comes from code (a loop, a Lua function, a larger statement, or an option the editor cannot write back) is changed by an override: `hl.unbind("<keys>")` and, for an edit, the replacement `hl.bind(...)` are appended to the end of the main file. Hyprland runs the file top to bottom, so the override wins and your loop stays as it is. The list marks such binds and the details panel says where they come from
 - New binds are appended at the end of the main file under a `-- Keybindings added by hypr-keybind-manager` header; new binds inside a submap are refused, add those inside `hl.define_submap` yourself
@@ -550,6 +552,8 @@ The application uses a **[HashMap](https://doc.rust-lang.org/std/collections/str
 - **Version Control**: Track keybinding changes in git
 - **Testing**: Experiment with different keybinding schemes
 - **Templates**: Create reusable keybinding sets for different workflows
+
+The chosen file is read in the background, so the window stays usable while a Lua file runs. A Lua file that takes longer than 2 seconds is stopped and the import is refused.
 
 **Import Modes** (asked after the file is chosen; Merge is the default):
 - **Replace Mode**: Deletes all existing keybindings and replaces with imported ones
@@ -606,13 +610,13 @@ The application uses a **[HashMap](https://doc.rust-lang.org/std/collections/str
 
 ```
 hypr-keybind-manager/
-├── README.md                                   # Project overview and documentation hub (1091 lines)
+├── README.md                                   # Project overview and documentation hub (1098 lines)
 ├── LICENSE                                     # Apache 2.0 license (201 lines)
-├── CONTRIBUTING.md                             # Contribution guidelines (308 lines)
+├── CONTRIBUTING.md                             # Contribution guidelines (309 lines)
 ├── SECURITY.md                                 # Security policy and threat model (515 lines)
-├── CHANGELOG.md                                # Release history (112 lines)
+├── CHANGELOG.md                                # Release history (123 lines)
 ├── CONTRIBUTORS.md                             # Contributor recognition (15 lines)
-├── Cargo.toml                                  # Rust dependencies and metadata (58 lines)
+├── Cargo.toml                                  # Rust dependencies and metadata (60 lines)
 ├── clippy.toml                                 # Lets tests use unwrap, expect and panic (5 lines)
 ├── PKGBUILD                                    # Arch Linux package build script (42 lines)
 ├── install.sh                                  # Installation script for manual builds (96 lines)
@@ -628,8 +632,8 @@ hypr-keybind-manager/
 │   ├── tag-release.sh                          # Automated release tagging (98 lines)
 │   └── test-escape-key.sh                      # Escape key implementation verification (109 lines)
 ├── docs/                                       # Technical documentation
-│   ├── ARCHITECTURE.md                         # System design and data flow (828 lines)
-│   ├── DESIGN_DECISIONS.md                     # Rationale for architectural choices (1137 lines)
+│   ├── ARCHITECTURE.md                         # System design and data flow (846 lines)
+│   ├── DESIGN_DECISIONS.md                     # Rationale for architectural choices (1161 lines)
 │   ├── ENTROPY_DETECTION.md                    # Shannon entropy deep-dive (945 lines)
 │   ├── GTK_INSPECTOR_GUIDE.md                  # GTK debugging guide (215 lines)
 │   └── screenshots/                            # Application screenshots (14 images, ~1.5 MB)
@@ -653,14 +657,16 @@ hypr-keybind-manager/
 ├── test-file-watcher.sh                        # File watcher test script (315 lines)
 ├── test-sync-version.sh                        # Version sync test script (340 lines)
 ├── test-tag-release.sh                         # Release automation test script (436 lines)
-└── src/                                        # Source code (~14,223 lines total)
+├── tests/                                      # Integration tests
+│   └── hostile_lua.rs                          # Lua files read through the app binary (273 lines)
+└── src/                                        # Source code (~14,525 lines total)
     ├── bin/                                    # Binary utilities
     │   ├── measure_entropy.rs                  # Entropy measurement tool (57 lines)
     │   └── test_manual.rs                      # Manual testing utility (86 lines)
-    ├── main.rs                                 # CLI entry point (296 lines)
+    ├── main.rs                                 # CLI entry point (302 lines)
     ├── lib.rs                                  # Library root (100 lines)
-    ├── config/                                 # Config file I/O (~4,854 lines)
-    │   ├── mod.rs                              # ConfigManager (reads/writes with backups) (803 lines)
+    ├── config/                                 # Config file I/O (~4,852 lines)
+    │   ├── mod.rs                              # ConfigManager (reads/writes with backups) (810 lines)
     │   ├── error.rs                            # ConfigError types (62 lines)
     │   ├── transaction.rs                      # Atomic write transactions (352 lines)
     │   ├── validator.rs                        # Config validation (Layer 3) (296 lines)
@@ -670,38 +676,39 @@ hypr-keybind-manager/
     │   │   ├── patterns.rs                     # Pattern builders (187 lines)
     │   │   ├── entropy.rs                      # Shannon entropy detection (291 lines)
     │   │   └── tests/                          # Modular test suite (795 lines)
-    │   └── tests/                              # Config tests (1,614 lines)
+    │   └── tests/                              # Config tests (1,605 lines)
     │       ├── mod.rs                          # Test module organisation (29 lines)
-    │       ├── config_manager_tests.rs         # ConfigManager tests (702 lines)
+    │       ├── config_manager_tests.rs         # ConfigManager tests (693 lines)
     │       ├── transaction_tests.rs            # Transaction tests (733 lines)
     │       └── validator_tests.rs              # Validator unit tests (150 lines)
-    ├── core/                                   # Business logic (~3,152 lines)
+    ├── core/                                   # Business logic (~3,405 lines)
     │   ├── types.rs                            # Keybinding, KeyCombo, Modifier, BindType (406 lines)
-    │   ├── lua_config.rs                       # Lua config: sandboxed run, line rewriting (700 lines)
+    │   ├── lua_config.rs                       # Lua config: sandboxed run, line rewriting (724 lines)
+    │   ├── lua_child.rs                        # Runs Lua files in a child process with limits (194 lines)
     │   ├── lua_prelude.lua                     # Recording hl stub and sandbox environment (151 lines)
     │   ├── lua_literal.lua                     # Renders Lua values as one-line source (46 lines)
     │   ├── parser.rs                           # Parse Hyprland config syntax (nom) (438 lines)
     │   ├── conflict.rs                         # ConflictDetector engine (HashMap) (109 lines)
     │   ├── validator.rs                        # Injection prevention (Layer 1) (186 lines)
     │   ├── sandbox.rs                          # Bubblewrap sandbox helpers (67 lines)
-    │   ├── mod.rs                              # Core module exports (43 lines)
-    │   └── tests/                              # Core tests (extracted) (1006 lines)
+    │   ├── mod.rs                              # Core module exports (44 lines)
+    │   └── tests/                              # Core tests (extracted) (1040 lines)
     │       ├── mod.rs                          # Test module organisation (36 lines)
-    │       ├── lua_config_tests.rs             # Lua config tests (341 lines)
+    │       ├── lua_config_tests.rs             # Lua config tests (375 lines)
     │       ├── conflict_tests.rs               # Conflict detection tests (149 lines)
     │       ├── parser_tests.rs                 # Parser tests (163 lines)
     │       ├── validator_tests.rs              # Validation tests (167 lines)
     │       ├── types_tests.rs                  # Type system tests (82 lines)
     │       └── sandbox_tests.rs                # Sandbox wrap/unwrap tests (68 lines)
-    ├── ui/                                     # GTK4 GUI (MVC pattern) (~5,271 lines)
+    ├── ui/                                     # GTK4 GUI (MVC pattern) (~5,284 lines)
     │   ├── app.rs                              # Main window coordination (299 lines)
-    │   ├── actions.rs                          # GTK action setup + undo/redo wiring (350 lines)
+    │   ├── actions.rs                          # GTK action setup + undo/redo wiring (368 lines)
     │   ├── builders/                           # UI builder modules (503 lines total)
     │   │   ├── mod.rs                          # Module exports (30 lines)
     │   │   ├── header.rs                       # Header bar with undo/redo buttons (92 lines)
     │   │   ├── layout.rs                       # Main layout construction (135 lines)
     │   │   └── handlers.rs                     # Event handler wiring (246 lines)
-    │   ├── controller.rs                       # MVC Controller (mediates Model ↔ View) (875 lines)
+    │   ├── controller.rs                       # MVC Controller (mediates Model ↔ View) (892 lines)
     │   ├── file_watcher.rs                     # Live config file monitoring (77 lines)
     │   ├── style.css                           # GTK CSS styling (165 lines)
     │   ├── mod.rs                              # UI module exports (45 lines)
@@ -715,22 +722,22 @@ hypr-keybind-manager/
     │   │   ├── edit_dialog.rs                  # Edit/Add dialog with key recording, sandbox toggle (689 lines)
     │   │   ├── backup_dialog.rs                # Backup management with Escape support (340 lines)
     │   │   └── mod.rs                          # Component exports (43 lines)
-    │   └── tests/                              # UI component tests (extracted) (692 lines)
+    │   └── tests/                              # UI component tests (extracted) (670 lines)
     │       ├── mod.rs                          # Test module organisation (27 lines)
     │       ├── backup_dialog_tests.rs          # Backup dialog tests (82 lines)
-    │       ├── controller_tests.rs             # Controller + undo/redo tests (542 lines)
+    │       ├── controller_tests.rs             # Controller + undo/redo tests (520 lines)
     │       └── layout_tests.rs                 # Layout tests (41 lines)
-    └── ipc/                                    # Hyprland IPC integration (~407 lines)
-        ├── mod.rs                              # HyprlandClient (add/remove/reload bindings) (177 lines)
-        └── tests/                              # IPC tests (extracted) (230 lines)
-            └── mod.rs                          # IPC integration tests (230 lines)
+    └── ipc/                                    # Hyprland IPC integration (~439 lines)
+        ├── mod.rs                              # HyprlandClient (add/remove/reload bindings) (197 lines)
+        └── tests/                              # IPC tests (extracted) (242 lines)
+            └── mod.rs                          # IPC integration tests (242 lines)
 ```
 
 For detailed architecture documentation, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ### Testing
 
-**Rust Tests (206 passing, 7 ignored):**
+**Rust Tests (218 passing, 7 ignored):**
 ```bash
 # Run all Rust tests
 cargo test

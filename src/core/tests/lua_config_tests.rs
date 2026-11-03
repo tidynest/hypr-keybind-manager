@@ -18,7 +18,7 @@ use crate::core::{
     lua_config::{ADDED_HEADER, parse_lua_config, render_lua_bind, rewrite_lua_files},
     types::{BindType, KeyCombo, Keybinding, Modifier},
 };
-use std::{fs, path::PathBuf};
+use std::{fs, path::PathBuf, sync::mpsc, thread, time::Duration};
 use tempfile::TempDir;
 
 const CONFIG: &str = r#"local mainMod = "SUPER"
@@ -178,6 +178,40 @@ fn test_lua_sandbox_blocks_escapes() {
         let err = parse_lua_config(&path).unwrap_err();
         assert!(err.contains(expect), "{source}: {err}");
     }
+}
+
+#[test]
+fn test_lua_instruction_limit_survives_pcall() {
+    let dir = TempDir::new().unwrap();
+    for source in [
+        "while true do pcall(function() while true do end end) end",
+        "while true do xpcall(function() while true do end end, function() end) end",
+    ] {
+        let path = write_config(&dir, source);
+        // On a thread, so a config that never stops fails the test instead of hanging it
+        let (tx, rx) = mpsc::channel();
+        thread::spawn(move || tx.send(parse_lua_config(&path).map(|_| ())));
+        let err = rx
+            .recv_timeout(Duration::from_secs(30))
+            .unwrap_or_else(|_| panic!("{source}: still running after 30 s"))
+            .unwrap_err();
+        assert!(err.contains("instructions"), "{source}: {err}");
+    }
+}
+
+#[test]
+fn test_lua_arguments_cannot_call_string_methods() {
+    // Imported arguments are evaluated in the app; this pattern backtracks
+    // inside C, where the instruction limit cannot stop it
+    let args = r#"("a"):rep(40):find(("a?"):rep(40) .. ("a"):rep(40) .. "b")"#;
+    let backtracking = binding(vec![], "X", "window.move", Some(args));
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || tx.send(render_lua_bind(&backtracking)));
+    let err = rx
+        .recv_timeout(Duration::from_secs(30))
+        .unwrap_or_else(|_| panic!("still running after 30 s"))
+        .unwrap_err();
+    assert!(err.contains("string value"), "{err}");
 }
 
 #[test]

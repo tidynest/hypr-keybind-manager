@@ -6,6 +6,15 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 ## [Unreleased]
 
+### Security
+- Medium: a Lua config could catch the instruction limit's error with `pcall` and loop on, which froze the GUI. Once the limit is reached, every further instruction raises the error again.
+- Medium: dispatcher arguments from an imported file are evaluated in the app before they are written into `hyprland.lua`. A string method such as `find` with a pattern that backtracks runs inside C, where the instruction limit never fires, so it froze the GUI. Argument text can no longer call string methods; plain data needs none.
+- Medium: an imported Lua file could still freeze the GUI or fill memory. A `__gc` finaliser and a string pattern that backtracks run where the instruction limit cannot reach them. A loop could also carry on once memory was full, and a link to `/dev/zero` made the app allocate until the machine ran low. Lua files now run in a child process that the app stops after 2 seconds, with a 512 MiB address space and only a few environment variables such as `HOME`. The GUI reads an import in the background, so the window stays usable while the file is evaluated.
+- Low: replies from Hyprland's socket were read with no size limit. A reply over 1 MiB is refused.
+
+### Fixed
+- With both `hyprland.lua` and `hyprland.conf` in `~/.config/hypr`, the default config was `hyprland.conf`. Hyprland 0.55 and later loads `hyprland.lua` in that case, and so does the app now.
+
 ## [1.4.2] - 2026-10-14
 
 ### Security

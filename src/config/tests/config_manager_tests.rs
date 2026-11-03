@@ -678,25 +678,16 @@ fn test_list_backups_skips_other_files_and_symlinks() {
 }
 
 #[test]
-fn test_lua_export_keeps_unrenderable_binds_inside_comments() {
+fn test_config_in_prefers_lua_like_hyprland() {
     let temp_dir = TempDir::new().unwrap();
-    let config_path = temp_dir.path().join("hyprland.lua");
-    fs::write(
-        &config_path,
-        "hl.bind(\"SUPER + K\", function() end, { description = \"a\\nos.exit()\" })\n",
-    )
-    .unwrap();
-    let manager = ConfigManager::new(config_path.clone()).unwrap();
-    let bindings = load_bindings_from(&config_path).unwrap().bindings;
-    let export_path = temp_dir.path().join("export.lua");
+    let lua = temp_dir.path().join("hyprland.lua");
+    let conf = temp_dir.path().join("hyprland.conf");
+    assert_eq!(config_in(temp_dir.path()), conf);
 
-    manager.export_to(&export_path, &bindings).unwrap();
+    fs::write(&conf, "").unwrap();
+    assert_eq!(config_in(temp_dir.path()), conf);
 
-    let exported = fs::read_to_string(&export_path).unwrap();
-    assert!(
-        exported
-            .lines()
-            .all(|line| line.is_empty() || line.starts_with("-- ")),
-        "{exported}"
-    );
+    // Hyprland loads hyprland.lua instead of hyprland.conf when both exist
+    fs::write(&lua, "").unwrap();
+    assert_eq!(config_in(temp_dir.path()), lua);
 }

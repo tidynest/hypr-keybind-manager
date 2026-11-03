@@ -168,7 +168,8 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for complete project structure and d
 - `src/core/` - Business logic (parsing, conflict detection, validation)
 - `src/config/` - File I/O and security validation
 - `src/ui/` - GTK4 user interface
-- `tests/` - Unit and integration tests
+- `src/*/tests/` - Unit tests
+- `tests/hostile_lua.rs` - Integration tests that load Lua configs. Lua runs in a child process started from the app binary, which only integration tests have, so a test that loads a Lua config through `load_bindings_from`, `ConfigManager` or `Controller` belongs here
 
 ---
 

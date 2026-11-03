@@ -20,8 +20,9 @@
 use crate::{
     config::ConfigError,
     core::{BindType, KeyCombo, Keybinding, Modifier},
-    ipc::{ClientMode, HyprlandClient},
+    ipc::{ClientMode, HyprlandClient, MAX_REPLY, read_reply},
 };
+use std::io::{self, Read};
 
 /// Helper: Creates a safe test binding
 fn create_safe_binding(key: &str, app: &str) -> Keybinding {
@@ -199,6 +200,17 @@ fn test_multiple_safe_bindings() {
             "Safe binding {} should validate",
             binding.key_combo.key
         );
+    }
+}
+
+#[test]
+fn test_read_reply_refuses_oversized_replies() {
+    let reply = |len| read_reply(io::repeat(b'a').take(len)).map(|text| text.len());
+    assert_eq!(read_reply(&b"ok"[..]).unwrap(), "ok");
+    assert_eq!(reply(MAX_REPLY as u64).unwrap(), MAX_REPLY);
+    match reply(MAX_REPLY as u64 + 1) {
+        Err(ConfigError::IpcCommandFailed(msg)) => assert!(msg.contains("longer than"), "{msg}"),
+        other => panic!("expected the reply to be refused, got {other:?}"),
     }
 }
 

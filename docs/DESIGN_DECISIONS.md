@@ -708,7 +708,31 @@ pub struct ConfigTransaction<'a> {  // 'a lifetime
 
 **Why line-based editing plus overrides**: Rewriting arbitrary Lua is not possible in general. Because every recorded bind knows its file and line, a bind whose line is one `hl.bind(...)` call can be replaced whole. Binds created in loops share a line, and closures cannot be rendered, so those are changed the way Hyprland itself allows: `hl.unbind("<keys>")` followed by the replacement `hl.bind(...)` appended to the end of the file. The file runs top to bottom, the override wins, and the user's loop is never edited by a program. On the next run the appended line is an ordinary bind, so a second edit rewrites it in place. The `mainMod ..` prefix survives on rewritten lines because the recorded keys value and the literal suffix on the line give the variable's value.
 
-**Sandbox**: the config gets `hl`, `string`, `table`, `math`, `utf8`, `os.getenv`/`date`/`time` and `require` limited to the config directory. No `io`, no `load`, no `os.execute`; 64 MiB memory limit; 20 million instruction limit. Values written back are Lua string literals or validated literals, so the edit dialog cannot inject code.
+**Sandbox**: the config gets `hl`, `string`, `table`, `math`, `utf8`, `os.getenv`/`date`/`time` and `require` limited to the config directory. No `io`, no `load`, no `os.execute`; 64 MiB memory limit; 20 million instruction limit. Values written back are Lua string literals or validated literals, so the edit dialog cannot inject code. Since 2026-11-03 the run happens in a child process, see the next section.
+
+---
+
+### Lua Runs in a Child Process
+
+**File**: `src/core/lua_child.rs`
+
+**Decision** (2026-11-03): Every Lua file, imported or the user's own, is run by the app's own binary started again with a hidden `evaluate-lua-config` command. Before any Lua runs the child caps its own address space and CPU time. The app stops it after 2 seconds and reads the result as JSON from a pipe.
+
+**Why**: The instruction hook and the memory limit work inside the Lua state, and a hostile file can get around both. Lua runs `__gc` finalisers with hooks off, and a backtracking string pattern runs inside C. Once memory is full the hook cannot even start. No change inside the state closes all of these, while a process can always be killed.
+
+**Why the app's own binary**: A separate helper would have to be installed next to the app by the PKGBUILD, `install.sh` and the release tarball. Starting `/proc/self/exe` needs none of that, and it is the running version even after an upgrade replaced the file on disk.
+
+**Why `nix`**: The crate forbids `unsafe`, and std has no `setrlimit`. `nix` was already in the tree through `atomic-write-file`; the direct dependency only turns on its `resource` feature.
+
+**Trade-offs**:
+- Every load and every write of a Lua config starts a process, about 20 ms more on the owner's config
+- The child sees only `HOME`, `USER`, the XDG base directories, `TERMINAL`, `EDITOR` and `BROWSER`, so a config that reads another variable gets nil where Hyprland gets a value
+- An import is read on a worker thread. Loading the user's own config and the run before each write still wait on the GUI's main thread, for up to the 2 second limit when the file misbehaves. Moving those off the main thread would race with edits made while they run
+- Unit tests cannot load a Lua config through the library, because their executable is not the app; those tests live in `tests/hostile_lua.rs`
+
+**Alternatives Considered**:
+1. **Remove `pcall`** (Rejected): Hyprland's wiki tells users to write `pcall(require, "...")` for optional modules, and it would not stop a finaliser or a pattern
+2. **Run Lua on a thread with a timeout** (Rejected): a thread cannot be stopped, so the loop keeps a core busy and its memory stays taken until the app exits
 
 ---
 

@@ -502,28 +502,6 @@ fn test_import_refuses_critical_command_and_leaves_config_alone() {
 }
 
 #[test]
-fn test_import_from_lua_cannot_add_config_lines() {
-    let (temp_dir, config_path) = create_test_config();
-    let controller = Controller::new(config_path.clone()).unwrap();
-    controller.load_keybindings().unwrap();
-    let before = fs::read_to_string(&config_path).unwrap();
-    // A Lua string may hold a line break; in a .conf it would start a new directive
-    let import_path = temp_dir.path().join("shared.lua");
-    fs::write(
-        &import_path,
-        "hl.bind(\"SUPER + F12\", hl.dsp.exec_cmd(\"true\\nexec-once = touch /tmp/pwned\"))\n",
-    )
-    .unwrap();
-
-    assert!(
-        controller
-            .import_from(&import_path, ImportMode::Merge)
-            .is_err()
-    );
-    assert_eq!(fs::read_to_string(&config_path).unwrap(), before);
-}
-
-#[test]
 fn test_add_refuses_critical_command() {
     let (_temp_dir, config_path) = create_test_config();
     let controller = Controller::new(config_path).unwrap();

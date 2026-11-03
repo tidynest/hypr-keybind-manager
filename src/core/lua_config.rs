@@ -35,12 +35,14 @@
 //! # Security
 //! The config runs with no `io`, no `load`, no `os.execute`, `require`
 //! limited to files inside the config directory, a memory limit and an
-//! instruction limit. Values written back are rendered as Lua string
+//! instruction limit. The app runs `parse_lua_config` through `lua_child`,
+//! in a child process that it stops after a time limit. Values written back are rendered as Lua string
 //! literals, and dispatcher arguments are evaluated as data and rendered
 //! again by `lua_literal.lua`, so text from the edit dialog or an imported
 //! file never reaches the config as code.
 
 use mlua::{Function, HookTriggers, Lua, MultiValue, Table, Value};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     fs,
@@ -129,7 +131,7 @@ pub const LUA_DISPATCHERS: &[&str] = &[
 ];
 
 /// One recorded `hl.bind` call
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct LuaBinding {
     pub binding: Keybinding,
     /// The keys string as Hyprland saw it, e.g. `SUPER + Q`
@@ -144,7 +146,9 @@ pub struct LuaBinding {
 }
 
 /// Everything recorded while running a Lua config
-#[derive(Debug, Default)]
+///
+/// The child process in `lua_child` sends it to the app as JSON.
+#[derive(Debug, Default, Deserialize, Serialize)]
 pub struct LuaConfig {
     pub bindings: Vec<LuaBinding>,
     /// The main file first, then every required module in load order
@@ -156,18 +160,26 @@ fn limited_lua(memory: usize) -> Result<Lua, String> {
     let lua = Lua::new();
     lua.set_memory_limit(memory).map_err(|e| e.to_string())?;
     lua.set_hook(
-        HookTriggers {
-            every_nth_instruction: Some(INSTRUCTION_LIMIT),
-            ..HookTriggers::default()
-        },
-        |_, _| {
-            Err(mlua::Error::runtime(
-                "the Lua code executed too many instructions; is there an endless loop?",
-            ))
-        },
+        HookTriggers::new().every_nth_instruction(INSTRUCTION_LIMIT),
+        instruction_limit,
     )
     .map_err(|e| e.to_string())?;
     Ok(lua)
+}
+
+/// Stops a run that reached the instruction limit
+///
+/// A config can catch the error with `pcall` and loop on, so the hook is set
+/// again to fire on every instruction. Each further instruction raises the
+/// error too, until it reaches the code that started the run.
+fn instruction_limit(lua: &Lua, _: &mlua::Debug) -> mlua::Result<mlua::VmState> {
+    lua.set_hook(
+        HookTriggers::new().every_nth_instruction(1),
+        instruction_limit,
+    )?;
+    Err(mlua::Error::runtime(
+        "the Lua code executed too many instructions; is there an endless loop?",
+    ))
 }
 
 /// The `literal` renderer from `lua_literal.lua`
@@ -179,6 +191,9 @@ fn load_literal(lua: &Lua) -> Result<Function, String> {
 }
 
 /// Runs the Lua config at `path` and collects its binds
+///
+/// Runs in this process, so a hostile file can hold it up; the app calls
+/// `lua_child::evaluate`, which runs this in a child process.
 pub fn parse_lua_config(path: &Path) -> Result<LuaConfig, String> {
     let source =
         fs::read_to_string(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
@@ -531,6 +546,11 @@ fn validate_dispatcher_path(path: &str) -> Result<(), String> {
 /// `literal`, so only data reaches the file. Writing the text itself is not
 /// safe even when it evaluates to data here: `os and os.execute("...") or 1`
 /// is 1 without globals, but runs the command once Hyprland loads the file.
+///
+/// This runs in the app, and the text may come from an imported file, so it
+/// cannot call string methods either: `("a"):rep(40):find(...)` with a
+/// pattern that backtracks runs inside C, where the instruction limit never
+/// fires. Data needs no methods.
 fn lua_literal_args(args: &str) -> Result<String, String> {
     if args.trim().is_empty() {
         return Ok(String::new());
@@ -541,12 +561,16 @@ fn lua_literal_args(args: &str) -> Result<String, String> {
     let lua = limited_lua(ARGS_MEMORY_LIMIT)?;
     let literal = load_literal(&lua)?;
     let empty = lua.create_table().map_err(|e| e.to_string())?;
+    // `literal` uses the methods, so they come back once the text has run
+    let string_methods = lua.type_metatable::<mlua::String>();
+    lua.set_type_metatable::<mlua::String>(None);
     let values: MultiValue = lua
         .load(format!("return {args}"))
         .set_name("=arguments")
         .set_environment(empty)
         .eval()
         .map_err(invalid)?;
+    lua.set_type_metatable::<mlua::String>(string_methods);
     values
         .into_iter()
         .map(|value| literal.call::<String>((value, 0, true)))

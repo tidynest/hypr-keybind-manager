@@ -21,12 +21,13 @@
 //! - Type definitions for keybindings and key combinations
 //! - Conflict detection using HashMap-based O(1) lookup
 //! - Input validation with security whitelisting
-//! - Configuration parsing
+//! - Configuration parsing, with Lua configs run in a child process
 //!
 //! All business logic is isolated from UI and I/O concerns to enable
 //! comprehensive unit testing without requiring a display server.
 
 pub mod conflict;
+pub mod lua_child;
 pub mod lua_config;
 pub mod parser;
 pub mod sandbox;
