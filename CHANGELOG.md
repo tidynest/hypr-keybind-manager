@@ -8,6 +8,7 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 ### Security
 - Medium: a Lua config could catch the instruction limit's error with `pcall` and loop on, which froze the GUI. Once the limit is reached, every further instruction raises the error again.
+- Medium: dispatcher arguments from an imported file are evaluated in the app before they are written into `hyprland.lua`. A string method such as `find` with a pattern that backtracks runs inside C, where the instruction limit never fires, so it froze the GUI. Argument text can no longer call string methods; plain data needs none.
 - Low: replies from Hyprland's socket were read with no size limit. A reply over 1 MiB is refused.
 
 ### Fixed

@@ -539,6 +539,11 @@ fn validate_dispatcher_path(path: &str) -> Result<(), String> {
 /// `literal`, so only data reaches the file. Writing the text itself is not
 /// safe even when it evaluates to data here: `os and os.execute("...") or 1`
 /// is 1 without globals, but runs the command once Hyprland loads the file.
+///
+/// This runs in the app, and the text may come from an imported file, so it
+/// cannot call string methods either: `("a"):rep(40):find(...)` with a
+/// pattern that backtracks runs inside C, where the instruction limit never
+/// fires. Data needs no methods.
 fn lua_literal_args(args: &str) -> Result<String, String> {
     if args.trim().is_empty() {
         return Ok(String::new());
@@ -549,12 +554,16 @@ fn lua_literal_args(args: &str) -> Result<String, String> {
     let lua = limited_lua(ARGS_MEMORY_LIMIT)?;
     let literal = load_literal(&lua)?;
     let empty = lua.create_table().map_err(|e| e.to_string())?;
+    // `literal` uses the methods, so they come back once the text has run
+    let string_methods = lua.type_metatable::<mlua::String>();
+    lua.set_type_metatable::<mlua::String>(None);
     let values: MultiValue = lua
         .load(format!("return {args}"))
         .set_name("=arguments")
         .set_environment(empty)
         .eval()
         .map_err(invalid)?;
+    lua.set_type_metatable::<mlua::String>(string_methods);
     values
         .into_iter()
         .map(|value| literal.call::<String>((value, 0, true)))

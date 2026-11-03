@@ -200,6 +200,21 @@ fn test_lua_instruction_limit_survives_pcall() {
 }
 
 #[test]
+fn test_lua_arguments_cannot_call_string_methods() {
+    // Imported arguments are evaluated in the app; this pattern backtracks
+    // inside C, where the instruction limit cannot stop it
+    let args = r#"("a"):rep(40):find(("a?"):rep(40) .. ("a"):rep(40) .. "b")"#;
+    let backtracking = binding(vec![], "X", "window.move", Some(args));
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || tx.send(render_lua_bind(&backtracking)));
+    let err = rx
+        .recv_timeout(Duration::from_secs(30))
+        .unwrap_or_else(|_| panic!("still running after 30 s"))
+        .unwrap_err();
+    assert!(err.contains("string value"), "{err}");
+}
+
+#[test]
 fn test_render_lua_bind_escapes_and_validates() {
     let mut exec = binding(
         vec![Modifier::Shift, Modifier::Super],
