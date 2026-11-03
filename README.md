@@ -6,7 +6,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.83+-orange.svg)](https://www.rust-lang.org/)
 [![GTK4](https://img.shields.io/badge/GTK-4.0-blue.svg)](https://www.gtk.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-206%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-218%20passing-brightgreen.svg)](#testing)
 
 ---
 
@@ -610,13 +610,13 @@ The chosen file is read in the background, so the window stays usable while a Lu
 
 ```
 hypr-keybind-manager/
-├── README.md                                   # Project overview and documentation hub (1091 lines)
+├── README.md                                   # Project overview and documentation hub (1098 lines)
 ├── LICENSE                                     # Apache 2.0 license (201 lines)
-├── CONTRIBUTING.md                             # Contribution guidelines (308 lines)
+├── CONTRIBUTING.md                             # Contribution guidelines (309 lines)
 ├── SECURITY.md                                 # Security policy and threat model (515 lines)
-├── CHANGELOG.md                                # Release history (112 lines)
+├── CHANGELOG.md                                # Release history (123 lines)
 ├── CONTRIBUTORS.md                             # Contributor recognition (15 lines)
-├── Cargo.toml                                  # Rust dependencies and metadata (58 lines)
+├── Cargo.toml                                  # Rust dependencies and metadata (60 lines)
 ├── clippy.toml                                 # Lets tests use unwrap, expect and panic (5 lines)
 ├── PKGBUILD                                    # Arch Linux package build script (42 lines)
 ├── install.sh                                  # Installation script for manual builds (96 lines)
@@ -632,8 +632,8 @@ hypr-keybind-manager/
 │   ├── tag-release.sh                          # Automated release tagging (98 lines)
 │   └── test-escape-key.sh                      # Escape key implementation verification (109 lines)
 ├── docs/                                       # Technical documentation
-│   ├── ARCHITECTURE.md                         # System design and data flow (828 lines)
-│   ├── DESIGN_DECISIONS.md                     # Rationale for architectural choices (1137 lines)
+│   ├── ARCHITECTURE.md                         # System design and data flow (846 lines)
+│   ├── DESIGN_DECISIONS.md                     # Rationale for architectural choices (1161 lines)
 │   ├── ENTROPY_DETECTION.md                    # Shannon entropy deep-dive (945 lines)
 │   ├── GTK_INSPECTOR_GUIDE.md                  # GTK debugging guide (215 lines)
 │   └── screenshots/                            # Application screenshots (14 images, ~1.5 MB)
@@ -659,14 +659,14 @@ hypr-keybind-manager/
 ├── test-tag-release.sh                         # Release automation test script (436 lines)
 ├── tests/                                      # Integration tests
 │   └── hostile_lua.rs                          # Lua files read through the app binary (273 lines)
-└── src/                                        # Source code (~14,223 lines total)
+└── src/                                        # Source code (~14,525 lines total)
     ├── bin/                                    # Binary utilities
     │   ├── measure_entropy.rs                  # Entropy measurement tool (57 lines)
     │   └── test_manual.rs                      # Manual testing utility (86 lines)
-    ├── main.rs                                 # CLI entry point (296 lines)
+    ├── main.rs                                 # CLI entry point (302 lines)
     ├── lib.rs                                  # Library root (100 lines)
-    ├── config/                                 # Config file I/O (~4,854 lines)
-    │   ├── mod.rs                              # ConfigManager (reads/writes with backups) (803 lines)
+    ├── config/                                 # Config file I/O (~4,852 lines)
+    │   ├── mod.rs                              # ConfigManager (reads/writes with backups) (810 lines)
     │   ├── error.rs                            # ConfigError types (62 lines)
     │   ├── transaction.rs                      # Atomic write transactions (352 lines)
     │   ├── validator.rs                        # Config validation (Layer 3) (296 lines)
@@ -676,14 +676,14 @@ hypr-keybind-manager/
     │   │   ├── patterns.rs                     # Pattern builders (187 lines)
     │   │   ├── entropy.rs                      # Shannon entropy detection (291 lines)
     │   │   └── tests/                          # Modular test suite (795 lines)
-    │   └── tests/                              # Config tests (1,614 lines)
+    │   └── tests/                              # Config tests (1,605 lines)
     │       ├── mod.rs                          # Test module organisation (29 lines)
-    │       ├── config_manager_tests.rs         # ConfigManager tests (702 lines)
+    │       ├── config_manager_tests.rs         # ConfigManager tests (693 lines)
     │       ├── transaction_tests.rs            # Transaction tests (733 lines)
     │       └── validator_tests.rs              # Validator unit tests (150 lines)
-    ├── core/                                   # Business logic (~3,152 lines)
+    ├── core/                                   # Business logic (~3,405 lines)
     │   ├── types.rs                            # Keybinding, KeyCombo, Modifier, BindType (406 lines)
-    │   ├── lua_config.rs                       # Lua config: sandboxed run, line rewriting (700 lines)
+    │   ├── lua_config.rs                       # Lua config: sandboxed run, line rewriting (724 lines)
     │   ├── lua_child.rs                        # Runs Lua files in a child process with limits (194 lines)
     │   ├── lua_prelude.lua                     # Recording hl stub and sandbox environment (151 lines)
     │   ├── lua_literal.lua                     # Renders Lua values as one-line source (46 lines)
@@ -691,24 +691,24 @@ hypr-keybind-manager/
     │   ├── conflict.rs                         # ConflictDetector engine (HashMap) (109 lines)
     │   ├── validator.rs                        # Injection prevention (Layer 1) (186 lines)
     │   ├── sandbox.rs                          # Bubblewrap sandbox helpers (67 lines)
-    │   ├── mod.rs                              # Core module exports (43 lines)
-    │   └── tests/                              # Core tests (extracted) (1006 lines)
+    │   ├── mod.rs                              # Core module exports (44 lines)
+    │   └── tests/                              # Core tests (extracted) (1040 lines)
     │       ├── mod.rs                          # Test module organisation (36 lines)
-    │       ├── lua_config_tests.rs             # Lua config tests (341 lines)
+    │       ├── lua_config_tests.rs             # Lua config tests (375 lines)
     │       ├── conflict_tests.rs               # Conflict detection tests (149 lines)
     │       ├── parser_tests.rs                 # Parser tests (163 lines)
     │       ├── validator_tests.rs              # Validation tests (167 lines)
     │       ├── types_tests.rs                  # Type system tests (82 lines)
     │       └── sandbox_tests.rs                # Sandbox wrap/unwrap tests (68 lines)
-    ├── ui/                                     # GTK4 GUI (MVC pattern) (~5,271 lines)
+    ├── ui/                                     # GTK4 GUI (MVC pattern) (~5,284 lines)
     │   ├── app.rs                              # Main window coordination (299 lines)
-    │   ├── actions.rs                          # GTK action setup + undo/redo wiring (350 lines)
+    │   ├── actions.rs                          # GTK action setup + undo/redo wiring (368 lines)
     │   ├── builders/                           # UI builder modules (503 lines total)
     │   │   ├── mod.rs                          # Module exports (30 lines)
     │   │   ├── header.rs                       # Header bar with undo/redo buttons (92 lines)
     │   │   ├── layout.rs                       # Main layout construction (135 lines)
     │   │   └── handlers.rs                     # Event handler wiring (246 lines)
-    │   ├── controller.rs                       # MVC Controller (mediates Model ↔ View) (875 lines)
+    │   ├── controller.rs                       # MVC Controller (mediates Model ↔ View) (892 lines)
     │   ├── file_watcher.rs                     # Live config file monitoring (77 lines)
     │   ├── style.css                           # GTK CSS styling (165 lines)
     │   ├── mod.rs                              # UI module exports (45 lines)
@@ -722,22 +722,22 @@ hypr-keybind-manager/
     │   │   ├── edit_dialog.rs                  # Edit/Add dialog with key recording, sandbox toggle (689 lines)
     │   │   ├── backup_dialog.rs                # Backup management with Escape support (340 lines)
     │   │   └── mod.rs                          # Component exports (43 lines)
-    │   └── tests/                              # UI component tests (extracted) (692 lines)
+    │   └── tests/                              # UI component tests (extracted) (670 lines)
     │       ├── mod.rs                          # Test module organisation (27 lines)
     │       ├── backup_dialog_tests.rs          # Backup dialog tests (82 lines)
-    │       ├── controller_tests.rs             # Controller + undo/redo tests (542 lines)
+    │       ├── controller_tests.rs             # Controller + undo/redo tests (520 lines)
     │       └── layout_tests.rs                 # Layout tests (41 lines)
-    └── ipc/                                    # Hyprland IPC integration (~407 lines)
-        ├── mod.rs                              # HyprlandClient (add/remove/reload bindings) (177 lines)
-        └── tests/                              # IPC tests (extracted) (230 lines)
-            └── mod.rs                          # IPC integration tests (230 lines)
+    └── ipc/                                    # Hyprland IPC integration (~439 lines)
+        ├── mod.rs                              # HyprlandClient (add/remove/reload bindings) (197 lines)
+        └── tests/                              # IPC tests (extracted) (242 lines)
+            └── mod.rs                          # IPC integration tests (242 lines)
 ```
 
 For detailed architecture documentation, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ### Testing
 
-**Rust Tests (206 passing, 7 ignored):**
+**Rust Tests (218 passing, 7 ignored):**
 ```bash
 # Run all Rust tests
 cargo test
