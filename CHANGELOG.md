@@ -8,6 +8,7 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 ### Security
 - Medium: a Lua config could catch the instruction limit's error with `pcall` and loop on, which froze the GUI. Once the limit is reached, every further instruction raises the error again.
+- Low: replies from Hyprland's socket were read with no size limit. A reply over 1 MiB is refused.
 
 ## [1.4.2] - 2026-10-14
 

@@ -517,7 +517,7 @@ Rewritten lines are rendered with `Keybinding::to_config_line`, which writes `$n
 - `HyprlandClient::new(mode)` with `DryRun`, `ReadOnly`, `Live`
 - `reload()` → sends `reload`; used by "Apply to Hyprland"
 - `add_bind(binding)` / `remove_bind(binding)` → `keyword bind... ` / `keyword unbind ...`, after injection validation
-- `request(command)` → raw reply, for read-only queries such as `version` or `j/binds`
+- `request(command)` → raw reply, for read-only queries such as `version` or `j/binds`; a reply over 1 MiB is refused
 
 ---
 

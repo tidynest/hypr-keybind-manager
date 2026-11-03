@@ -51,6 +51,14 @@ use crate::core::{Keybinding, validator as injection_validator};
 /// How long to wait for the compositor to answer
 const TIMEOUT: Duration = Duration::from_secs(5);
 
+/// Longest reply read from the socket
+///
+/// The commands sent here get `ok` or a one-line error back. The longest
+/// reply `request` is meant for, `j/binds`, is under 50 KB for a config with
+/// a hundred binds, so 1 MiB fits any real reply while a socket that keeps
+/// sending cannot make the app allocate without bound.
+const MAX_REPLY: usize = 1 << 20;
+
 /// What the client is allowed to do
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ClientMode {
@@ -151,11 +159,23 @@ pub fn request(command: &str) -> Result<String, ConfigError> {
         .write_all(command.as_bytes())
         .map_err(|e| ConfigError::IpcCommandFailed(format!("failed to send command: {e}")))?;
 
-    let mut reply = String::new();
-    stream
-        .read_to_string(&mut reply)
+    read_reply(stream)
+}
+
+/// Reads a reply to its end, refusing one longer than `MAX_REPLY` bytes
+fn read_reply(reader: impl Read) -> Result<String, ConfigError> {
+    let mut reply = Vec::new();
+    reader
+        .take(MAX_REPLY as u64 + 1)
+        .read_to_end(&mut reply)
         .map_err(|e| ConfigError::IpcCommandFailed(format!("failed to read reply: {e}")))?;
-    Ok(reply)
+    if reply.len() > MAX_REPLY {
+        return Err(ConfigError::IpcCommandFailed(format!(
+            "Hyprland's reply is longer than {MAX_REPLY} bytes"
+        )));
+    }
+    String::from_utf8(reply)
+        .map_err(|e| ConfigError::IpcCommandFailed(format!("reply is not UTF-8: {e}")))
 }
 
 /// `$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket.sock`
