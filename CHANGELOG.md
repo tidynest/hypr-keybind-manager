@@ -6,6 +6,9 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 ## [Unreleased]
 
+### Security
+- Medium: a Lua config could catch the instruction limit's error with `pcall` and loop on, which froze the GUI. Once the limit is reached, every further instruction raises the error again.
+
 ## [1.4.2] - 2026-10-14
 
 ### Security

@@ -156,18 +156,26 @@ fn limited_lua(memory: usize) -> Result<Lua, String> {
     let lua = Lua::new();
     lua.set_memory_limit(memory).map_err(|e| e.to_string())?;
     lua.set_hook(
-        HookTriggers {
-            every_nth_instruction: Some(INSTRUCTION_LIMIT),
-            ..HookTriggers::default()
-        },
-        |_, _| {
-            Err(mlua::Error::runtime(
-                "the Lua code executed too many instructions; is there an endless loop?",
-            ))
-        },
+        HookTriggers::new().every_nth_instruction(INSTRUCTION_LIMIT),
+        instruction_limit,
     )
     .map_err(|e| e.to_string())?;
     Ok(lua)
+}
+
+/// Stops a run that reached the instruction limit
+///
+/// A config can catch the error with `pcall` and loop on, so the hook is set
+/// again to fire on every instruction. Each further instruction raises the
+/// error too, until it reaches the code that started the run.
+fn instruction_limit(lua: &Lua, _: &mlua::Debug) -> mlua::Result<mlua::VmState> {
+    lua.set_hook(
+        HookTriggers::new().every_nth_instruction(1),
+        instruction_limit,
+    )?;
+    Err(mlua::Error::runtime(
+        "the Lua code executed too many instructions; is there an endless loop?",
+    ))
 }
 
 /// The `literal` renderer from `lua_literal.lua`
