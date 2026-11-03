@@ -143,6 +143,8 @@ graph LR
     Core --> ConflictCore[conflict.rs]
     Core --> CoreVal[validator.rs]
     Core --> Sandbox[sandbox.rs]
+    Core --> LuaChild[lua_child.rs]
+    Core --> LuaConfig[lua_config.rs]
 
     Controller -.->|uses| ConfigMgr
     Controller -.->|uses| ConflictCore
@@ -151,6 +153,8 @@ graph LR
     Edit -.->|uses| Sandbox
 
     ConfigMgr -.->|uses| Parser
+    ConfigMgr -.->|uses| LuaChild
+    LuaChild -.->|runs in a child process| LuaConfig
     ConfigMgr -.->|uses| ConfigVal
     ConfigVal -.->|uses| Danger
     ConfigVal -.->|uses| CoreVal
@@ -368,7 +372,7 @@ Parse args → Create App → Run GTK main loop
 ```
 
 **Key Functions**:
-- `main()` - Entry point, error handling
+- `main()` - Entry point, error handling. The hidden `evaluate-lua-config` subcommand hands over to `lua_child::serve`; the app starts itself with it to run a Lua file
 - `terminal_safe(binding)` - replaces control characters before `list` and `check` print a config, so a config from someone else cannot send escape sequences to the terminal; `list --json` prints the raw data, which JSON escapes
 
 ---
@@ -468,7 +472,7 @@ pub struct ConfigTransaction<'a> {
 - `list_backups()` → `Result<Vec<PathBuf>, ConfigError>`
 - `restore_backup(path)` → `Result<(), ConfigError>`
 
-**Format dispatch**: `ConfigFormat::of(path)` picks hyprlang or Lua by extension. `load_bindings_from(path)` returns `LoadedBindings` (bindings, read-only reasons, files) for either. `write_bindings` hands Lua configs to `write_bindings_lua`, which runs `rewrite_lua_files` and commits each changed file through a transaction. `default_config_path` prefers `hyprland.lua`, then `hyprland.conf`, as Hyprland 0.55 and later does.
+**Format dispatch**: `ConfigFormat::of(path)` picks hyprlang or Lua by extension. `load_bindings_from(path)` returns `LoadedBindings` (bindings, read-only reasons, files) for either; a Lua config is run through `lua_child::evaluate`. `write_bindings` hands Lua configs to `write_bindings_lua`, which runs the config again the same way, then `rewrite_lua_files`, and commits each changed file through a transaction. `default_config_path` prefers `hyprland.lua`, then `hyprland.conf`, as Hyprland 0.55 and later does.
 
 **In-Place Write Sequence** (`write_bindings`, hyprlang):
 1. Parse the current file tree with `parse_config_tree` (main file plus every `source =` file)
@@ -525,7 +529,7 @@ Rewritten lines are rendered with `Keybinding::to_config_line`, which writes `$n
 
 **Responsibility**: Read `hyprland.lua` configs (Hyprland 0.55+) and rewrite individual `hl.bind` lines.
 
-**Reading**: The config is a program, so it is run. `parse_lua_config` creates an embedded Lua 5.5 state (mlua, vendored), loads `lua_prelude.lua`, and executes the config with the prelude's sandbox environment. The prelude's `hl.bind` records keys, action, options, submap and the calling file and line (via `Lua::inspect_stack`), and returns a handle whose `remove` marks the record removed. `hl.dsp.*` calls produce descriptors carrying the dispatcher path and its arguments rendered as Lua literals. `hl.define_submap` sets the submap for binds recorded inside it. `require` reads only files inside the config directory.
+**Reading**: The config is a program, so it is run, in a child process: the app calls `lua_child::evaluate`, never `parse_lua_config` directly. `parse_lua_config` creates an embedded Lua 5.5 state (mlua, vendored), loads `lua_prelude.lua`, and executes the config with the prelude's sandbox environment. The prelude's `hl.bind` records keys, action, options, submap and the calling file and line (via `Lua::inspect_stack`), and returns a handle whose `remove` marks the record removed. `hl.dsp.*` calls produce descriptors carrying the dispatcher path and its arguments rendered as Lua literals. `hl.define_submap` sets the submap for binds recorded inside it. `require` reads only files inside the config directory.
 
 **Override rules** (`mark_overrides`): a bind's own line cannot be rewritten when its action is a Lua function, more than one bind came from its line (a loop), it uses an option the module cannot write back (`device`, `drag`, `auto_consuming`, ...), or its line is not a single `hl.bind(...)` statement. Such binds carry an `override_reason`.
 
@@ -534,6 +538,18 @@ Rewritten lines are rendered with `Keybinding::to_config_line`, which writes `$n
 **Safety of written text**: keys, commands and descriptions become Lua string literals through `lua_string`, and dispatcher paths are checked against `[a-z0-9_.]`. Other arguments go through `lua_literal_args`: they are evaluated with no globals and with the string metatable removed in a `limited_lua` state (1 MiB, the same instruction limit as the parser), since a `find` that backtracks would run inside C beyond the limit's reach, and each resulting value is rendered by `literal` from `lua_literal.lua` in strict mode, which refuses functions and nil. Only that rendering is written. Writing the checked text itself let `os and os.execute("...") or 1` through, since it is 1 without globals.
 
 **`lua_literal.lua`**: renders a Lua value as source on one line. The prelude uses it to record the arguments of parsed binds, in lenient mode. Strings go through `%q` with the newline escape kept on one line, Lua keywords used as table keys are bracketed, and non-finite numbers are written as `1e9999` and `(0/0)`.
+
+---
+
+### `src/core/lua_child.rs` - Lua Evaluator Process
+
+**Responsibility**: Run a Lua file where nothing it does can freeze, hang or crash the app.
+
+**Parent** (`evaluate(path)`): starts `/proc/self/exe evaluate-lua-config -- <path>` with no shell, stdin closed, stderr dropped and the environment cut down to `PASSED_ENV`. `/proc/self/exe` still names the running binary after an upgrade has replaced the file on disk, which `current_exe()` does not. A thread reads stdout, at most `MAX_REPLY` (4 MiB) plus one byte. After `TIME_LIMIT` (2 seconds), or once the reply is in, the child is killed and reaped. The reply is `serde_json` of `Result<LuaConfig, String>`. A child killed by its CPU limit, or one that ends without a readable reply, becomes an error for `ConfigError::ValidationFailed`.
+
+**Child** (`serve(path)`): lowers `RLIMIT_AS` to 512 MiB, `RLIMIT_CPU` to 3 seconds and `RLIMIT_CORE` to 0 with `nix`, never raising a limit that is already lower, then runs `parse_lua_config` and writes the result. If a limit cannot be set, no Lua runs and the error is the result.
+
+**Tests**: the unit test harness is not the app binary and cannot serve as the child, so tests that load a Lua config through `load_bindings_from`, `ConfigManager` or `Controller` live in `tests/hostile_lua.rs`. They call `set_program` with the binary cargo built for them.
 
 ---
 

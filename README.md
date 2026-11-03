@@ -57,7 +57,7 @@
 
 - **Full [CRUD](https://en.wikipedia.org/wiki/Create,_read,_update_and_delete) Operations**: Create, read, update, and delete keybindings through an intuitive GUI
 - **In-Place Config Editing**: Only the changed lines are rewritten. `$mainMod`, comments, indentation, ordering and `source =` files stay as you wrote them
-- **Both Config Languages**: `hyprland.conf` (hyprlang) and `hyprland.lua` (Hyprland 0.55+). Lua configs are run in a sandbox to find every bind, including ones built in loops; hand-written `hl.bind` lines are editable
+- **Both Config Languages**: `hyprland.conf` (hyprlang) and `hyprland.lua` (Hyprland 0.55+). Lua configs are run in a sandboxed child process to find every bind, including ones built in loops; hand-written `hl.bind` lines are editable
 - **Complete Hyprland Syntax**: Every bind flag (`bindd`, `bindel`, `bindnt`, ...), `bindd` descriptions, submaps and sourced files
 - **Real-Time Conflict Detection**: Instantly identifies duplicate key combinations per submap with [O(1)](https://en.wikipedia.org/wiki/Time_complexity#Constant_time) performance
 - **Checks Before Every Save**: Refuses binds whose text Hyprland would misread and commands rated critical, and writes Lua arguments back as plain data. `exec` bindings can be sandboxed with Bubblewrap
@@ -526,6 +526,7 @@ The application uses a **[HashMap](https://doc.rust-lang.org/std/collections/str
 **Lua Configs** (`hyprland.lua`, Hyprland 0.55+):
 - The config is executed in an embedded Lua 5.5 with a recording stand-in for the `hl` API, so every `hl.bind` call is captured with the file and line it came from, whatever code produced it
 - The sandbox has no `io`, no `load`, no `os.execute`, a memory limit, an instruction limit, and `require` limited to files inside the config directory
+- The file runs in a separate copy of the program that is stopped after 2 seconds and may use at most 512 MiB, so a config that loops forever or fills memory, your own or an imported one, ends in an error message instead of freezing the app
 - A bind whose line is a single `hl.bind(...)` statement with a dispatcher action is rewritten in place; a `mainMod .. " + Q"` key expression is kept when the new keys start with the same value
 - A bind that comes from code (a loop, a Lua function, a larger statement, or an option the editor cannot write back) is changed by an override: `hl.unbind("<keys>")` and, for an edit, the replacement `hl.bind(...)` are appended to the end of the main file. Hyprland runs the file top to bottom, so the override wins and your loop stays as it is. The list marks such binds and the details panel says where they come from
 - New binds are appended at the end of the main file under a `-- Keybindings added by hypr-keybind-manager` header; new binds inside a submap are refused, add those inside `hl.define_submap` yourself
@@ -654,6 +655,8 @@ hypr-keybind-manager/
 ├── test-file-watcher.sh                        # File watcher test script (315 lines)
 ├── test-sync-version.sh                        # Version sync test script (340 lines)
 ├── test-tag-release.sh                         # Release automation test script (436 lines)
+├── tests/                                      # Integration tests
+│   └── hostile_lua.rs                          # Lua files read through the app binary (273 lines)
 └── src/                                        # Source code (~14,223 lines total)
     ├── bin/                                    # Binary utilities
     │   ├── measure_entropy.rs                  # Entropy measurement tool (57 lines)
@@ -679,6 +682,7 @@ hypr-keybind-manager/
     ├── core/                                   # Business logic (~3,152 lines)
     │   ├── types.rs                            # Keybinding, KeyCombo, Modifier, BindType (406 lines)
     │   ├── lua_config.rs                       # Lua config: sandboxed run, line rewriting (700 lines)
+    │   ├── lua_child.rs                        # Runs Lua files in a child process with limits (194 lines)
     │   ├── lua_prelude.lua                     # Recording hl stub and sandbox environment (151 lines)
     │   ├── lua_literal.lua                     # Renders Lua values as one-line source (46 lines)
     │   ├── parser.rs                           # Parse Hyprland config syntax (nom) (438 lines)

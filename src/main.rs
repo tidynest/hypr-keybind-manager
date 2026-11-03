@@ -35,7 +35,7 @@ use clap::{Parser, Subcommand};
 use colored::*;
 use hypr_keybind_manager::{
     config::{default_config_path, load_bindings_from},
-    core::{Keybinding, conflict::ConflictDetector},
+    core::{Keybinding, conflict::ConflictDetector, lua_child},
     ui::App,
 };
 use std::path::{Path, PathBuf};
@@ -79,6 +79,11 @@ enum Commands {
         #[arg(short, long)]
         config: Option<PathBuf>,
     },
+
+    /// Runs one Lua config and prints its binds as JSON; the app starts
+    /// itself with this to keep Lua out of its own process
+    #[command(name = lua_child::CHILD_COMMAND, hide = true)]
+    EvaluateLua { path: PathBuf },
 }
 
 /// Main entry point for the CLI application.
@@ -96,6 +101,7 @@ fn main() -> anyhow::Result<(), Box<dyn std::error::Error>> {
         Commands::Check { config } => check_conflicts(&resolve_config_path(config)?)?,
         Commands::List { config, json } => list_keybindings(&resolve_config_path(config)?, json)?,
         Commands::Gui { config } => launch_gui(&resolve_config_path(config)?)?,
+        Commands::EvaluateLua { path } => std::process::exit(lua_child::serve(&path)),
     }
 
     Ok(())

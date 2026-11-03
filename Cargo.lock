@@ -705,6 +705,7 @@ dependencies = [
  "glib",
  "gtk4",
  "mlua",
+ "nix",
  "nom",
  "notify",
  "regex",

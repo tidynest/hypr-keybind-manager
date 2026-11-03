@@ -35,12 +35,14 @@
 //! # Security
 //! The config runs with no `io`, no `load`, no `os.execute`, `require`
 //! limited to files inside the config directory, a memory limit and an
-//! instruction limit. Values written back are rendered as Lua string
+//! instruction limit. The app runs `parse_lua_config` through `lua_child`,
+//! in a child process that it stops after a time limit. Values written back are rendered as Lua string
 //! literals, and dispatcher arguments are evaluated as data and rendered
 //! again by `lua_literal.lua`, so text from the edit dialog or an imported
 //! file never reaches the config as code.
 
 use mlua::{Function, HookTriggers, Lua, MultiValue, Table, Value};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     fs,
@@ -129,7 +131,7 @@ pub const LUA_DISPATCHERS: &[&str] = &[
 ];
 
 /// One recorded `hl.bind` call
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct LuaBinding {
     pub binding: Keybinding,
     /// The keys string as Hyprland saw it, e.g. `SUPER + Q`
@@ -144,7 +146,9 @@ pub struct LuaBinding {
 }
 
 /// Everything recorded while running a Lua config
-#[derive(Debug, Default)]
+///
+/// The child process in `lua_child` sends it to the app as JSON.
+#[derive(Debug, Default, Deserialize, Serialize)]
 pub struct LuaConfig {
     pub bindings: Vec<LuaBinding>,
     /// The main file first, then every required module in load order
@@ -187,6 +191,9 @@ fn load_literal(lua: &Lua) -> Result<Function, String> {
 }
 
 /// Runs the Lua config at `path` and collects its binds
+///
+/// Runs in this process, so a hostile file can hold it up; the app calls
+/// `lua_child::evaluate`, which runs this in a child process.
 pub fn parse_lua_config(path: &Path) -> Result<LuaConfig, String> {
     let source =
         fs::read_to_string(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;

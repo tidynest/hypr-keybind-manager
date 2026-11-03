@@ -53,7 +53,8 @@ use std::{
 };
 
 use crate::core::{
-    lua_config::{ADDED_HEADER, parse_lua_config, render_lua_bind, rewrite_lua_files},
+    lua_child,
+    lua_config::{ADDED_HEADER, render_lua_bind, rewrite_lua_files},
     parser::{LineKind, parse_config_tree, scan_lines},
     types::Keybinding,
 };
@@ -96,10 +97,13 @@ pub struct LoadedBindings {
 }
 
 /// Reads the bindings of a config file of either format
+///
+/// A Lua config runs in a child process, see `lua_child`, so this can take
+/// up to its time limit.
 pub fn load_bindings_from(path: &Path) -> Result<LoadedBindings, ConfigError> {
     match ConfigFormat::of(path) {
         ConfigFormat::Lua => {
-            let parsed = parse_lua_config(path).map_err(ConfigError::ValidationFailed)?;
+            let parsed = lua_child::evaluate(path).map_err(ConfigError::ValidationFailed)?;
             let origin_notes = parsed
                 .bindings
                 .iter()
@@ -614,11 +618,13 @@ impl ConfigManager {
 
     /// Rewrites the `hl.bind` lines of a Lua config that changed
     ///
-    /// The config is run again to find the current line of every bind, then
-    /// `rewrite_lua_files` works out the new text of each affected file.
+    /// The config is run again in a child process to find the current line
+    /// of every bind, then `rewrite_lua_files` works out the new text of each
+    /// affected file.
     /// Each file is written through its own transaction.
     fn write_bindings_lua(&self, bindings: &[Keybinding]) -> Result<(), ConfigError> {
-        let parsed = parse_lua_config(&self.config_path).map_err(ConfigError::ValidationFailed)?;
+        let parsed =
+            lua_child::evaluate(&self.config_path).map_err(ConfigError::ValidationFailed)?;
         let outputs =
             rewrite_lua_files(&parsed, bindings).map_err(ConfigError::ValidationFailed)?;
         for (file, text) in outputs {
