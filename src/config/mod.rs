@@ -124,21 +124,22 @@ pub fn load_bindings_from(path: &Path) -> Result<LoadedBindings, ConfigError> {
     }
 }
 
-/// The config Hyprland would use: `hyprland.conf` if present, else `hyprland.lua`
-///
-/// Falls back to the `.conf` path when neither exists, so the caller can
-/// report what was looked for.
+/// The config Hyprland would use, in `$XDG_CONFIG_HOME/hypr`, see `config_in`
 pub fn default_config_path() -> PathBuf {
     let base = std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
         .unwrap_or_else(|| PathBuf::from("."));
-    let dir = base.join("hypr");
-    let conf = dir.join("hyprland.conf");
-    if conf.exists() {
-        return conf;
-    }
-    let lua = dir.join("hyprland.lua");
+    config_in(&base.join("hypr"))
+}
+
+/// `hyprland.lua` in `dir` if present, else `hyprland.conf`
+///
+/// Hyprland 0.55 and later loads `hyprland.lua` instead of `hyprland.conf`
+/// when both exist. Falls back to the `.conf` path when neither exists, so
+/// the caller can report what was looked for.
+fn config_in(dir: &Path) -> PathBuf {
+    let (lua, conf) = (dir.join("hyprland.lua"), dir.join("hyprland.conf"));
     if lua.exists() { lua } else { conf }
 }
 

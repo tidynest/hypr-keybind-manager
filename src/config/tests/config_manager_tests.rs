@@ -700,3 +700,18 @@ fn test_lua_export_keeps_unrenderable_binds_inside_comments() {
         "{exported}"
     );
 }
+
+#[test]
+fn test_config_in_prefers_lua_like_hyprland() {
+    let temp_dir = TempDir::new().unwrap();
+    let lua = temp_dir.path().join("hyprland.lua");
+    let conf = temp_dir.path().join("hyprland.conf");
+    assert_eq!(config_in(temp_dir.path()), conf);
+
+    fs::write(&conf, "").unwrap();
+    assert_eq!(config_in(temp_dir.path()), conf);
+
+    // Hyprland loads hyprland.lua instead of hyprland.conf when both exist
+    fs::write(&lua, "").unwrap();
+    assert_eq!(config_in(temp_dir.path()), lua);
+}

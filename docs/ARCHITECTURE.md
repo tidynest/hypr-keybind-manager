@@ -468,7 +468,7 @@ pub struct ConfigTransaction<'a> {
 - `list_backups()` → `Result<Vec<PathBuf>, ConfigError>`
 - `restore_backup(path)` → `Result<(), ConfigError>`
 
-**Format dispatch**: `ConfigFormat::of(path)` picks hyprlang or Lua by extension. `load_bindings_from(path)` returns `LoadedBindings` (bindings, read-only reasons, files) for either. `write_bindings` hands Lua configs to `write_bindings_lua`, which runs `rewrite_lua_files` and commits each changed file through a transaction. `default_config_path` prefers `hyprland.conf`, then `hyprland.lua`.
+**Format dispatch**: `ConfigFormat::of(path)` picks hyprlang or Lua by extension. `load_bindings_from(path)` returns `LoadedBindings` (bindings, read-only reasons, files) for either. `write_bindings` hands Lua configs to `write_bindings_lua`, which runs `rewrite_lua_files` and commits each changed file through a transaction. `default_config_path` prefers `hyprland.lua`, then `hyprland.conf`, as Hyprland 0.55 and later does.
 
 **In-Place Write Sequence** (`write_bindings`, hyprlang):
 1. Parse the current file tree with `parse_config_tree` (main file plus every `source =` file)

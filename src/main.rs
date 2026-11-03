@@ -57,14 +57,14 @@ struct Cli {
 enum Commands {
     /// Check for keybinding conflicts
     Check {
-        /// Path to Hyprland config file [default: ~/.config/hypr/hyprland.conf, or hyprland.lua when only that exists]
+        /// Path to Hyprland config file [default: ~/.config/hypr/hyprland.lua, or hyprland.conf when there is no hyprland.lua]
         #[arg(short, long)]
         config: Option<PathBuf>,
     },
 
     /// List all keybindings
     List {
-        /// Path to Hyprland config file [default: ~/.config/hypr/hyprland.conf, or hyprland.lua when only that exists]
+        /// Path to Hyprland config file [default: ~/.config/hypr/hyprland.lua, or hyprland.conf when there is no hyprland.lua]
         #[arg(short, long)]
         config: Option<PathBuf>,
 
@@ -75,7 +75,7 @@ enum Commands {
 
     /// Launch GUI overlay
     Gui {
-        /// Path to Hyprland config file [default: ~/.config/hypr/hyprland.conf, or hyprland.lua when only that exists]
+        /// Path to Hyprland config file [default: ~/.config/hypr/hyprland.lua, or hyprland.conf when there is no hyprland.lua]
         #[arg(short, long)]
         config: Option<PathBuf>,
     },

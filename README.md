@@ -443,7 +443,8 @@ Global Options:
 
 Subcommand Options (available on check, list, and gui):
   -c, --config <FILE>  Path to Hyprland config file
-                       [default: ~/.config/hypr/hyprland.conf]
+                       [default: ~/.config/hypr/hyprland.lua, or
+                       hyprland.conf when there is no hyprland.lua]
 
 List Options:
       --json           Print the bindings as JSON instead of a table
