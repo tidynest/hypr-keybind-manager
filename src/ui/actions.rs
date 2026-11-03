@@ -20,7 +20,7 @@
 use gtk4::{
     Application, ApplicationWindow, Box as GtkBox, Button, CheckButton, EventControllerKey,
     FileDialog, Label, Orientation, Window, gdk,
-    gio::{Cancellable, SimpleAction},
+    gio::{self, Cancellable, SimpleAction},
     prelude::*,
 };
 use std::{cell::Cell, rc::Rc};
@@ -151,7 +151,9 @@ pub fn setup_export_action(
 /// Sets up the import action
 ///
 /// Opens a file chooser first, then asks whether to replace or merge, and
-/// refreshes the UI after the import.
+/// refreshes the UI after the import. The file is read off the main thread,
+/// with the action disabled until it is done: a Lua file runs in a child
+/// process for up to its time limit, and the window stays usable meanwhile.
 pub fn setup_import_action(
     app: &Application,
     window: &ApplicationWindow,
@@ -165,7 +167,7 @@ pub fn setup_import_action(
     let conflict_panel = layout.conflict_panel.clone();
     let status_banner = layout.status_banner.clone();
 
-    import_action.connect_activate(move |_, _| {
+    import_action.connect_activate(move |action, _| {
         let file_dialog = FileDialog::builder().title("Import Keybindings").build();
 
         let controller = controller.clone();
@@ -174,6 +176,7 @@ pub fn setup_import_action(
         let conflict_panel = conflict_panel.clone();
         let status_banner = status_banner.clone();
         let window = window_for_import.clone();
+        let action = action.clone();
 
         let parent = window.clone();
         file_dialog.open(Some(&parent), None::<&Cancellable>, move |result| {
@@ -185,23 +188,38 @@ pub fn setup_import_action(
                 return;
             };
 
-            match controller.import_from(&path, mode) {
-                Ok(()) => {
-                    refresh_main_view(&controller, &keybind_list, &details_panel, &conflict_panel);
-                    if let Some(app) = window.application() {
-                        sync_history_actions(&app, &controller);
-                    }
-                    status_banner.show(&format!(
-                        "Imported {} ({}). Undo reverts it.",
-                        path.display(),
-                        match mode {
-                            ImportMode::Replace => "replaced existing bindings",
-                            ImportMode::Merge => "merged with existing bindings",
+            action.set_enabled(false);
+            status_banner.show(&format!("Reading {}…", path.display()));
+            glib::spawn_future_local(async move {
+                let file = path.clone();
+                let read = gio::spawn_blocking(move || Controller::read_import(&file))
+                    .await
+                    .unwrap_or_else(|_| Err("Reading the import file failed".to_string()));
+                action.set_enabled(true);
+
+                match read.and_then(|bindings| controller.apply_import(bindings, mode)) {
+                    Ok(()) => {
+                        refresh_main_view(
+                            &controller,
+                            &keybind_list,
+                            &details_panel,
+                            &conflict_panel,
+                        );
+                        if let Some(app) = window.application() {
+                            sync_history_actions(&app, &controller);
                         }
-                    ));
+                        status_banner.show(&format!(
+                            "Imported {} ({}). Undo reverts it.",
+                            path.display(),
+                            match mode {
+                                ImportMode::Replace => "replaced existing bindings",
+                                ImportMode::Merge => "merged with existing bindings",
+                            }
+                        ));
+                    }
+                    Err(e) => show_action_error(&window, "Import Failed", &e),
                 }
-                Err(e) => show_action_error(&window, "Import Failed", &e),
-            }
+            });
         });
     });
 

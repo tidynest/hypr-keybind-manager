@@ -727,7 +727,7 @@ pub struct ConfigTransaction<'a> {  // 'a lifetime
 **Trade-offs**:
 - Every load and every write of a Lua config starts a process, about 20 ms more on the owner's config
 - The child sees only `HOME`, `USER`, the XDG base directories, `TERMINAL`, `EDITOR` and `BROWSER`, so a config that reads another variable gets nil where Hyprland gets a value
-- Loads and writes wait on the GUI's main thread, for up to the 2 second limit when a file misbehaves
+- An import is read on a worker thread. Loading the user's own config and the run before each write still wait on the GUI's main thread, for up to the 2 second limit when the file misbehaves. Moving those off the main thread would race with edits made while they run
 - Unit tests cannot load a Lua config through the library, because their executable is not the app; those tests live in `tests/hostile_lua.rs`
 
 **Alternatives Considered**:

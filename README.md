@@ -553,6 +553,8 @@ The application uses a **[HashMap](https://doc.rust-lang.org/std/collections/str
 - **Testing**: Experiment with different keybinding schemes
 - **Templates**: Create reusable keybinding sets for different workflows
 
+The chosen file is read in the background, so the window stays usable while a Lua file runs. A Lua file that takes longer than 2 seconds is stopped and the import is refused.
+
 **Import Modes** (asked after the file is chosen; Merge is the default):
 - **Replace Mode**: Deletes all existing keybindings and replaces with imported ones
   - Use case: Completely switching to a new keybinding scheme

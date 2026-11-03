@@ -683,11 +683,28 @@ impl Controller {
         Ok(())
     }
 
+    /// Imports the bindings of `import_path`, see `read_import` and `apply_import`
     pub fn import_from(&self, import_path: &Path, mode: ImportMode) -> Result<(), String> {
-        // Either format can be imported; read-only Lua binds still copy as plain bindings
-        let imported_bindings = load_bindings_from(import_path)
-            .map_err(|e| format!("Failed to read import file: {}", e))?
-            .bindings;
+        self.apply_import(Self::read_import(import_path)?, mode)
+    }
+
+    /// Reads the bindings of a file to import, of either format
+    ///
+    /// Needs no controller, so the GUI can run it off the main thread: a Lua
+    /// file runs in a child process that may take up to its time limit.
+    /// Read-only Lua binds still copy as plain bindings.
+    pub fn read_import(import_path: &Path) -> Result<Vec<Keybinding>, String> {
+        load_bindings_from(import_path)
+            .map(|loaded| loaded.bindings)
+            .map_err(|e| format!("Failed to read import file: {}", e))
+    }
+
+    /// Adds bindings returned by `read_import` and writes the config
+    pub fn apply_import(
+        &self,
+        imported_bindings: Vec<Keybinding>,
+        mode: ImportMode,
+    ) -> Result<(), String> {
         // The file may come from anyone; one refused binding stops the whole import
         for binding in &imported_bindings {
             self.validate_keybinding(binding)?;

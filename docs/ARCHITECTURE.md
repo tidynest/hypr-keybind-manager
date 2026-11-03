@@ -428,7 +428,9 @@ pub struct Controller {
 - `add_keybinding(binding)` → `Result<(), String>`
 - `update_keybinding(old, new)` → `Result<(), String>`
 - `delete_keybinding(binding)` → `Result<(), String>`
-- `import_from(path, mode)` → `Result<(), String>`. Reads either format; every imported binding is validated before anything changes
+- `import_from(path, mode)` → `Result<(), String>`. `read_import` followed by `apply_import`
+- `read_import(path)` → `Result<Vec<Keybinding>, String>`. Reads either format and needs no controller, so the import action runs it with `gio::spawn_blocking` and the window stays usable while a Lua file is evaluated
+- `apply_import(bindings, mode)` → `Result<(), String>`. Every imported binding is validated before anything changes
 - `validate_keybinding(binding)` → `Result<(), String>`. Refuses an `exec` or `execr` command the danger detector rates critical; called by add, update and import before the undo snapshot is taken
 - `undo()` → `Result<(), String>`
 - `redo()` → `Result<(), String>`
